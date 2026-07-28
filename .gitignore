@@ -39,3 +39,9 @@ evidence*.json
 # Python cache under package
 material_price_audit/__pycache__/
 **/__pycache__/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
