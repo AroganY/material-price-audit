@@ -71,38 +71,102 @@ def detail_matches_item(
         ok = bool(name) and (name[:4] in blob or name in blob)
         return MatchResult(ok=ok, score=1.0 if ok else 0.0, required_hit=1 if ok else 0, required_total=1, detail="name-fallback")
 
-    # required: model-like tokens
-    required = [
+    # 型号核心：DS-/RG-/ST… 整段；不要把 AC220V、零碎字母全当成「必须全中」
+    model_full = [
         t
         for t in tokens
-        if re.search(r"[A-Za-z]", t) or t.upper().startswith("DN") or t.startswith("φ") or t.startswith("Φ")
+        if re.match(r"^(?:DS-|RG-|ST|iDS-|HM-|JB-|MS-|LRS-|GTYQ-|ZN-|WDZN-)", t, re.I)
     ]
-    optional = [t for t in tokens if t not in required]
+    size_toks = [
+        t
+        for t in tokens
+        if t.upper().startswith("DN") or t.startswith("φ") or t.startswith("Φ")
+    ]
+    # 从整型号拆出关键片段（KH6320 / 6320-C1），命中任一段也算型号对上
+    model_keys: list[str] = []
+    for m in model_full:
+        model_keys.append(m)
+        # DS-KH6320-C1 → KH6320-C1, KH6320, 6320
+        parts = re.split(r"[-/]", m)
+        for p in parts:
+            if len(p) >= 4 and re.search(r"[A-Za-z0-9]", p):
+                model_keys.append(p)
+        m2 = re.search(r"([A-Z]{0,4}\d{3,}[A-Z0-9]*)", m, re.I)
+        if m2:
+            model_keys.append(m2.group(1))
+
+    # 去重
+    seen_k = set()
+    model_keys_u = []
+    for k in model_keys:
+        lk = k.lower()
+        if lk not in seen_k:
+            seen_k.add(lk)
+            model_keys_u.append(k)
+    model_keys = model_keys_u
+
+    optional = [
+        t
+        for t in tokens
+        if t not in model_full and t not in size_toks
+    ]
 
     def hit(tok: str) -> bool:
+        if not tok:
+            return False
         return tok.lower() in blob_l or tok in blob
 
-    req_hits = sum(1 for t in required if hit(t))
+    # 型号：任一核心片段命中即可（京东标题常写 DS-KH6320-C1A1 变体）
+    model_hit = any(hit(k) for k in model_keys) if model_keys else False
+    # 宽松：去横杠再比
+    if not model_hit and model_full:
+        compact_blob = re.sub(r"[\s\-/]", "", blob_l)
+        for m in model_full:
+            if re.sub(r"[\s\-/]", "", m.lower()) in compact_blob:
+                model_hit = True
+                break
+            # 核心数字段
+            num = re.search(r"(\d{4,})", m)
+            if num and num.group(1) in blob:
+                # 还要一点字母前缀防误伤
+                prefix = re.search(r"([A-Za-z]{1,4})\d", m)
+                if not prefix or prefix.group(1).lower() in blob_l:
+                    model_hit = True
+                    break
+
+    size_hits = sum(1 for t in size_toks if hit(t))
     opt_hits = sum(1 for t in optional if hit(t))
 
-    if required:
-        # all model tokens ideally; allow miss 0 if only 1 required, else >= ceil(0.8)
-        need = max(1, int(round(len(required) * 0.8)))
-        if req_hits < need:
+    if model_keys or size_toks:
+        if model_keys and not model_hit:
             return MatchResult(
                 ok=False,
-                score=req_hits / max(len(required), 1),
-                required_hit=req_hits,
-                required_total=len(required),
-                detail=f"model tokens {req_hits}/{len(required)} < {need}",
+                score=0.0,
+                required_hit=0,
+                required_total=1,
+                detail=f"model miss (need one of {model_keys[:4]})",
             )
-        score = 0.6 * (req_hits / len(required)) + 0.4 * (opt_hits / max(len(optional), 1) if optional else 1.0)
+        if size_toks and size_hits < max(1, len(size_toks) // 2):
+            return MatchResult(
+                ok=False,
+                score=size_hits / max(len(size_toks), 1),
+                required_hit=size_hits,
+                required_total=len(size_toks),
+                detail=f"size tokens {size_hits}/{len(size_toks)}",
+            )
+        # 型号已中：给高分；中文词加分
+        score = 0.72 if model_hit or not model_keys else 0.0
+        if optional:
+            score += 0.28 * (opt_hits / max(len(optional), 1))
+        else:
+            score = max(score, 0.85 if model_hit else score)
+        score = min(1.0, score)
         return MatchResult(
-            ok=score >= min_score,
+            ok=score >= min_score or model_hit,
             score=score,
-            required_hit=req_hits,
-            required_total=len(required),
-            detail=f"model ok score={score:.2f}",
+            required_hit=1 if model_hit else size_hits,
+            required_total=1,
+            detail=f"model hit={model_hit} score={score:.2f}",
         )
 
     # no model tokens: need enough keyword hits

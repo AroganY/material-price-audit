@@ -184,13 +184,21 @@ def wait_for_login_agent(
     clear_agent_login_signal(root)
     start_url = _safe_url(page) or login_url
 
-    # 已不在登录 URL → 秒过，不折腾
-    if page_looks_logged_in(page, platform_id, login_url):
-        print(f"  [{name}] ✓ 已离开登录页 / 会话可用，不刷新、不等待")
-        return "already_ok"
-    if not url_looks_like_login(start_url) and not url_looks_like_login(login_url):
+    # 仅当「当前/目标」明确是登录页且已离开 → 秒过
+    # 禁止：login_url 是首页时把「随便一个非 login URL」当成已登录（1688 曾中招）
+    hard_login = url_looks_like_login(start_url) or url_looks_like_login(login_url)
+    if hard_login and page_looks_logged_in(page, platform_id, login_url):
+        if not url_looks_like_login(_safe_url(page)):
+            print(f"  [{name}] ✓ 已离开登录页，继续")
+            return "already_ok"
+    if hard_login and url_looks_like_login(start_url) and not url_looks_like_login(_safe_url(page)):
         print(f"  [{name}] ✓ 当前不是登录 URL，继续")
         return "already_ok"
+    # 首页类 login_url 且当前也不像登录页：不假定已登录，仍等 Agent/短超时
+    if not hard_login and not url_looks_like_login(_safe_url(page)):
+        print(f"  [{name}] 目标不是登录页；请确认已登录或 touch LOGIN_CONTINUE 跳过")
+        # 缩短：首页探测最多 45s，避免死等
+        timeout_s = min(int(timeout_s), 45)
 
     sig = agent_login_signal_path(root)
     print("")

@@ -135,7 +135,8 @@ BUILTIN: dict[str, PlatformSpec] = {
     "1688": PlatformSpec(
         id="1688",
         name="1688批发",
-        login_url="https://www.1688.com/",
+        # 真正登录页（首页 www.1688.com 未登录也会打开，不能当「已登录」）
+        login_url="https://login.taobao.com/?redirect_url=https%3A%2F%2Fwww.1688.com%2F",
         search_url_template="https://s.1688.com/selloffer/offer_search.htm?keywords={query}",
         handler="1688",
         item_link_contains="detail.1688.com",
@@ -428,27 +429,89 @@ def list_platforms(cfg: dict | None = None) -> list[PlatformSpec]:
 # ---- search handlers ----
 
 def _search_jd(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
+    """
+    京东搜索。2026 新版列表已无 li.gl-item，改为 [data-sku] 卡片。
+    """
     url = spec.search_url_template.format(query=quote(query))
-    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    page.wait_for_timeout(2500)
-    if "登录" in (page.title() or ""):
-        return None, "need_login"
-    goods = page.eval_on_selector_all(
-        "li.gl-item",
-        """els => els.slice(0, 15).map(el => {
-            const sku = el.getAttribute('data-sku') || '';
-            const a = el.querySelector('.p-name a, a[href*="item.jd.com"]');
-            const priceEl = el.querySelector('.p-price i, .p-price em');
-            const nameEl = el.querySelector('.p-name em, .p-name a');
-            return {
-              sku,
-              href: a ? a.href : (sku ? ('https://item.jd.com/' + sku + '.html') : ''),
-              priceText: priceEl ? priceEl.innerText : '',
-              name: nameEl ? nameEl.innerText.replace(/\\s+/g,' ').trim() : ''
-            };
-        })""",
+    goods = []
+    for attempt in range(2):
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(3500 if attempt == 0 else 4500)
+        cur = (page.url or "").lower()
+        title = page.title() or ""
+        if "passport" in cur or ("登录" in title and "商品搜索" not in title):
+            return None, "need_login"
+        goods = page.evaluate(
+            """() => {
+              return document.querySelectorAll('[data-sku], li.gl-item').length;
+            }"""
+        )
+        if goods and int(goods) > 0:
+            break
+        page.wait_for_timeout(1000)
+
+    # 新版：div[data-sku]；旧版：li.gl-item
+    goods = page.evaluate(
+        """() => {
+          const out = [];
+          const seen = new Set();
+          const nodes = document.querySelectorAll('[data-sku], li.gl-item');
+          for (const el of nodes) {
+            const sku = el.getAttribute('data-sku') || el.getAttribute('data-spu') || '';
+            if (!sku || seen.has(sku)) continue;
+            seen.add(sku);
+            let href = '';
+            const a = el.querySelector('a[href*="item.jd.com"], a[href*="item.m.jd.com"]')
+              || el.querySelector('a[href]');
+            if (a && a.href && a.href.includes('item')) href = a.href;
+            if (!href) href = 'https://item.jd.com/' + sku + '.html';
+            const text = (el.innerText || '').replace(/\\s+/g, ' ').trim();
+            // 价格：¥ 452 . 42 / ¥452.42 / 到手价
+            let priceText = '';
+            const m1 = text.match(/[¥￥]\\s*(\\d+)\\s*[.\\u3002]?\\s*(\\d{0,2})/);
+            if (m1) priceText = m1[2] ? (m1[1] + '.' + m1[2]) : m1[1];
+            if (!priceText) {
+              const m2 = text.match(/(\\d+\\.\\d{2})/);
+              if (m2) priceText = m2[1];
+            }
+            // 名称：去掉广告前缀
+            let name = text.replace(/^广告\\s*/, '').slice(0, 160);
+            const nameEl = el.querySelector('.p-name em, .p-name a, [class*="name"]');
+            if (nameEl && (nameEl.innerText || '').trim().length > 4) {
+              name = nameEl.innerText.replace(/\\s+/g, ' ').trim().slice(0, 160);
+            }
+            out.push({ sku, href, priceText, name });
+            if (out.length >= 20) break;
+          }
+          return out;
+        }"""
     )
-    return _filter_cands(goods or [], must, min_score, "jd", "item.jd.com"), "ok"
+    cands = _filter_cands(goods or [], must, min_score, "jd", "item.jd.com")
+    # 链接过滤过严时：允许我们构造的 item.jd.com/{sku}
+    if not cands and goods:
+        loose = []
+        for g in goods:
+            price = parse_price(g.get("priceText"))
+            name = g.get("name") or ""
+            href = g.get("href") or ""
+            if not price:
+                continue
+            sc = score_title(name + " " + href, must)
+            if sc < min_score:
+                continue
+            loose.append(
+                {
+                    "title": name[:160],
+                    "price_tax": price,
+                    "url": (href.split("?")[0] if href else f"https://item.jd.com/{g.get('sku')}.html"),
+                    "sku": g.get("sku") or "",
+                    "score": sc,
+                    "platform": "jd",
+                }
+            )
+        loose.sort(key=lambda x: (-x["score"], x["price_tax"]))
+        return loose[:15], "ok"
+    return cands, "ok"
 
 
 def _search_1688(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
@@ -729,9 +792,9 @@ def _filter_cands(goods, must, min_score, platform_id, link_hint) -> list[dict] 
         sc = score_title(name + " " + href, must)
         if not price or not href:
             continue
-        if link_hint and link_hint not in href and platform_id not in ("zkh", "mysteel"):
-            # allow zkh loose links
-            if platform_id not in ("zkh", "suning", "mysteel"):
+        if link_hint and link_hint not in href and platform_id not in ("zkh", "mysteel", "jd"):
+            # jd 新版常无 item 锚点，href 由 sku 拼出；zkh/suning 链接松
+            if platform_id not in ("zkh", "suning", "mysteel", "jd"):
                 continue
         if sc >= min_score:
             cands.append(
