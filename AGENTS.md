@@ -12,27 +12,25 @@
 ```bash
 cd <package-root>   # material-price-audit 目录
 
-# 1) 环境自检；失败则自动装依赖
-python3 -m material_price_audit check --auto-install
+# 1) 环境：只快检 import；缺包才 --auto-install。禁止升级 Python / 禁止反复 check
+#    日常 run 已内置轻量检查，不要先刷一遍 check
 
-# 2) 若用户还没给平台：打开/告知勾选页（一次多选），或直接用默认
-#    默认：guangcai,huixun,lingcai,jd,1688
-#    勾选页：docs/platform-select.html  → 生成 platforms 列表
+# 2) 平台：必须用户选。禁止默认全站登录。
+#    问一句：「要比哪几个站？」→ 例如 guangcai,jd
+#    或：select-platforms / docs/platform-select.html
 
-# 3) 一键跑（自动识别 data/input/ 下任意询价 .xlsx，不必叫 inquiry）
-python3 -m material_price_audit run \
-  --platforms guangcai,huixun,lingcai,jd,1688 \
-  --auto-install \
-  --login-wait 90
+# 3) 只跑用户选的站（询价表 data/input/ 任意文件名）
+python3 -m material_price_audit run --platforms guangcai,jd --limit 8
 ```
 
-**只在这两种情况停下来问用户：**
+**只在这些情况停下来问用户：**
 
-1. **没有 Python / 自动安装失败** → 把安装命令甩给用户（或帮装）  
-2. **没有询价单文件** → 一句：「请把任意文件名的询价 Excel 放到 `data/input/`」  
-3. **登录** → 浏览器已打开，提示「请在 90 秒内登录各平台（已登录可忽略）」——**不要每个平台单独问一遍**
+1. **缺包装失败** → 给安装命令（只装缺失，不升级 Python）  
+2. **没有询价单** → 「把任意文件名 Excel 放到 data/input/」  
+3. **没选平台** → 「要比哪些网站？例如 guangcai,jd / huixun / lingcai」  
+4. **登录** → 只打开用户选的站，每站回车继续（不要 90 秒×全站）
 
-不要：先问平台、再问路径、再问是否登录、再问是否试跑……那种傻逼流程。
+不要默认全站挨个登录；不要每次先折腾 Python 环境是否更新。
 
 ---
 

@@ -22,6 +22,7 @@ data/input/*
 
 # Local machine config (commit config.example.yaml only)
 config.yaml
+.env_ok_cache.json
 
 # OS / IDE
 .DS_Store

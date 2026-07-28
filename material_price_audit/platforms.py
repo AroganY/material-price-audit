@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
@@ -284,13 +285,19 @@ def load_platform_registry(cfg: dict | None = None) -> dict[str, PlatformSpec]:
     return reg
 
 
-def resolve_enabled_platforms(cfg: dict | None, cli_platforms: str | None) -> list[str]:
+def resolve_enabled_platforms(
+    cfg: dict | None,
+    cli_platforms: str | None,
+    *,
+    allow_default: bool = False,
+) -> list[str]:
     """
     Priority:
       1) CLI --platforms a,b,c
       2) config platforms.enabled list
       3) config platforms: [jd, 1688]  (legacy list form)
-      4) default jd,1688
+      4) 默认空列表 —— 必须由用户选择，禁止偷偷全站登录
+         allow_default=True 时仅给 platforms 列表展示用，不给 run/scrape 当默认
     """
     if cli_platforms:
         ids = [normalize_platform_id(x) for x in cli_platforms.split(",") if x.strip()]
@@ -304,8 +311,88 @@ def resolve_enabled_platforms(cfg: dict | None, cli_platforms: str | None) -> li
         enabled = plats.get("enabled") or plats.get("list") or []
         if enabled:
             return [normalize_platform_id(x) for x in enabled]
-    # 默认：广材 + 慧讯(RCC) + 领材(hylcw) + 电商补充
-    return ["guangcai", "huixun", "lingcai", "jd", "1688"]
+    if allow_default:
+        return ["guangcai", "huixun", "lingcai", "jd", "1688"]
+    return []
+
+
+# 终端/网页勾选时展示的推荐顺序（不自动启用）
+SELECTABLE_PLATFORM_IDS = [
+    "guangcai",
+    "huixun",
+    "lingcai",
+    "jd",
+    "1688",
+    "zkh",
+    "taobao",
+    "tmall",
+    "jcnet",
+    "gldjc_hangqing",
+    "gldjc_xunjia",
+    "suning",
+    "mysteel",
+]
+
+
+def save_platforms_selected(path: Path, platform_ids: list[str]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(normalize_platform_id(p) for p in platform_ids if str(p).strip())
+    path.write_text(body + ("\n" if body else ""), encoding="utf-8")
+
+
+def pick_platforms_interactive(registry: dict[str, PlatformSpec] | None = None) -> list[str]:
+    """
+    终端多选平台。用户输入编号或 id，例如：1,3 或 guangcai,jd
+    回车取消（返回空）。
+    """
+    reg = registry or load_platform_registry({})
+    choices: list[tuple[str, PlatformSpec]] = []
+    for pid in SELECTABLE_PLATFORM_IDS:
+        if pid in reg:
+            choices.append((pid, reg[pid]))
+    for pid, spec in reg.items():
+        if pid not in {c[0] for c in choices}:
+            choices.append((pid, spec))
+
+    print("")
+    print("========== 选择要比价的平台（必选，只登录你勾的） ==========")
+    print("输入编号（逗号分隔）如 1,4,5   或 id 如 guangcai,jd")
+    print("只选你有账号/要查的站；不选的不会打开登录页。")
+    print("-" * 60)
+    for i, (pid, spec) in enumerate(choices, 1):
+        print(f"  {i:>2}. {spec.name:<10}  {pid:<14}  {spec.login_url}")
+    print("-" * 60)
+    try:
+        raw = input("你的选择 > ").strip()
+    except EOFError:
+        return []
+    if not raw:
+        return []
+
+    selected: list[str] = []
+    for part in raw.replace("，", ",").replace(" ", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if part.isdigit():
+            idx = int(part)
+            if 1 <= idx <= len(choices):
+                selected.append(choices[idx - 1][0])
+            continue
+        pid = normalize_platform_id(part)
+        if pid in reg:
+            selected.append(pid)
+        else:
+            print(f"  [忽略未知] {part}")
+    # 去重保序
+    seen = set()
+    out = []
+    for p in selected:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
 
 
 def list_platforms(cfg: dict | None = None) -> list[PlatformSpec]:

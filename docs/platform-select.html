@@ -76,8 +76,8 @@
     PLATS.forEach((p, i) => {
       const lab = document.createElement("label");
       lab.className = "row";
-      const checked = ["guangcai", "huixun", "lingcai", "jd", "1688"].includes(p.id);
-      lab.innerHTML = `<input type="checkbox" value="${p.id}" ${checked ? "checked" : ""}>
+      // 默认全不勾：用户自己选，避免被迫全站登录
+      lab.innerHTML = `<input type="checkbox" value="${p.id}">
         <span><strong>${i + 1}. ${p.name}</strong> <code>${p.id}</code><br><small>${p.desc}</small></span>`;
       list.appendChild(lab);
     });
@@ -96,19 +96,18 @@
     document.getElementById("btnGen").onclick = async () => {
       const ids = selected();
       if (!ids.length) {
-        alert("请至少勾选一个平台");
+        alert("请至少勾选一个平台（只登录你勾的）");
         return;
       }
       const fileBody = ids.join("\n");
       const platforms = ids.join(",");
-      const cmd = `python -m material_price_audit run \\
-  --platforms ${platforms} \\
-  --auto-install \\
-  --login-wait 90`;
+      const cmd = `# 1) 把上一框内容保存为 data/output/platforms.selected
+# 2) 只登录所选平台：
+python -m material_price_audit run --platforms ${platforms} --limit 8`;
       document.getElementById("out").textContent = fileBody;
       document.getElementById("cmd").textContent = cmd;
       document.getElementById("status").textContent =
-        "已生成 " + ids.length + " 个平台（顺序=优先级 A→B→C）";
+        "已选 " + ids.length + " 个站（只会登录这些）· 顺序=优先级 A→B→C";
       try {
         await navigator.clipboard.writeText(cmd);
         document.getElementById("status").textContent += " · 命令已复制";

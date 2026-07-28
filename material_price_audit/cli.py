@@ -32,7 +32,9 @@ from .platforms import (
     load_platform_registry,
     login_urls_for,
     pick_best_candidate,
+    pick_platforms_interactive,
     resolve_enabled_platforms,
+    save_platforms_selected,
     search_on_platform,
 )
 from .scraper import launch_context, open_detail, pick_manual, to_evidence, wait_user
@@ -62,7 +64,8 @@ def load_config(path: Path | None) -> dict:
             "between_items_sleep": 1.2,
         },
         "platforms": {
-            "enabled": ["guangcai", "huixun", "lingcai", "jd", "1688"],
+            # 空 = 必须用户选择（--platforms / platforms.selected / 终端勾选）
+            "enabled": [],
             "definitions": {},
         },
         "excel": {},
@@ -115,15 +118,20 @@ def cmd_check(args):
         root = package_root()
         r = try_auto_install(root / "requirements.txt")
     else:
-        r = check_environment(require_browser=not args.skip_browser)
-    r.print()
+        # 默认快检；--force 才启浏览器。不谈升级 Python。
+        r = check_environment(
+            require_browser=not args.skip_browser and getattr(args, "force", False),
+            force=bool(getattr(args, "force", False)),
+            use_cache=not bool(getattr(args, "force", False)),
+        )
+    r.print(quiet_ok=False)
     print(f"\npackage version: {__version__}")
     print(f"package root   : {package_root()}")
+    print("说明: 不自动升级 Python/pip；缺包才装。")
     if not r.ok:
         print("\n========== AGENT_ENV_FAIL ==========")
-        print("请安装 Python3.10+ 与依赖后重试。可执行:")
+        print("只装缺失依赖即可，不要升级系统 Python。可执行:")
         print(f"  {sys.executable} -m material_price_audit check --auto-install")
-        print("或:")
         for h in r.hints:
             print(f"  {h}")
         print("========== AGENT_ENV_FAIL_END ==========")
@@ -199,19 +207,106 @@ def cmd_platforms(args):
     return 0
 
 
+def _platforms_selected_path(root: Path | None = None) -> Path:
+    return (root or package_root()) / "data" / "output" / "platforms.selected"
+
+
+def resolve_user_platforms(
+    cfg: dict,
+    cli_platforms: str | None,
+    *,
+    interactive: bool = True,
+    root: Path | None = None,
+) -> list[str]:
+    """
+    用户显式选择的平台（顺序=优先级）。
+    优先级：CLI → platforms.selected 文件 → config.enabled → 终端交互勾选。
+    绝不静默默认全站登录。
+    """
+    root = root or package_root()
+    if cli_platforms and str(cli_platforms).strip():
+        return resolve_enabled_platforms(cfg, cli_platforms)
+
+    selected_file = _platforms_selected_path(root)
+    from_file = _read_platforms_file(selected_file)
+    if from_file:
+        ids = resolve_enabled_platforms(cfg, from_file)
+        print(f"[platforms] 使用已选文件: {selected_file.name} → {', '.join(ids)}")
+        return ids
+
+    from_cfg = resolve_enabled_platforms(cfg, None)
+    if from_cfg:
+        print(f"[platforms] 使用 config.yaml enabled → {', '.join(from_cfg)}")
+        return from_cfg
+
+    html = root / "docs" / "platform-select.html"
+    if interactive and sys.stdin.isatty():
+        reg = load_platform_registry(cfg)
+        picked = pick_platforms_interactive(reg)
+        if picked:
+            save_platforms_selected(selected_file, picked)
+            print(f"[platforms] 已保存选择 → {selected_file}")
+            print(f"           {', '.join(picked)}")
+            return picked
+        print("未选择平台。也可打开网页勾选：")
+        print(f"  {html}")
+        return []
+
+    print("ERROR: 未选择比价平台。必须先选，不会默认全站登录。", file=sys.stderr)
+    print("任选一种方式：", file=sys.stderr)
+    print("  1) --platforms guangcai,jd          # 只登录你写的", file=sys.stderr)
+    print(f"  2) 打开网页勾选: {html}", file=sys.stderr)
+    print("     生成后保存到 data/output/platforms.selected", file=sys.stderr)
+    print("  3) 交互: python -m material_price_audit select-platforms", file=sys.stderr)
+    return []
+
+
+def cmd_select_platforms(args):
+    """终端勾选平台并写入 platforms.selected + 可选写回 config。"""
+    root = package_root()
+    cfg = load_config(Path(args.config) if args.config else None)
+    reg = load_platform_registry(cfg)
+    if args.platforms:
+        picked = resolve_enabled_platforms(cfg, args.platforms)
+    else:
+        picked = pick_platforms_interactive(reg)
+    if not picked:
+        print("未选择任何平台。")
+        return 2
+    path = _platforms_selected_path(root)
+    save_platforms_selected(path, picked)
+    print(f"已保存: {path}")
+    print(f"平台  : {', '.join(picked)}")
+    print("登录只会打开上述站点，不会挨个强登未选项。")
+    if getattr(args, "write_config", False):
+        run_init(root=root, platforms=picked, force_config=True)
+        print(f"已写 config.yaml enabled: {', '.join(picked)}")
+    print("下一步: python -m material_price_audit run --skip-login   # 若已登录")
+    print("   或: python -m material_price_audit run               # 只登录所选平台")
+    return 0
+
+
 def cmd_login(args):
-    ensure_or_exit(require_browser=True)
+    ensure_or_exit(require_browser=False, quiet=True)
     cfg = load_config(Path(args.config) if args.config else None)
     profile = Path(args.profile).expanduser().resolve()
-    wait_s = args.login_wait or cfg["browser"]["login_wait_seconds"]
-    enabled = resolve_enabled_platforms(cfg, args.platforms or None)
+    wait_s = args.login_wait if args.login_wait is not None else 0
+    # 0 = 每个站登录后回车；非交互时用 config 默认
+    if args.yes and not args.login_wait:
+        wait_s = int(cfg["browser"].get("login_wait_seconds") or 60)
+
+    enabled = resolve_user_platforms(
+        cfg, args.platforms or None, interactive=not args.yes, root=package_root()
+    )
+    if not enabled:
+        return 2
     reg = load_platform_registry(cfg)
     urls = login_urls_for(enabled, reg)
     if not urls:
-        print("ERROR: 没有可登录的平台，请检查 --platforms 或 config", file=sys.stderr)
+        print("ERROR: 没有可登录的平台 URL", file=sys.stderr)
         return 2
 
-    print("将依次打开以下平台，请在浏览器完成登录：")
+    print(f"只登录你选的 {len(urls)} 个站（不会打开未选项）：")
     for pid, name, url in urls:
         print(f"  - [{pid}] {name}: {url}")
 
@@ -219,15 +314,16 @@ def cmd_login(args):
         profile, channel=cfg["browser"]["channel"], headless=False
     )
     try:
-        for pid, name, url in urls:
+        n = len(urls)
+        for i, (pid, name, url) in enumerate(urls, 1):
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             wait_user(
-                f"【{name} / {pid}】请在浏览器登录（需要登录的站点请完成登录；可跳过仅浏览站）",
+                f"【{i}/{n} {name}】在浏览器登录后继续（本站可跳过则直接回车）",
                 wait_s,
-                args.yes,
+                bool(args.yes),
             )
-        print(f"登录流程结束。配置目录: {profile}")
-        print(f"已覆盖平台: {', '.join(p for p,_,_ in urls)}")
+        print(f"登录结束。profile={profile}")
+        print(f"已覆盖: {', '.join(p for p, _, _ in urls)}")
     finally:
         ctx.close()
         pw.stop()
@@ -260,7 +356,8 @@ def _read_platforms_file(path: Path) -> str:
 
 def cmd_scrape(args):
     auto_install = bool(getattr(args, "auto_install", False))
-    ensure_or_exit(require_browser=True, auto_install=auto_install)
+    # 快检 import，不反复升包/启浏览器
+    ensure_or_exit(require_browser=False, auto_install=auto_install, quiet=True)
     cfg = load_config(Path(args.config) if args.config else None)
     root = package_root()
 
@@ -293,18 +390,25 @@ def cmd_scrape(args):
     detail_min = float(cfg["pricing"].get("detail_match_min_score", 0.55))
     timeout_ms = int(cfg["browser"]["page_timeout_ms"])
     sleep_s = float(cfg["browser"]["between_items_sleep"])
-    wait_s = args.login_wait or cfg["browser"]["login_wait_seconds"]
-    # non-interactive by default for automation unless --interactive
+    # 登录：交互默认回车继续；--yes 才用秒数等待
+    wait_s = int(args.login_wait or 0)
     non_interactive = not bool(getattr(args, "interactive", False))
     if getattr(args, "yes", False):
         non_interactive = True
+        if not wait_s:
+            wait_s = int(cfg["browser"].get("login_wait_seconds") or 45)
 
-    plat_arg = args.platforms or ""
-    if not plat_arg:
-        # optional file from HTML multi-select
-        pf = package_root() / "data" / "output" / "platforms.selected"
-        plat_arg = _read_platforms_file(pf) or None
-    enabled = resolve_enabled_platforms(cfg, plat_arg)
+    enabled = resolve_user_platforms(
+        cfg,
+        args.platforms or None,
+        interactive=not non_interactive or not getattr(args, "yes", False),
+        root=root,
+    )
+    # --yes 且非 TTY 时 interactive 可能已关；再允许一次若仍空则失败
+    if not enabled and sys.stdin.isatty() and not getattr(args, "yes", False):
+        enabled = resolve_user_platforms(cfg, None, interactive=True, root=root)
+    if not enabled:
+        return 2
     reg = load_platform_registry(cfg)
     unknown = [p for p in enabled if p not in reg]
     if unknown:
@@ -341,11 +445,15 @@ def cmd_scrape(args):
     )
     try:
         if not skip_login:
-            print("打开各平台登录页（只需登录一次；已登录可直接等超时/回车）…")
-            for pid, name, url in login_urls_for(enabled, reg):
+            urls = login_urls_for(enabled, reg)
+            print(f"只打开你选的 {len(urls)} 个登录页（未选的站不会打开）：")
+            for pid, name, url in urls:
+                print(f"  · {name}  {url}")
+            n = len(urls)
+            for i, (pid, name, url) in enumerate(urls, 1):
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
                 wait_user(
-                    f"【{name}】登录后继续（自动化模式将等待 {wait_s if non_interactive else '回车'}）",
+                    f"【{i}/{n} {name}】登录后继续（可跳过则直接回车）",
                     wait_s if non_interactive else 0,
                     non_interactive,
                 )
@@ -510,30 +618,35 @@ def cmd_scrape(args):
 
 def cmd_run(args):
     """
-    One-shot automation:
-      env check (+ optional auto-install) → init → login once → waterfall scrape → rfq
+    One-shot:
+      轻量 env → 用户已选平台 → 只登录所选 → 瀑布抓取 → rfq
+    不默认全站、不升级 Python。
     """
     root = package_root()
     auto_install = bool(args.auto_install)
 
-    # resolve platforms from args or HTML selection file
-    plat = args.platforms or _read_platforms_file(root / "data" / "output" / "platforms.selected")
-    if not plat:
-        plat = "guangcai,huixun,lingcai,jd,1688"
-
-    print("=== RUN 全自动流水线 ===")
-    print(f"platforms: {plat}")
-
-    # env
+    print("=== RUN ===")
     try:
-        ensure_or_exit(require_browser=True, auto_install=auto_install)
+        ensure_or_exit(require_browser=False, auto_install=auto_install, quiet=True)
     except SystemExit:
-        print("环境失败。Agent 请执行: python -m material_price_audit check --auto-install")
+        print("缺依赖时: python -m material_price_audit check --auto-install")
         return 2
 
-    # init scaffold + config
-    plats = [p.strip() for p in plat.split(",") if p.strip()]
-    run_init(root=root, platforms=plats, force_config=bool(args.force_config))
+    cfg = load_config(Path(args.config) if args.config else None)
+    # 平台必须用户选：CLI / selected 文件 / 终端勾选（TTY）
+    interactive = sys.stdin.isatty() and not bool(getattr(args, "yes", False))
+    enabled = resolve_user_platforms(
+        cfg, args.platforms or None, interactive=interactive, root=root
+    )
+    if not enabled:
+        return 2
+
+    plat = ",".join(enabled)
+    print(f"platforms（仅这些会登录）: {plat}")
+
+    # 写入 selected + config.enabled，方便下次
+    save_platforms_selected(_platforms_selected_path(root), enabled)
+    run_init(root=root, platforms=enabled, force_config=bool(args.force_config))
 
     try:
         input_path = resolve_inquiry_path(
@@ -542,8 +655,7 @@ def cmd_run(args):
         )
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
-        print("把任意文件名的询价 .xlsx 丢进 data/input/ 即可（不必叫 inquiry.xlsx）")
-        print("网页多选平台: docs/platform-select.html")
+        print("把任意文件名的询价 .xlsx 丢进 data/input/ 即可")
         return 2
 
     output_path = Path(args.output or (root / "data/output/result.xlsx")).expanduser().resolve()
@@ -551,7 +663,8 @@ def cmd_run(args):
     profile = Path(args.profile or (root / ".browser-profile")).expanduser().resolve()
     rfq_path = Path(args.rfq or (root / "data/output/rfq.xlsx")).expanduser().resolve()
 
-    # fake args namespace for scrape
+    # TTY：交互回车登录；非 TTY/--yes：按 login-wait 秒
+    use_yes = bool(getattr(args, "yes", False)) or not sys.stdin.isatty()
     a = type("A", (), {})()
     a.input = str(input_path)
     a.output = str(output_path)
@@ -559,9 +672,9 @@ def cmd_run(args):
     a.profile = str(profile)
     a.platforms = plat
     a.limit = args.limit or 0
-    a.login_wait = args.login_wait if args.login_wait else 90
-    a.yes = True
-    a.interactive = False
+    a.login_wait = int(args.login_wait or 0) if not use_yes else int(args.login_wait or 45)
+    a.yes = use_yes
+    a.interactive = not use_yes
     a.skip_existing = not args.no_skip_existing
     a.skip_login = bool(args.skip_login)
     a.open_detail = True
@@ -574,7 +687,6 @@ def cmd_run(args):
     if rc != 0:
         return rc
 
-    # rfq
     cfg = load_config(Path(a.config) if a.config else None)
     items = load_inquiry(input_path, cfg.get("excel") or {})
     evidence = load_evidence(evidence_path)
@@ -588,7 +700,7 @@ def cmd_run(args):
 
 
 def cmd_merge(args):
-    ensure_or_exit(require_browser=False)
+    ensure_or_exit(require_browser=False, quiet=True)
     cfg = load_config(Path(args.config) if args.config else None)
     input_path = Path(args.input).expanduser().resolve()
     output_path = Path(args.output).expanduser().resolve()
@@ -659,9 +771,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", default="", help="optional config.yaml")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sp = sub.add_parser("check", help="检查 Python / Playwright 环境")
-    sp.add_argument("--skip-browser", action="store_true")
-    sp.add_argument("--auto-install", action="store_true", help="缺失依赖时自动 pip/playwright 安装")
+    sp = sub.add_parser("check", help="轻量检查依赖（不升级 Python；默认不启浏览器）")
+    sp.add_argument("--skip-browser", action="store_true", help="兼容旧参数")
+    sp.add_argument(
+        "--force",
+        action="store_true",
+        help="强制重检并尝试启动浏览器（日常 run 不需要）",
+    )
+    sp.add_argument(
+        "--auto-install",
+        action="store_true",
+        help="仅安装缺失包，不 upgrade pip/Python",
+    )
     sp.set_defaults(func=cmd_check)
 
     sp = sub.add_parser(
@@ -692,15 +813,31 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--platforms", default="", help="仅用于预览解析结果")
     sp.set_defaults(func=cmd_platforms)
 
-    sp = sub.add_parser("login", help="按指定平台依次打开登录页")
+    sp = sub.add_parser(
+        "select-platforms",
+        help="【必做】终端勾选比价平台，写入 platforms.selected（只登录所选）",
+    )
+    sp.add_argument(
+        "--platforms",
+        default="",
+        help="非交互直接写入，如 guangcai,jd（跳过勾选菜单）",
+    )
+    sp.add_argument(
+        "--write-config",
+        action="store_true",
+        help="同时写回 config.yaml enabled",
+    )
+    sp.set_defaults(func=cmd_select_platforms)
+
+    sp = sub.add_parser("login", help="只打开「已选平台」的登录页（不是全站挨个登）")
     sp.add_argument("--profile", required=True, help="浏览器配置目录（勿提交 git）")
     sp.add_argument(
         "--platforms",
         default="",
-        help="逗号分隔，如 jd,1688,zkh,taobao（默认读 config）",
+        help="逗号分隔，如 guangcai,jd；不传则读 platforms.selected / 交互勾选",
     )
-    sp.add_argument("--yes", action="store_true")
-    sp.add_argument("--login-wait", type=int, default=0)
+    sp.add_argument("--yes", action="store_true", help="非交互：按秒等待而非回车")
+    sp.add_argument("--login-wait", type=int, default=0, help="--yes 时每站等待秒数")
     sp.set_defaults(func=cmd_login)
 
     sp = sub.add_parser("scrape", help="瀑布抓取：A平台详情匹配才用，否则自动B→C")
@@ -733,12 +870,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "run",
-        help="【推荐】一键自动化：环境自检→配置→登录等待→瀑布抓取→导出RFQ",
+        help="一键：轻量环境→用户已选平台→只登录所选→抓取→RFQ",
     )
     sp.add_argument(
         "--input",
         default="",
-        help="询价表路径或目录；默认自动识别 data/input/ 内任意 .xlsx（不必改名 inquiry）",
+        help="询价表路径或目录；默认自动识别 data/input/ 内任意 .xlsx",
     )
     sp.add_argument("--output", default="", help="默认 data/output/result.xlsx")
     sp.add_argument("--evidence", default="", help="默认 data/output/evidence.json")
@@ -747,12 +884,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--platforms",
         default="",
-        help="优先级列表；也可先用 docs/platform-select.html 勾选生成 platforms.selected",
+        help="必选：如 guangcai,jd。不传则读 platforms.selected 或终端勾选（绝不默认全站）",
     )
     sp.add_argument("--limit", type=int, default=0, help="试跑条数，0=全量")
-    sp.add_argument("--login-wait", type=int, default=90, help="每平台登录等待秒数")
-    sp.add_argument("--skip-login", action="store_true")
-    sp.add_argument("--auto-install", action="store_true", help="缺依赖自动 pip/playwright")
+    sp.add_argument(
+        "--login-wait",
+        type=int,
+        default=0,
+        help="非交互时每站等待秒数；交互模式回车继续（默认）",
+    )
+    sp.add_argument("--yes", action="store_true", help="非交互（Agent 用）")
+    sp.add_argument("--skip-login", action="store_true", help="已登录过则跳过登录页")
+    sp.add_argument(
+        "--auto-install",
+        action="store_true",
+        help="仅补缺失包，不升级 Python",
+    )
     sp.add_argument("--force-config", action="store_true")
     sp.add_argument("--no-skip-existing", action="store_true")
     sp.set_defaults(func=cmd_run)

@@ -16,25 +16,18 @@ browser:
   between_items_sleep: 1.2
 
 platforms:
-  # 三家造价信息站域名互不相同，登录页会分别打开（不会串成广材）
-  enabled:
-    - guangcai     # 广材网 https://www.gldjc.com/
-    - huixun       # 慧讯网 登录 https://services.iccchina.com/login （RCC，非广材）
-    - lingcai      # 领材网 登录 https://www.hylcw.cn/userInfo/index.html （hylcw.cn，非广材）
-    - jd
-    - "1688"
-    # - jcnet      # 建材在线 https://www.jc.net.cn/
-    # - gldjc_hangqing
-    # - gldjc_xunjia
-
-  definitions:
-    # 内置 URL 已写在 platforms.py；仅当官网变更时才覆盖，例如：
-    # huixun:
-    #   login_url: "https://services.iccchina.com/login"
-    #   search_url: "https://services.iccchina.com/iccHome"
-    # lingcai:
-    #   login_url: "https://www.hylcw.cn/userInfo/index.html"
-    #   search_url: "https://www.hylcw.cn/lcIndex.html?keyword={query}"
+  # 空 = 尚未选择。请先：
+  #   python -m material_price_audit select-platforms
+  # 或 run --platforms guangcai,jd
+  # 登录页只会打开你选的站。
+  enabled: []
+  # 示例（用户选完后才会有内容）：
+  # enabled:
+  #   - guangcai     # 登录 https://www.gldjc.com/login
+  #   - huixun       # 登录 https://services.iccchina.com/login
+  #   - lingcai      # 登录 https://www.hylcw.cn/userInfo/index.html
+  #   - jd
+  definitions: {}
 
 excel:
   submit_price_headers: [报送不含税单价, 报送单价, 投标单价]
