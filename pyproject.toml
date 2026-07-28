@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "material-price-audit"
+version = "0.1.0"
+description = "Construction material inquiry price audit with Playwright evidence (accuracy-first)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Material Price Audit Contributors" }]
+keywords = ["construction", "cost", "pricing", "playwright", "excel", "inquiry"]
+dependencies = [
+  "openpyxl>=3.1.0",
+  "playwright>=1.40.0",
+  "PyYAML>=6.0",
+]
+
+[project.scripts]
+material-price-audit = "material_price_audit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/example/material-price-audit"
+
+[tool.setuptools.packages.find]
+include = ["material_price_audit*"]

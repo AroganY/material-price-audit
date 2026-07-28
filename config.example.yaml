@@ -1,0 +1,56 @@
+# 复制: cp config.example.yaml config.yaml
+
+pricing:
+  tax_divisor: 1.13
+  never_exceed_submit: true
+  open_detail: true
+  min_title_score: 1
+  # multi = 每个材料在所有启用平台搜索，取匹配分最高、同级取更低价
+  platform_strategy: multi
+
+browser:
+  channel: chrome
+  headless: false
+  login_wait_seconds: 120
+  page_timeout_ms: 60000
+  between_items_sleep: 1.2
+
+platforms:
+  # 造价材料信息站优先 + 电商补充
+  enabled:
+    - guangcai     # 广材网  https://www.gldjc.com/
+    - huixun       # 慧讯网（广联达材料价，与广材同体系）
+    - lingcai      # 领材网（默认同 gldjc 检索；独立域名可在 definitions 覆盖）
+    - jd           # 京东
+    - "1688"       # 1688 批发（必须加引号）
+    # - zkh
+    # - taobao
+    # - tmall
+    # - gldjc_hangqing  # 广材钢材行情
+    # - gldjc_xunjia    # 广材人工询价入口
+
+  definitions: {}
+  # 若领材/慧讯有独立域名，可覆盖，例如：
+  # definitions:
+  #   lingcai:
+  #     name: 领材网
+  #     login_url: https://your-lingcai.example.com/login
+  #     search_url: "https://your-lingcai.example.com/search?q={query}"
+  #     handler: generic
+  #     item_link_contains: example.com
+  #     item_link_selector: 'a[href*="/product"]'
+  #     detail_price_selectors: [".price"]
+
+excel:
+  submit_price_headers:
+    - 报送不含税单价
+    - 报送单价
+    - 投标单价
+  audit_price_headers:
+    - 审定不含税单价
+    - 审定单价
+  name_headers: [材料名称, 名称, 设备名称]
+  spec_headers: [规格、型号, 规格型号, 规格, 型号]
+  unit_headers: [单位]
+  qty_headers: [数量]
+  brand_headers: [产地、品牌及特殊要求, 品牌, 产地品牌]

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Browser profile (contains login cookies — never commit)
+.browser-profile/
+*.browser-profile/
+
+# Runtime data
+data/output/*
+!data/output/.gitkeep
+data/input/*
+!data/input/.gitkeep
+!data/input/README.md
+
+# Local machine config (commit config.example.yaml only)
+config.yaml
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.xlsx
+!~$*.xlsx
+evidence*.json
+*.log
+
+# Keep examples structure
+!examples/**
+
+# Python cache under package
+material_price_audit/__pycache__/
+**/__pycache__/
