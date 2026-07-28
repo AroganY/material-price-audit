@@ -1,12 +1,10 @@
-# 复制: cp config.example.yaml config.yaml
+# cp config.example.yaml config.yaml
 
 pricing:
   tax_divisor: 1.13
   never_exceed_submit: true
   open_detail: true
   min_title_score: 1
-  # waterfall = A平台详情规格/型号匹配才用，否则自动 B→C（推荐）
-  # multi = 搜全部再综合排序
   platform_strategy: waterfall
   detail_match_min_score: 0.55
 
@@ -18,39 +16,39 @@ browser:
   between_items_sleep: 1.2
 
 platforms:
-  # 造价材料信息站优先 + 电商补充
+  # 只启用「官网地址已核实」的站。领材网未配置真实域名时不要写 lingcai。
   enabled:
-    - guangcai     # 广材网  https://www.gldjc.com/
-    - huixun       # 慧讯网（广联达材料价，与广材同体系）
-    - lingcai      # 领材网（默认同 gldjc 检索；独立域名可在 definitions 覆盖）
-    - jd           # 京东
-    - "1688"       # 1688 批发（必须加引号）
-    # - zkh
-    # - taobao
-    # - tmall
-    # - gldjc_hangqing  # 广材钢材行情
-    # - gldjc_xunjia    # 广材人工询价入口
+    - guangcai     # 广材网 https://www.gldjc.com/
+    - jd
+    - "1688"
+    # - huixun     # 与 guangcai 同站（登录自动去重），可选
+    # - lingcai    # 必须先在 definitions 填真实领材网 URL
+    # - jcnet      # 建材在线 https://www.jc.net.cn/
+    # - gldjc_hangqing
+    # - gldjc_xunjia
 
-  definitions: {}
-  # 若领材/慧讯有独立域名，可覆盖，例如：
-  # definitions:
-  #   lingcai:
-  #     name: 领材网
-  #     login_url: https://your-lingcai.example.com/login
-  #     search_url: "https://your-lingcai.example.com/search?q={query}"
-  #     handler: generic
-  #     item_link_contains: example.com
-  #     item_link_selector: 'a[href*="/product"]'
-  #     detail_price_selectors: [".price"]
+  definitions:
+    # —— 领材网：必须填浏览器地址栏里的真实地址，禁止填 gldjc.com ——
+    # lingcai:
+    #   name: 领材网
+    #   login_url: "https://【领材网登录页】"
+    #   search_url: "https://【领材网搜索】?q={query}"
+    #   handler: generic
+    #   item_link_contains: "【域名】"
+    #   item_link_selector: 'a[href*="【域名】"]'
+    #   detail_price_selectors: [".price", "[class*='price']"]
+
+    # —— 若慧讯有旧独立域名（少见），可覆盖 ——
+    # huixun:
+    #   name: 慧讯网
+    #   login_url: "https://【独立慧讯登录】"
+    #   search_url: "https://【搜索】?keyword={query}"
+    #   handler: generic
+    #   item_link_contains: "【域名】"
 
 excel:
-  submit_price_headers:
-    - 报送不含税单价
-    - 报送单价
-    - 投标单价
-  audit_price_headers:
-    - 审定不含税单价
-    - 审定单价
+  submit_price_headers: [报送不含税单价, 报送单价, 投标单价]
+  audit_price_headers: [审定不含税单价, 审定单价]
   name_headers: [材料名称, 名称, 设备名称]
   spec_headers: [规格、型号, 规格型号, 规格, 型号]
   unit_headers: [单位]

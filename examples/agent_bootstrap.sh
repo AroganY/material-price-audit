@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
-PLATFORMS="${1:-guangcai,huixun,lingcai,jd,1688}"
+PLATFORMS="${1:-guangcai,jd,1688}"
 LIMIT="${2:-}"   # 可选第二参数：试跑条数，如 8
 
 echo "=============================================="

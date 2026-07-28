@@ -20,8 +20,8 @@ from .env_check import check_environment
 from .platforms import BUILTIN, resolve_enabled_platforms
 
 
-# 造价场景默认：广材/慧讯/领材（gldjc 体系）+ 电商补充
-DEFAULT_PLATFORMS = ["guangcai", "huixun", "lingcai", "jd", "1688"]
+# 默认：仅 URL 已核实的平台。慧讯=广材同站（登录去重）；领材须用户自配域名
+DEFAULT_PLATFORMS = ["guangcai", "jd", "1688"]
 
 
 @dataclass

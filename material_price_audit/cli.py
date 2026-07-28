@@ -62,8 +62,19 @@ def load_config(path: Path | None) -> dict:
             "between_items_sleep": 1.2,
         },
         "platforms": {
-            "enabled": ["guangcai", "huixun", "lingcai", "jd", "1688"],
-            "definitions": {},
+            "enabled": ["guangcai", "jd", "1688"],
+            "definitions": {
+                # 领材网：必须填你们实际使用的官网（禁止填广材 gldjc.com）
+                # "lingcai": {
+                #   "name": "领材网",
+                #   "login_url": "https://【领材网真实登录页】",
+                #   "search_url": "https://【领材网搜索】?q={query}",
+                #   "handler": "generic",
+                #   "item_link_contains": "【域名】",
+                #   "item_link_selector": "a[href]",
+                #   "detail_price_selectors": [".price"],
+                # },
+            },
         },
         "excel": {},
     }
@@ -516,7 +527,7 @@ def cmd_run(args):
     # resolve platforms from args or HTML selection file
     plat = args.platforms or _read_platforms_file(root / "data" / "output" / "platforms.selected")
     if not plat:
-        plat = "guangcai,huixun,lingcai,jd,1688"
+        plat = "guangcai,jd,1688"
 
     print("=== RUN 全自动流水线 ===")
     print(f"platforms: {plat}")

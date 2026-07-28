@@ -22,69 +22,62 @@ class PlatformSpec:
     id: str
     name: str
     login_url: str
-    search_url_template: str  # must contain {query}
+    search_url_template: str  # must contain {query} when configured
     # built-in handler name or "generic"
     handler: str = "generic"
     require_login_hint: bool = True
     # generic selectors
     item_link_contains: str = ""  # substring that product URLs should contain
     item_link_selector: str = "a[href]"
-    # optional: evaluate script returns list[{href,name,priceText}]
-    # kept simple: use link selector + parent text for price
     detail_price_selectors: list[str] = field(default_factory=list)
     notes: str = ""
+    # if True, must set login_url+search_url in config before use (no fake defaults)
+    requires_config: bool = False
+    # if set, login_urls_for will skip when that platform already logged (same site)
+    same_login_as: str = ""
 
 
 # ---- built-in definitions ----
-# 造价材料信息站（优先）+ 电商/工业品（补充）
+# 只写「实测可打开且标题匹配」的 URL；禁止把不同品牌网站指到广材网。
 
 BUILTIN: dict[str, PlatformSpec] = {
-    # ========== 造价材料信息站（内置重点）==========
+    # ========== 造价材料信息站 ==========
     "guangcai": PlatformSpec(
         id="guangcai",
         name="广材网",
+        # 实测 2026-07：首页标题「广材网-建筑工程造价行业材料价格查询平台」
         login_url="https://www.gldjc.com/login",
-        # 实测搜索落地：/scj/so.html?l=1&keyword=...（未登录会跳转登录页）
         search_url_template="https://www.gldjc.com/scj/so.html?l=1&keyword={query}",
         handler="gldjc",
         item_link_contains="gldjc.com",
         item_link_selector='a[href*="gldjc.com"]',
-        detail_price_selectors=[
-            ".price",
-            "[class*='price']",
-            "[class*='Price']",
-            ".material-price",
-        ],
-        notes="广联达广材网 gldjc.com · 建工材料价格查询，通常需登录会员",
+        detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
+        notes="官网 https://www.gldjc.com/ （广联达平方）· 检索需登录",
     ),
     "huixun": PlatformSpec(
         id="huixun",
-        name="慧讯网",
-        # 慧讯为广联达材料价格产品线常用称呼，现入口与广材网同一体系
-        login_url="https://www.gldjc.com/login",
-        search_url_template="https://www.gldjc.com/scj/so.html?l=1&keyword={query}",
-        handler="gldjc",
-        item_link_contains="gldjc.com",
-        item_link_selector='a[href*="gldjc.com"]',
-        detail_price_selectors=[
-            ".price",
-            "[class*='price']",
-            "[class*='Price']",
-        ],
-        notes="广联达慧讯/材料价 · 与广材网同属 gldjc 体系，需登录；若贵司有独立慧讯域名可在 definitions 覆盖",
-    ),
-    "lingcai": PlatformSpec(
-        id="lingcai",
-        name="领材网",
-        # 领材网常与广联达材料询价生态相关；默认走广材询价/材料检索入口
-        # 若实际账号在独立域名，请用 platforms.definitions.lingcai 覆盖 URL
+        name="慧讯网（现广材网）",
+        # 公开事实：原「广联达慧讯网」材料价格服务现统一品牌为「广材网」，
+        # 可访问官网即 gldjc.com，登录页标题为「登录-广材网…」。
+        # 因此与 guangcai 共用同一登录/搜索 URL，登录时自动去重只弹一次。
         login_url="https://www.gldjc.com/login",
         search_url_template="https://www.gldjc.com/scj/so.html?l=1&keyword={query}",
         handler="gldjc",
         item_link_contains="gldjc.com",
         item_link_selector='a[href*="gldjc.com"]',
         detail_price_selectors=[".price", "[class*='price']"],
-        notes="领材网 · 默认对接广材材料检索；独立部署域名请在 config definitions 覆盖 login_url/search_url",
+        same_login_as="guangcai",
+        notes="【重要】慧讯网公开入口已更名为广材网 https://www.gldjc.com/ ；与 guangcai 同一站点，登录不重复弹窗。若你司仍有旧独立域名，用 definitions.huixun 覆盖。",
+    ),
+    "lingcai": PlatformSpec(
+        id="lingcai",
+        name="领材网",
+        # 禁止默认跳广材！领材网若为独立产品，必须由用户配置真实 URL。
+        login_url="",
+        search_url_template="",
+        handler="generic",
+        requires_config=True,
+        notes="【须配置】未找到可公开访问的独立官网。请在 config.yaml → platforms.definitions.lingcai 填写 login_url 与 search_url（含 {query}）。禁止误用广材网地址。",
     ),
     "gldjc_hangqing": PlatformSpec(
         id="gldjc_hangqing",
@@ -95,7 +88,7 @@ BUILTIN: dict[str, PlatformSpec] = {
         item_link_contains="hangqing.gldjc.com",
         item_link_selector='a[href*="hangqing.gldjc.com"]',
         detail_price_selectors=["[class*='price']"],
-        notes="钢材等每日行情（资讯向，需人工判断是否可作审定）",
+        notes="实测可打开 hangqing.gldjc.com · 钢材等行情",
         require_login_hint=False,
     ),
     "gldjc_xunjia": PlatformSpec(
@@ -107,7 +100,19 @@ BUILTIN: dict[str, PlatformSpec] = {
         item_link_contains="xunjia.gldjc.com",
         item_link_selector='a[href*="xunjia"]',
         detail_price_selectors=["[class*='price']"],
-        notes="人工询价入口（偏流程，非自动挂牌价）",
+        notes="实测可打开 xunjia.gldjc.com · 人工询价入口",
+        require_login_hint=True,
+    ),
+    "jcnet": PlatformSpec(
+        id="jcnet",
+        name="建材在线",
+        login_url="https://www.jc.net.cn/",
+        search_url_template="https://www.jc.net.cn/",
+        handler="generic",
+        item_link_contains="jc.net.cn",
+        item_link_selector='a[href*="jc.net.cn"]',
+        detail_price_selectors=["[class*='price']", ".price"],
+        notes="实测标题含「建材在线-建材信息价格服务」· jc.net.cn",
         require_login_hint=True,
     ),
     # ========== 电商 / 工业品 ==========
@@ -234,11 +239,10 @@ def normalize_platform_id(pid) -> str:
 
 
 def load_platform_registry(cfg: dict | None = None) -> dict[str, PlatformSpec]:
-    """Merge built-ins with config platforms.definitions."""
-    reg = dict(BUILTIN)
+    """Merge built-ins with config platforms.definitions (definitions fully override fields)."""
+    reg = {k: PlatformSpec(**{**v.__dict__}) for k, v in BUILTIN.items()}
     cfg = cfg or {}
     plats = cfg.get("platforms") or {}
-    # support both list form and dict form
     definitions = {}
     if isinstance(plats, dict):
         definitions = plats.get("definitions") or {}
@@ -246,23 +250,31 @@ def load_platform_registry(cfg: dict | None = None) -> dict[str, PlatformSpec]:
         if not isinstance(raw, dict):
             continue
         pid = normalize_platform_id(str(pid))
+        base = reg.get(pid)
+        login = str(raw.get("login_url") or raw.get("home_url") or (base.login_url if base else "") or "")
+        search = str(
+            raw.get("search_url")
+            or raw.get("search_url_template")
+            or (base.search_url_template if base else "")
+            or ""
+        )
         reg[pid] = PlatformSpec(
             id=pid,
-            name=str(raw.get("name") or pid),
-            login_url=str(raw.get("login_url") or raw.get("home_url") or ""),
-            search_url_template=str(
-                raw.get("search_url") or raw.get("search_url_template") or ""
-            ),
-            handler=str(raw.get("handler") or "generic"),
-            require_login_hint=bool(raw.get("require_login", True)),
-            item_link_contains=str(raw.get("item_link_contains") or ""),
-            item_link_selector=str(raw.get("item_link_selector") or "a[href]"),
+            name=str(raw.get("name") or (base.name if base else pid)),
+            login_url=login,
+            search_url_template=search,
+            handler=str(raw.get("handler") or (base.handler if base else "generic")),
+            require_login_hint=bool(raw.get("require_login", True if not base else base.require_login_hint)),
+            item_link_contains=str(raw.get("item_link_contains") or (base.item_link_contains if base else "")),
+            item_link_selector=str(raw.get("item_link_selector") or (base.item_link_selector if base else "a[href]")),
             detail_price_selectors=list(
                 raw.get("detail_price_selectors")
                 or raw.get("detail_price_selector")
-                or []
+                or (base.detail_price_selectors if base else [])
             ),
-            notes=str(raw.get("notes") or ""),
+            notes=str(raw.get("notes") or (base.notes if base else "")),
+            requires_config=False if (login and search) else bool(base.requires_config if base else True),
+            same_login_as=str(raw.get("same_login_as") or (base.same_login_as if base else "")),
         )
     return reg
 
@@ -287,7 +299,8 @@ def resolve_enabled_platforms(cfg: dict | None, cli_platforms: str | None) -> li
         enabled = plats.get("enabled") or plats.get("list") or []
         if enabled:
             return [normalize_platform_id(x) for x in enabled]
-    return ["guangcai", "huixun", "lingcai", "jd", "1688"]
+    # 默认只启用「URL 已核实」的平台；领材网需用户自行配置后加入
+    return ["guangcai", "jd", "1688"]
 
 
 def list_platforms(cfg: dict | None = None) -> list[PlatformSpec]:
@@ -557,6 +570,18 @@ def search_on_platform(
     spec = registry.get(pid)
     if not spec:
         return [], "unknown_platform"
+    if getattr(spec, "requires_config", False) and (
+        not spec.login_url or not spec.search_url_template or "{query}" not in spec.search_url_template
+    ):
+        print(
+            f"  [{pid}] 未配置真实搜索地址，跳过（请配置 platforms.definitions.{pid}，勿误用广材网）"
+        )
+        return [], "not_configured"
+    if not spec.search_url_template or (
+        "{query}" not in spec.search_url_template and spec.handler not in ("generic",)
+    ):
+        if "{query}" not in (spec.search_url_template or "") and spec.handler == "gldjc":
+            return [], "not_configured"
     handler_name = spec.handler if spec.handler in HANDLERS else "generic"
     # map built-in id to specialized handler
     if pid == "jd":
@@ -579,16 +604,46 @@ def search_on_platform(
 
 
 def login_urls_for(platform_ids: list[str], registry: dict[str, PlatformSpec]) -> list[tuple[str, str, str]]:
-    """Return list of (id, name, login_url)."""
+    """
+    Return list of (id, name, login_url).
+    - skip empty login_url (未配置的领材网等)
+    - dedupe by login_url so 慧讯/广材 同站只弹一次登录
+    """
     out = []
+    seen_urls: set[str] = set()
+    seen_ids: set[str] = set()
     for pid in platform_ids:
         pid = normalize_platform_id(pid)
         spec = registry.get(pid)
         if not spec:
+            print(f"  [skip] 未知平台 id={pid}")
+            continue
+        if getattr(spec, "requires_config", False) and (
+            not spec.login_url or not spec.search_url_template
+        ):
+            print(
+                f"  [skip] {spec.name}({pid}) 未配置真实官网。"
+                f"请在 config.yaml → platforms.definitions.{pid} 填写 login_url / search_url"
+            )
             continue
         if not spec.login_url:
+            print(f"  [skip] {spec.name}({pid}) 无 login_url")
             continue
-        out.append((spec.id, spec.name, spec.login_url))
+        # resolve same_login_as
+        login_url = spec.login_url
+        if spec.same_login_as:
+            parent = registry.get(normalize_platform_id(spec.same_login_as))
+            if parent and parent.login_url:
+                login_url = parent.login_url
+        key = login_url.rstrip("/")
+        if key in seen_urls:
+            print(f"  [dedupe] {spec.name} 与已打开站点共用登录页，跳过重复弹窗: {login_url}")
+            continue
+        if pid in seen_ids:
+            continue
+        seen_urls.add(key)
+        seen_ids.add(pid)
+        out.append((spec.id, spec.name, login_url))
     return out
 
 

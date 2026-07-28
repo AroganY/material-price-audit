@@ -58,23 +58,27 @@
   </div>
   <script>
     const PLATS = [
-      { id: "guangcai", name: "广材网", desc: "造价材料价（优先，需登录）", cost: true },
-      { id: "huixun", name: "慧讯网", desc: "广联达材料价体系", cost: true },
-      { id: "lingcai", name: "领材网", desc: "默认同体系检索", cost: true },
-      { id: "jd", name: "京东", desc: "零售补充", cost: false },
-      { id: "1688", name: "1688", desc: "批发补充", cost: false },
-      { id: "zkh", name: "震坤行", desc: "工业品", cost: false },
-      { id: "taobao", name: "淘宝", desc: "零售", cost: false },
-      { id: "tmall", name: "天猫", desc: "零售", cost: false },
-      { id: "suning", name: "苏宁", desc: "零售", cost: false },
-      { id: "mysteel", name: "我的钢铁网", desc: "钢材行情", cost: false },
+      { id: "guangcai", name: "广材网", desc: "官网 gldjc.com · 登录页标题「登录-广材网」", cost: true },
+      { id: "huixun", name: "慧讯网（现广材网）", desc: "公开入口已更名为广材网，与 guangcai 同一登录（自动去重）", cost: true },
+      { id: "lingcai", name: "领材网", desc: "须在 config 填真实官网；未配置不会打开广材", cost: true },
+      { id: "jcnet", name: "建材在线", desc: "jc.net.cn 建材信息价", cost: true },
+      { id: "gldjc_hangqing", name: "广材行情", desc: "hangqing.gldjc.com", cost: true },
+      { id: "gldjc_xunjia", name: "广材询价", desc: "xunjia.gldjc.com 人工询价", cost: true },
+      { id: "jd", name: "京东", desc: "jd.com", cost: false },
+      { id: "1688", name: "1688", desc: "1688.com", cost: false },
+      { id: "zkh", name: "震坤行", desc: "zkh.com", cost: false },
+      { id: "taobao", name: "淘宝", desc: "taobao.com", cost: false },
+      { id: "tmall", name: "天猫", desc: "tmall.com", cost: false },
+      { id: "suning", name: "苏宁", desc: "suning.com", cost: false },
+      { id: "mysteel", name: "我的钢铁网", desc: "mysteel.com", cost: false },
     ];
     const list = document.getElementById("list");
     PLATS.forEach((p, i) => {
       const lab = document.createElement("label");
       lab.className = "row";
-      lab.innerHTML = `<input type="checkbox" value="${p.id}" ${p.cost || p.id==="jd" || p.id==="1688" ? "checked" : ""}>
-        <span><strong>${i + 1}. ${p.name}</strong> <code>${p.id}</code><small>${p.desc}</small></span>`;
+      const checked = p.id === "guangcai" || p.id === "jd" || p.id === "1688";
+      lab.innerHTML = `<input type="checkbox" value="${p.id}" ${checked ? "checked" : ""}>
+        <span><strong>${i + 1}. ${p.name}</strong> <code>${p.id}</code><br><small>${p.desc}</small></span>`;
       list.appendChild(lab);
     });
     function selected() {
