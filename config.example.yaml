@@ -5,8 +5,10 @@ pricing:
   never_exceed_submit: true
   open_detail: true
   min_title_score: 1
-  # multi = 每个材料在所有启用平台搜索，取匹配分最高、同级取更低价
-  platform_strategy: multi
+  # waterfall = A平台详情规格/型号匹配才用，否则自动 B→C（推荐）
+  # multi = 搜全部再综合排序
+  platform_strategy: waterfall
+  detail_match_min_score: 0.55
 
 browser:
   channel: chrome

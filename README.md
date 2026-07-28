@@ -57,35 +57,30 @@
 
 ---
 
-## 3. 造价人怎么用（极简 5 步）
+## 3. 造价人怎么用（一键）
 
-> 详细白话版见 **[给造价人员-怎么用.md](./给造价人员-怎么用.md)**
+> 白话版：**[给造价人员-怎么用.md](./给造价人员-怎么用.md)**  
+> 勾选平台页：**[docs/platform-select.html](./docs/platform-select.html)**
 
-| 步骤 | 做什么 | 结果 |
-|------|--------|------|
-| ① | 把询价表放到 `data/input/inquiry.xlsx` | 表里要有「报送不含税单价」 |
-| ② | 登录广材 / 慧讯 / 领材（浏览器弹出后自己登） | 能看到会员价 |
-| ③ | **先只跑 8 条试一试** | 打开 `result.xlsx` 点链接核对型号 |
-| ④ | 型号对了再跑全表 | 得到全部可查材料的审定价 |
-| ⑤ | 查不到的导出 `rfq.xlsx` | 发给供应商书面报价 |
-
-**命令（可交给信息同事或 AI 执行）：**
+| 步骤 | 做什么 |
+|------|--------|
+| ① | 询价表 → `data/input/inquiry.xlsx` |
+| ② | （可选）打开 `docs/platform-select.html` 勾选平台顺序 |
+| ③ | 执行下面 **一条命令**；浏览器弹出时登录即可 |
+| ④ | 打开 `data/output/result.xlsx` 核对 |
 
 ```bash
-# 登录
-python -m material_price_audit login \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai
+# 环境自检+自动装依赖+登录等待+瀑布抓价+导出RFQ
+python -m material_price_audit run \
+  --platforms guangcai,huixun,lingcai,jd,1688 \
+  --auto-install \
+  --login-wait 90
 
-# 试跑 8 条
-python -m material_price_audit scrape \
-  --input data/input/inquiry.xlsx \
-  --output data/output/result.xlsx \
-  --evidence data/output/evidence.json \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai \
-  --limit 8
+# 第一次建议先试 8 条
+python -m material_price_audit run --platforms guangcai,huixun,lingcai --limit 8 --auto-install --login-wait 90
 ```
+
+**匹配规则：** 平台 A 的**详情页规格/型号匹配**才用 A；否则自动 B→C→…；全失败则不填审定，进 `rfq.xlsx`。
 
 ---
 
@@ -125,16 +120,17 @@ python -m material_price_audit scrape \
 复制给 Grok / Codex / Claude：
 
 ```text
-请按 AGENTS.md 带我做材料核价。
-先运行 init，再按 AGENT_NEXT.md 一项一项问我。
-平台用：广材网、慧讯网、领材网。
-无证据不要填审定；先试跑 8 条。
+按 AGENTS.md 自动跑 material-price-audit：
+1) check --auto-install
+2) 询价表默认 data/input/inquiry.xlsx（没有就说一声让我放）
+3) run --platforms guangcai,huixun,lingcai,jd,1688 --auto-install --login-wait 90
+不要一步步碎问。瀑布匹配：详情规格对上才用该平台，否则自动下一站。
 ```
 
-或：
-
 ```bash
-bash examples/agent_bootstrap.sh guangcai,huixun,lingcai
+bash examples/agent_bootstrap.sh guangcai,huixun,lingcai,jd,1688
+# 试跑 8 条：
+bash examples/agent_bootstrap.sh guangcai,huixun,lingcai 8
 ```
 
 ---

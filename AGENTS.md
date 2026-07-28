@@ -1,273 +1,186 @@
-# AGENTS.md — 给所有 AI Agent 的操作协议
+# AGENTS.md — AI 自动化协议（少问话、多执行）
 
-> 本文件是 **material-price-audit** 的机器可读流程。  
-> **任何模型（Grok / Codex / Claude / Cursor）接入时：先 `init`，再读引导，再问用户。**
+> **不要一步一步碎问。**  
+> 用户要的是：环境自检 → 一次选好平台 → 自动登录等待 → 瀑布匹配抓价 → 出结果。
 
 ---
 
-## 0. 一句话
+## 0. 默认行为（必须）
 
-用户说「询价核价 / 安装材料审价 / 帮我抓价」时：
+用户一说「核价 / 询价 / 跑工具」：
+
+```bash
+cd <package-root>   # material-price-audit 目录
+
+# 1) 环境自检；失败则自动装依赖
+python3 -m material_price_audit check --auto-install
+
+# 2) 若用户还没给平台：打开/告知勾选页（一次多选），或直接用默认
+#    默认：guangcai,huixun,lingcai,jd,1688
+#    勾选页：docs/platform-select.html  → 生成 platforms 列表
+
+# 3) 一键跑（询价单默认 data/input/inquiry.xlsx）
+python3 -m material_price_audit run \
+  --platforms guangcai,huixun,lingcai,jd,1688 \
+  --auto-install \
+  --login-wait 90
+```
+
+**只在这两种情况停下来问用户：**
+
+1. **没有 Python / 自动安装失败** → 把安装命令甩给用户（或帮装）  
+2. **没有询价单文件** → 一句：「请把表放到 `data/input/inquiry.xlsx`」  
+3. **登录** → 浏览器已打开，提示「请在 90 秒内登录各平台（已登录可忽略）」——**不要每个平台单独问一遍**
+
+不要：先问平台、再问路径、再问是否登录、再问是否试跑……那种傻逼流程。
+
+---
+
+## 1. 环境自检（Python 都没有也要提示）
+
+```bash
+python3 -m material_price_audit check --auto-install
+```
+
+| 情况 | Agent 动作 |
+|------|------------|
+| 无 `python3`/`python` | 提示安装 Python 3.10+（brew / python.org），装完重跑 |
+| 缺 pip 包 / playwright | `--auto-install` 已尝试；仍失败则打印 hints 给用户 |
+| OK | 继续 `run` |
+
+检测逻辑在 `env_check.py`，会输出 `AGENT_ENV_FAIL` 块。
+
+---
+
+## 2. 平台：一次多选，不要连问
+
+### 方式 A — 默认（最快）
+
+直接：
+
+```bash
+--platforms guangcai,huixun,lingcai,jd,1688
+```
+
+### 方式 B — 用户勾选（HTML）
+
+1. 让用户打开 `docs/platform-select.html`  
+2. 勾选平台 → 点「生成命令并复制」  
+3. Agent 执行复制出的 `run` 命令  
+
+### 方式 C — 用户一句话
+
+用户说「广材+京东+1688」→ 转成：
+
+```bash
+--platforms guangcai,jd,1688
+```
+
+中文别名已支持：`广材网,慧讯网,领材网`。
+
+**优先级 = 列表从左到右（A→B→C）。**
+
+---
+
+## 3. 瀑布匹配规则（核心）
+
+对每一条材料：
 
 ```text
-1) cd 到本包根目录
-2) python -m material_price_audit init
-3) 阅读终端 AGENT_GUIDE 块 + data/output/AGENT_NEXT.md
-4) 按 questions 逐条问用户
-5) 用户答完后执行 next_command
-6) 每完成一步再跑 python -m material_price_audit guide
+平台A：搜索 → 打开详情
+  ├─ 规格/型号（及关键中文词）匹配 → 采用 A 的价，停止
+  └─ 不匹配 / 无结果 → 自动试平台B → C → …
+全部失败 → status=no_match（审定留空），进 RFQ
+```
+
+实现：`platform_strategy: waterfall` + `matching.detail_matches_item`  
+详情页必须对上型号/规格倾向的 token，**不是随便搜到第一个价就用**。
+
+---
+
+## 4. 一键命令 `run`
+
+```bash
+python3 -m material_price_audit run \
+  --platforms guangcai,huixun,lingcai,jd,1688 \
+  --auto-install \
+  --login-wait 90
+```
+
+内部顺序：
+
+1. `check`（可选 auto-install）  
+2. `init` 写 config  
+3. 打开各平台登录页，**每个只等 login-wait 秒**（非交互）  
+4. 瀑布 scrape  
+5. 自动导出 `rfq.xlsx`  
+
+试跑 8 条：
+
+```bash
+python3 -m material_price_audit run --platforms guangcai,huixun,lingcai --limit 8 --login-wait 90 --auto-install
+```
+
+已登录过可：
+
+```bash
+python3 -m material_price_audit run --skip-login --platforms ...
 ```
 
 ---
 
-## 1. 包根目录
+## 5. 路径（固定，别问）
 
-```text
-/Users/arogan/myMvp/AI搞定造价IDEA/AI询价/material-price-audit
-```
-
-（开源克隆后 = 含 `pyproject.toml` 与 `material_price_audit/` 的目录）
-
----
-
-## 2. 硬规则（违反即错误）
-
-| # | 规则 |
-|---|------|
-| R1 | **无 `status=verified` 证据 → 禁止填审定不含税单价** |
-| R2 | 禁止用搜索列表页冒充详情证据 |
-| R3 | `审定 = min(挂牌含税÷tax_divisor, 报送不含税)` |
-| R4 | 环境 `check` 失败时，先装依赖，不要 scrape |
-| R5 | `--input --output --evidence --profile` 路径必须显式 |
-| R6 | **平台由用户指定**，禁止默认写死「只有京东/阿里」而不询问 |
-| R7 | 先 `--limit 8` 试跑，成功再全量 |
-| R8 | 登录必须用户在浏览器完成；Agent 只负责打开 login 流程 |
-
----
-
-## 3. 标准路径
-
-| 用途 | 相对路径 |
+| 用途 | 默认路径 |
 |------|----------|
-| 配置 | `config.yaml`（`init` 生成） |
-| 询价单入参 | `data/input/inquiry.xlsx` |
-| 结果出参 | `data/output/result.xlsx` |
+| 询价单 | `data/input/inquiry.xlsx` |
+| 结果 | `data/output/result.xlsx` |
 | 证据 | `data/output/evidence.json` |
 | RFQ | `data/output/rfq.xlsx` |
-| Agent 状态 | `data/output/agent_state.json` |
-| Agent 下一步 | `data/output/AGENT_NEXT.md` |
-| 浏览器登录态 | `.browser-profile/`（勿提交 git） |
+| 勾选平台文件 | `data/output/platforms.selected` |
+| 登录态 | `.browser-profile/` |
+
+用户表不在默认路径时，**一次**用 `--input` 指定，不要反复确认。
 
 ---
 
-## 4. 阶段机 phase
+## 6. 对用户话术（短）
 
-`init` / `guide` 会输出 `phase`：
-
-| phase | 你要做的事 |
-|-------|------------|
-| `need_env` | 展示安装命令，征得同意后执行 pip / playwright install，再 `check` |
-| `need_config` | 已 `init` 或再 `init --platforms ...` |
-| `need_inquiry` | 请用户放置询价单到 `data/input/inquiry.xlsx`，确认表头 |
-| `need_login` | 确认平台列表 → `login --platforms ...` → 等用户说「登录完成」 |
-| `ready_scrape` | `scrape --limit 8` → 核对 → 全量 scrape → `rfq` |
-| `done` | 汇报结果路径与 verified 数量 |
-
-**每完成一个用户动作后执行：**
-
-```bash
-python -m material_price_audit guide
-```
-
----
-
-## 5. 初始化（唯一推荐入口）
-
-```bash
-cd "<package-root>"
-python -m material_price_audit init
-```
-
-若用户已说平台：
-
-```bash
-python -m material_price_audit init --platforms guangcai,huixun,lingcai,jd,1688 --tax 1.13
-```
-
-终端会出现：
+### 开场
 
 ```text
-========== AGENT_GUIDE_BEGIN ==========
-phase: ...
-questions:
-  - ...
-next_command: ...
-========== AGENT_GUIDE_END ==========
+我来自动跑核价：先检查环境，再用广材/慧讯/领材（可改）按顺序匹配详情价。
+请确认询价表在 data/input/inquiry.xlsx；浏览器弹出时登录一下各网站即可。
 ```
 
-**Agent 必须：**
+### 只要平台时（可选一句）
 
-1. 解析 `AGENT_GUIDE` 或读 `data/output/AGENT_NEXT.md`
-2. 用中文向用户提问 `questions`（建议一次 1 个问题）
-3. 用户回答后执行 `next_command`（可补全路径）
-4. 不要跳过 phase 乱 scrape
+```text
+默认平台顺序：广材→慧讯→领材→京东→1688。
+要改的话直接回：例如 广材,京东,1688
+或打开 docs/platform-select.html 勾选。
+不回则用默认，我直接跑。
+```
 
----
+### 结束
 
-## 6. 向用户收集的配置项
-
-初始化对话中按需收集（有默认值可跳过）：
-
-| 配置项 | 问法示例 | 默认 |
-|--------|----------|------|
-| 平台列表 | 要在哪些网站比价？广材/慧讯/领材 + 京东/1688…？ | guangcai,huixun,lingcai,jd,1688 |
-| 自定义站 | 若有内部商城，请给：名称、登录页URL、搜索URL（含`{query}`） | 无 |
-| 询价单 | 请把 Excel 放到 `data/input/inquiry.xlsx` | — |
-| 税率折算 | 含税÷多少当不含税？ | 1.13 |
-| 试跑条数 | 先试跑几条？ | 8 |
-
-收集平台后：
-
-```bash
-python -m material_price_audit init --platforms guangcai,huixun,lingcai,jd,1688 --force
+```text
+完成：verified=N。结果 data/output/result.xlsx，未命中 RFQ=data/output/rfq.xlsx。
+请打开「实抓汇总」抽查几条详情链接。
 ```
 
 ---
 
-## 7. 命令速查
+## 7. 禁止
 
-```bash
-# 环境
-python -m material_price_audit check
-
-# 初始化 + 引导（首选）
-python -m material_price_audit init --platforms guangcai,huixun,lingcai,jd,1688
-python -m material_price_audit guide
-
-# 平台
-python -m material_price_audit platforms
-
-# 登录（用户操作浏览器）
-python -m material_price_audit login --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688
-
-# 试跑
-python -m material_price_audit scrape \
-  --input data/input/inquiry.xlsx \
-  --output data/output/result.xlsx \
-  --evidence data/output/evidence.json \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688 \
-  --limit 8
-
-# 全量
-python -m material_price_audit scrape \
-  --input data/input/inquiry.xlsx \
-  --output data/output/result.xlsx \
-  --evidence data/output/evidence.json \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688
-
-# 未命中
-python -m material_price_audit rfq \
-  --input data/input/inquiry.xlsx \
-  --evidence data/output/evidence.json \
-  --output data/output/rfq.xlsx
-```
-
-非交互等待登录（用户离开键盘时）：
-
-```bash
-... login --yes --login-wait 120
-... scrape --yes --login-wait 90 --limit 8
-```
+- 禁止逐步：问平台 → 问路径 → 问登录 → 问是否试跑 → 问是否全量  
+- 禁止无详情匹配就采用列表价（waterfall 模式）  
+- 禁止编造审定价  
+- 禁止提交 `.browser-profile` 与真实报价表  
 
 ---
 
-## 8. 对用户的标准话术
+## 8. 人类文档
 
-### 开场（init 后）
-
-```text
-我已经初始化「材料询价核价」工具。
-接下来需要你做几项配置：
-1）选择要比价的网站
-2）把询价单放到指定文件夹
-3）在浏览器登录这些网站
-我不会在没有商品证据时乱填审定价格。
-```
-
-### 要平台时
-
-```text
-请告诉我启用哪些平台（可多选）：
-
-【造价材料信息站 · 推荐】
-- guangcai  广材网（gldjc.com，通常需登录）
-- huixun    慧讯网（广联达材料价，与广材同体系）
-- lingcai   领材网（默认同检索入口；独立域名可配置）
-
-【电商补充】
-- jd / 1688 / zkh / taobao / tmall / suning / mysteel
-
-或你们自己的网站（需登录地址 + 搜索地址）
-直接回复例如：guangcai,huixun,lingcai,jd,1688
-```
-
-### 要询价单时
-
-```text
-请把询价 Excel 放到：
-  <root>/data/input/inquiry.xlsx
-表头需要有「报送不含税单价」。放好后回复：已放好
-```
-
-### 登录时
-
-```text
-我现在打开浏览器，请依次登录：<平台列表>。
-全部登录完成后回复：登录完成
-```
-
-### 试跑后
-
-```text
-试跑结束：命中 N 条。
-请打开 data/output/result.xlsx →「实抓汇总」，点开蓝色链接核对型号。
-确认没问题后回复：全量 或 导出询价单
-```
-
----
-
-## 9. 完成汇报模板
-
-```text
-- 启用平台：...
-- 材料总数 / 可匹配 / verified：...
-- 结果：data/output/result.xlsx
-- 证据：data/output/evidence.json
-- 未命中 RFQ：data/output/rfq.xlsx
-- 提醒：请人工抽查详情页链接与型号一致性
-```
-
----
-
-## 10. 禁止行为
-
-- 不要读取旧的「审定核价完成 / 带可点击URL」假结果当最终依据  
-- 不要在 `phase=need_env` 时强行 scrape  
-- 不要替用户编造商品详情 URL  
-- 不要一次问 10 个问题；跟随 `AGENT_NEXT.md` 的 questions  
-
----
-
-## 11. 相关文件
-
-| 文件 | 读者 |
-|------|------|
-| `AGENTS.md` | AI Agent（本文） |
-| `data/output/AGENT_NEXT.md` | 运行时动态下一步 |
-| `data/output/agent_state.json` | 运行时状态 JSON |
-| `README.md` | 人类技术文档 |
-| `教程-用Grok或Codex执行核价.md` | 人类小白 + 提示词 |
-| `config.example.yaml` | 配置模板 |
+- 造价白话：`给造价人员-怎么用.md`  
+- 网页：`docs/index.html`、`docs/platform-select.html`  

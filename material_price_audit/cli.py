@@ -27,6 +27,7 @@ from .env_check import check_environment, ensure_or_exit
 from .excel_io import export_rfq, load_inquiry, write_result_workbook
 from .init_wizard import detect_state, print_agent_block, run_init, write_agent_guide
 from .matcher import build_jobs
+from .matching import detail_matches_item
 from .platforms import (
     load_platform_registry,
     login_urls_for,
@@ -34,7 +35,7 @@ from .platforms import (
     resolve_enabled_platforms,
     search_on_platform,
 )
-from .scraper import launch_context, open_detail, pick_manual, score_title, to_evidence, wait_user
+from .scraper import launch_context, open_detail, pick_manual, to_evidence, wait_user
 
 
 def package_root() -> Path:
@@ -48,9 +49,10 @@ def load_config(path: Path | None) -> dict:
             "never_exceed_submit": True,
             "open_detail": True,
             "min_title_score": 1,
-            # multi: try all enabled platforms and pick best score / lowest price
-            # preferred: try job.preferred platform first, then others
-            "platform_strategy": "multi",
+            # waterfall: A 详情规格匹配才采用，否则自动 B→C…
+            # multi: 搜全部再取综合最优（旧行为）
+            "platform_strategy": "waterfall",
+            "detail_match_min_score": 0.55,
         },
         "browser": {
             "channel": "chrome",
@@ -107,10 +109,24 @@ def save_evidence(path: Path, evidence: dict[str, dict], meta: dict | None = Non
 
 
 def cmd_check(args):
-    r = check_environment(require_browser=not args.skip_browser)
+    if getattr(args, "auto_install", False):
+        from .env_check import try_auto_install
+
+        root = package_root()
+        r = try_auto_install(root / "requirements.txt")
+    else:
+        r = check_environment(require_browser=not args.skip_browser)
     r.print()
     print(f"\npackage version: {__version__}")
     print(f"package root   : {package_root()}")
+    if not r.ok:
+        print("\n========== AGENT_ENV_FAIL ==========")
+        print("请安装 Python3.10+ 与依赖后重试。可执行:")
+        print(f"  {sys.executable} -m material_price_audit check --auto-install")
+        print("或:")
+        for h in r.hints:
+            print(f"  {h}")
+        print("========== AGENT_ENV_FAIL_END ==========")
     return 0 if r.ok else 2
 
 
@@ -219,18 +235,32 @@ def cmd_login(args):
 
 
 def _platform_order(job_platform: str, enabled: list[str], strategy: str) -> list[str]:
-    """Order platforms to try for one item."""
+    """Order platforms to try for one item. Waterfall uses enabled list as priority A→B→C."""
+    if strategy == "waterfall":
+        return list(enabled)
     if strategy == "preferred" and job_platform in enabled:
-        rest = [p for p in enabled if p != job_platform]
-        return [job_platform] + rest
-    # multi / default: try all enabled; put preferred first if present
+        return [job_platform] + [p for p in enabled if p != job_platform]
     if job_platform in enabled:
         return [job_platform] + [p for p in enabled if p != job_platform]
     return list(enabled)
 
 
+def _read_platforms_file(path: Path) -> str:
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8").strip()
+    # allow lines or comma-separated
+    parts = []
+    for line in text.replace(",", "\n").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            parts.append(line)
+    return ",".join(parts)
+
+
 def cmd_scrape(args):
-    ensure_or_exit(require_browser=True)
+    auto_install = bool(getattr(args, "auto_install", False))
+    ensure_or_exit(require_browser=True, auto_install=auto_install)
     cfg = load_config(Path(args.config) if args.config else None)
 
     input_path = Path(args.input).expanduser().resolve()
@@ -239,8 +269,8 @@ def cmd_scrape(args):
     profile = Path(args.profile).expanduser().resolve()
 
     if not input_path.exists():
-        print(f"ERROR: 询价单不存在 / input not found:\n  {input_path}", file=sys.stderr)
-        print("请用 --input 指定清晰路径，例如: --input ./data/input/inquiry.xlsx", file=sys.stderr)
+        print(f"ERROR: 询价单不存在:\n  {input_path}", file=sys.stderr)
+        print("请把询价表放到 data/input/inquiry.xlsx 或改 --input", file=sys.stderr)
         return 2
 
     tax = float(cfg["pricing"]["tax_divisor"])
@@ -248,149 +278,202 @@ def cmd_scrape(args):
     open_detail_flag = (
         bool(cfg["pricing"]["open_detail"]) if args.open_detail is None else args.open_detail
     )
+    # waterfall always opens detail for match
+    strategy = str(
+        getattr(args, "strategy", None)
+        or cfg["pricing"].get("platform_strategy")
+        or "waterfall"
+    )
+    if strategy == "waterfall":
+        open_detail_flag = True
     min_score = int(cfg["pricing"].get("min_title_score", 1))
-    strategy = str(cfg["pricing"].get("platform_strategy") or "multi")
+    detail_min = float(cfg["pricing"].get("detail_match_min_score", 0.55))
     timeout_ms = int(cfg["browser"]["page_timeout_ms"])
     sleep_s = float(cfg["browser"]["between_items_sleep"])
     wait_s = args.login_wait or cfg["browser"]["login_wait_seconds"]
+    # non-interactive by default for automation unless --interactive
+    non_interactive = not bool(getattr(args, "interactive", False))
+    if getattr(args, "yes", False):
+        non_interactive = True
 
-    enabled = resolve_enabled_platforms(cfg, args.platforms or None)
+    plat_arg = args.platforms or ""
+    if not plat_arg:
+        # optional file from HTML multi-select
+        pf = package_root() / "data" / "output" / "platforms.selected"
+        plat_arg = _read_platforms_file(pf) or None
+    enabled = resolve_enabled_platforms(cfg, plat_arg)
     reg = load_platform_registry(cfg)
     unknown = [p for p in enabled if p not in reg]
     if unknown:
         print(f"ERROR: 未知平台 {unknown}。运行: python -m material_price_audit platforms", file=sys.stderr)
         return 2
 
-    print("=== scrape ===")
+    print("=== scrape (auto waterfall) ===")
     print(f"input    : {input_path}")
     print(f"output   : {output_path}")
     print(f"evidence : {evidence_path}")
-    print(f"profile  : {profile}")
-    print(f"platforms: {', '.join(enabled)}  strategy={strategy}")
-    print(f"tax      : /{tax}  never_exceed={never_exceed}  open_detail={open_detail_flag}")
+    print(f"platforms: {', '.join(enabled)}")
+    print(f"strategy : {strategy}  (A详情型号匹配→采用，否则自动B→C…)")
+    print(f"tax      : /{tax}  never_exceed={never_exceed}")
 
     items = load_inquiry(input_path, cfg.get("excel") or {})
-    # preferred platform is only a hint; scrape tries all --platforms
     jobs = build_jobs(items, platforms=None)
     if args.limit and args.limit > 0:
         jobs = jobs[: args.limit]
 
     evidence = load_evidence(evidence_path)
     print(
-        f"items={len(items)} matchable_jobs={len(jobs)} existing_verified="
+        f"items={len(items)} jobs={len(jobs)} verified="
         f"{sum(1 for e in evidence.values() if e.get('status')=='verified')}"
     )
 
     if not jobs:
-        print("WARNING: 没有可自动匹配的型号/规则项。将只生成 pending 结果。")
+        print("WARNING: 无可自动匹配项，生成 pending 结果 + 建议 rfq")
         write_result_workbook(input_path, output_path, items, evidence, tax)
         return 0
 
+    skip_login = bool(getattr(args, "skip_login", False))
     pw, ctx, page = launch_context(
         profile, channel=cfg["browser"]["channel"], headless=bool(cfg["browser"]["headless"])
     )
     try:
-        # login tour for enabled platforms
-        for pid, name, url in login_urls_for(enabled, reg):
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            wait_user(
-                f"请确认已登录【{name}/{pid}】（不需要登录的站可直接回车）",
-                wait_s if args.yes else 0,
-                args.yes,
-            )
+        if not skip_login:
+            print("打开各平台登录页（只需登录一次；已登录可直接等超时/回车）…")
+            for pid, name, url in login_urls_for(enabled, reg):
+                page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                wait_user(
+                    f"【{name}】登录后继续（自动化模式将等待 {wait_s if non_interactive else '回车'}）",
+                    wait_s if non_interactive else 0,
+                    non_interactive,
+                )
 
         done = 0
         for job in jobs:
             it = job.item
             key = it.key
             if args.skip_existing and evidence.get(key, {}).get("status") == "verified":
-                print(f"skip existing {it.name[:32]}")
+                print(f"skip {it.name[:32]}")
                 continue
 
             order = _platform_order(job.platform, enabled, strategy)
-            print(f"→ [{it.sheet}] {it.name[:36]} | try {order} | {job.query}")
+            print(f"→ [{it.sheet}] {it.name[:40]}")
+            print(f"   waterfall: {' → '.join(order)}")
 
-            all_cands: list[dict] = []
+            attempts = []
+            chosen = None
             try:
-                for pid in order:
-                    cands, st = search_on_platform(
-                        page, pid, job.query, job.must, timeout_ms, min_score, reg
-                    )
-                    if st == "need_login":
-                        wait_user(f"【{pid}】需要登录，请登录后继续", wait_s, args.yes)
+                if strategy == "waterfall":
+                    # A then B then C: first platform with detail match wins
+                    for pid in order:
                         cands, st = search_on_platform(
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
-                    if st.startswith("error:"):
-                        print(f"  [{pid}] {st}")
-                        continue
-                    if cands:
-                        print(f"  [{pid}] candidates={len(cands)} best¥{cands[0]['price_tax']}")
-                        all_cands.extend(cands[:5])
-                    else:
-                        print(f"  [{pid}] no_match")
+                        if st == "need_login":
+                            wait_user(f"【{pid}】需要登录", wait_s, non_interactive)
+                            cands, st = search_on_platform(
+                                page, pid, job.query, job.must, timeout_ms, min_score, reg
+                            )
+                        if not cands:
+                            attempts.append({"platform": pid, "status": st or "no_list"})
+                            print(f"   [{pid}] 列表无结果，切换下一平台")
+                            continue
+                        # try top candidates on this platform until detail matches
+                        platform_ok = False
+                        for cand in cands[:5]:
+                            spec = reg.get(pid)
+                            extra = list(spec.detail_price_selectors) if spec else []
+                            cand = open_detail(
+                                page, cand, timeout_ms, extra_price_selectors=extra
+                            )
+                            title = cand.get("detail_title") or cand.get("title") or ""
+                            # snippet of body for match
+                            try:
+                                body = page.inner_text("body")[:2500]
+                            except Exception:
+                                body = ""
+                            mr = detail_matches_item(it, title, body, min_score=detail_min)
+                            attempts.append(
+                                {
+                                    "platform": pid,
+                                    "url": cand.get("final_url") or cand.get("url"),
+                                    "price_tax": cand.get("price_tax"),
+                                    "match_ok": mr.ok,
+                                    "match_score": round(mr.score, 3),
+                                    "match_detail": mr.detail,
+                                    "title": title[:80],
+                                }
+                            )
+                            if mr.ok and cand.get("price_tax"):
+                                chosen = cand
+                                chosen["match"] = mr.detail
+                                platform_ok = True
+                                print(
+                                    f"   [{pid}] ✓ 详情匹配 {mr.detail} ¥{cand['price_tax']}"
+                                )
+                                break
+                            print(f"   [{pid}] × 详情不匹配 ({mr.detail})，试下一条/下一站")
+                        if platform_ok:
+                            break
+                else:
+                    # legacy multi: collect then pick best, still detail-check
+                    all_cands = []
+                    for pid in order:
+                        cands, st = search_on_platform(
+                            page, pid, job.query, job.must, timeout_ms, min_score, reg
+                        )
+                        if st == "need_login":
+                            wait_user(f"【{pid}】需要登录", wait_s, non_interactive)
+                            cands, st = search_on_platform(
+                                page, pid, job.query, job.must, timeout_ms, min_score, reg
+                            )
+                        if cands:
+                            all_cands.extend(cands[:5])
+                    if args.manual and all_cands:
+                        chosen = pick_manual(all_cands, job.query)
+                    elif all_cands:
+                        for cand in sorted(
+                            all_cands, key=lambda x: (-x.get("score", 0), x.get("price_tax", 1e9))
+                        ):
+                            pid = cand.get("platform")
+                            spec = reg.get(pid or "")
+                            extra = list(spec.detail_price_selectors) if spec else []
+                            cand = open_detail(
+                                page, cand, timeout_ms, extra_price_selectors=extra
+                            )
+                            title = cand.get("detail_title") or cand.get("title") or ""
+                            try:
+                                body = page.inner_text("body")[:2500]
+                            except Exception:
+                                body = ""
+                            mr = detail_matches_item(it, title, body, min_score=detail_min)
+                            if mr.ok:
+                                chosen = cand
+                                break
 
-                if not all_cands:
+                if not chosen:
                     evidence[key] = {
                         "key": key,
                         "status": "no_match",
                         "name": it.name,
                         "query": job.query,
                         "platforms_tried": order,
+                        "attempts": attempts,
                     }
-                    print("  => no_match on all platforms")
+                    print("   => 所有平台均无「规格/型号匹配的详情价」")
                     continue
 
-                if args.manual:
-                    cand = pick_manual(all_cands, job.query)
-                    if not cand:
-                        evidence[key] = {
-                            "key": key,
-                            "status": "skipped",
-                            "name": it.name,
-                        }
-                        continue
-                else:
-                    cand = pick_best_candidate(all_cands)
-
-                if open_detail_flag and cand:
-                    spec = reg.get(cand.get("platform") or "", None)
-                    extra = list(spec.detail_price_selectors) if spec else []
-                    cand = open_detail(page, cand, timeout_ms, extra_price_selectors=extra)
-                    title = (cand.get("detail_title") or cand.get("title") or "")
-                    if score_title(title, job.must) == 0 and job.confidence == "high":
-                        print(f"  reject detail title mismatch: {title[:60]}")
-                        evidence[key] = {
-                            "key": key,
-                            "status": "rejected_title",
-                            "name": it.name,
-                            "url": cand.get("final_url") or cand.get("url"),
-                            "title": title,
-                            "platform": cand.get("platform"),
-                        }
-                        continue
-
-                evidence[key] = to_evidence(key, it, cand, tax, never_exceed)
-                # keep alternatives for audit trail
-                evidence[key]["alternatives"] = [
-                    {
-                        "platform": c.get("platform"),
-                        "price_tax": c.get("price_tax"),
-                        "url": c.get("url"),
-                        "score": c.get("score"),
-                        "title": (c.get("title") or "")[:80],
-                    }
-                    for c in all_cands[:8]
-                ]
+                evidence[key] = to_evidence(key, it, chosen, tax, never_exceed)
+                evidence[key]["attempts"] = attempts
+                evidence[key]["strategy"] = strategy
                 done += 1
                 ev = evidence[key]
                 print(
-                    f"  => verified [{ev.get('platform')}] 含税¥{ev['price_tax']} "
-                    f"→ 不含税¥{ev['price_ex_tax']} → 审定¥{ev['audit']}\n"
-                    f"     {ev['url']}"
+                    f"   => verified [{ev.get('platform')}] "
+                    f"含税¥{ev['price_tax']} → 审定¥{ev['audit']}\n"
+                    f"      {ev['url']}"
                 )
             except Exception as e:
-                print(f"  ERROR {type(e).__name__}: {e}")
+                print(f"   ERROR {type(e).__name__}: {e}")
                 evidence[key] = {
                     "key": key,
                     "status": "error",
@@ -402,11 +485,7 @@ def cmd_scrape(args):
                 save_evidence(
                     evidence_path,
                     evidence,
-                    meta={
-                        "input": str(input_path),
-                        "tax_divisor": tax,
-                        "platforms": enabled,
-                    },
+                    meta={"input": str(input_path), "platforms": enabled, "strategy": strategy},
                 )
             time.sleep(sleep_s)
     finally:
@@ -416,12 +495,93 @@ def cmd_scrape(args):
     save_evidence(
         evidence_path,
         evidence,
-        meta={"input": str(input_path), "tax_divisor": tax, "platforms": enabled},
+        meta={"input": str(input_path), "tax_divisor": tax, "platforms": enabled, "strategy": strategy},
     )
     hit = write_result_workbook(input_path, output_path, items, evidence, tax)
-    print(f"\nDONE verified_in_excel={hit}")
+    # also write rfq automatically if requested later by run
+    print(f"\nDONE verified={hit} / jobs={len(jobs)}")
     print(f"output  : {output_path}")
     print(f"evidence: {evidence_path}")
+    return 0
+
+
+def cmd_run(args):
+    """
+    One-shot automation:
+      env check (+ optional auto-install) → init → login once → waterfall scrape → rfq
+    """
+    root = package_root()
+    auto_install = bool(args.auto_install)
+
+    # resolve platforms from args or HTML selection file
+    plat = args.platforms or _read_platforms_file(root / "data" / "output" / "platforms.selected")
+    if not plat:
+        plat = "guangcai,huixun,lingcai,jd,1688"
+
+    print("=== RUN 全自动流水线 ===")
+    print(f"platforms: {plat}")
+
+    # env
+    try:
+        ensure_or_exit(require_browser=True, auto_install=auto_install)
+    except SystemExit:
+        print("环境失败。Agent 请执行安装 hints 后重跑: python -m material_price_audit run --auto-install ...")
+        return 2
+
+    # init scaffold + config
+    plats = [p.strip() for p in plat.split(",") if p.strip()]
+    run_init(root=root, platforms=plats, force_config=bool(args.force_config))
+
+    input_path = Path(args.input or (root / "data/input/inquiry.xlsx")).expanduser().resolve()
+    output_path = Path(args.output or (root / "data/output/result.xlsx")).expanduser().resolve()
+    evidence_path = Path(args.evidence or (root / "data/output/evidence.json")).expanduser().resolve()
+    profile = Path(args.profile or (root / ".browser-profile")).expanduser().resolve()
+    rfq_path = Path(args.rfq or (root / "data/output/rfq.xlsx")).expanduser().resolve()
+
+    if not input_path.exists():
+        print(f"ERROR: 找不到询价单 {input_path}")
+        print("请把 Excel 放到 data/input/inquiry.xlsx 后重新 run（无需再逐步问答）")
+        # write platforms file helper message
+        print(f"平台已写入配置: {plat}")
+        print("网页多选平台: 打开 docs/platform-select.html")
+        return 2
+
+    # fake args namespace for scrape
+    class A:
+        pass
+
+    a = A()
+    a.input = str(input_path)
+    a.output = str(output_path)
+    a.evidence = str(evidence_path)
+    a.profile = str(profile)
+    a.platforms = plat
+    a.limit = args.limit or 0
+    a.login_wait = args.login_wait if args.login_wait else 90
+    a.yes = True
+    a.interactive = False
+    a.skip_existing = not args.no_skip_existing
+    a.skip_login = bool(args.skip_login)
+    a.open_detail = True
+    a.manual = False
+    a.auto_install = auto_install
+    a.strategy = "waterfall"
+    a.config = args.config or str(root / "config.yaml")
+
+    rc = cmd_scrape(a)
+    if rc != 0:
+        return rc
+
+    # rfq
+    cfg = load_config(Path(a.config) if a.config else None)
+    items = load_inquiry(input_path, cfg.get("excel") or {})
+    evidence = load_evidence(evidence_path)
+    n = export_rfq(items, evidence, rfq_path)
+    print(f"RFQ 未命中项: {n} → {rfq_path}")
+    print("\n=== RUN 完成 ===")
+    print(f"结果: {output_path}")
+    print(f"证据: {evidence_path}")
+    print(f"RFQ : {rfq_path}")
     return 0
 
 
@@ -499,6 +659,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("check", help="检查 Python / Playwright 环境")
     sp.add_argument("--skip-browser", action="store_true")
+    sp.add_argument("--auto-install", action="store_true", help="缺失依赖时自动 pip/playwright 安装")
     sp.set_defaults(func=cmd_check)
 
     sp = sub.add_parser(
@@ -540,7 +701,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--login-wait", type=int, default=0)
     sp.set_defaults(func=cmd_login)
 
-    sp = sub.add_parser("scrape", help="多平台抓取证据价并输出核价 Excel")
+    sp = sub.add_parser("scrape", help="瀑布抓取：A平台详情匹配才用，否则自动B→C")
     sp.add_argument("--input", required=True, help="询价单 Excel（入参）")
     sp.add_argument("--output", required=True, help="核价结果 Excel（出参）")
     sp.add_argument("--evidence", required=True, help="证据 JSON（出参）")
@@ -548,17 +709,43 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--platforms",
         default="",
-        help="启用平台，逗号分隔：jd,1688,zkh,taobao,tmall,suning 或自定义 id",
+        help="平台优先级A,B,C… 如 guangcai,huixun,lingcai,jd,1688",
     )
     sp.add_argument("--limit", type=int, default=0)
-    sp.add_argument("--yes", action="store_true")
-    sp.add_argument("--login-wait", type=int, default=0)
-    sp.add_argument("--manual", action="store_true", help="多平台候选人工挑选")
+    sp.add_argument("--yes", action="store_true", help="非交互（默认推荐）")
+    sp.add_argument("--interactive", action="store_true", help="每步回车确认")
+    sp.add_argument("--login-wait", type=int, default=0, help="每平台登录等待秒数")
+    sp.add_argument("--skip-login", action="store_true", help="跳过登录页（已登录时）")
+    sp.add_argument("--manual", action="store_true", help="人工挑选（关闭瀑布自动）")
+    sp.add_argument("--strategy", default="", help="waterfall|multi|preferred")
+    sp.add_argument("--auto-install", action="store_true")
     sp.add_argument("--skip-existing", action="store_true", default=True)
     sp.add_argument("--no-skip-existing", action="store_false", dest="skip_existing")
     sp.add_argument("--open-detail", dest="open_detail", action="store_true", default=None)
     sp.add_argument("--no-open-detail", dest="open_detail", action="store_false")
     sp.set_defaults(func=cmd_scrape)
+
+    sp = sub.add_parser(
+        "run",
+        help="【推荐】一键自动化：环境自检→配置→登录等待→瀑布抓取→导出RFQ",
+    )
+    sp.add_argument("--input", default="", help="默认 data/input/inquiry.xlsx")
+    sp.add_argument("--output", default="", help="默认 data/output/result.xlsx")
+    sp.add_argument("--evidence", default="", help="默认 data/output/evidence.json")
+    sp.add_argument("--rfq", default="", help="默认 data/output/rfq.xlsx")
+    sp.add_argument("--profile", default="", help="默认 .browser-profile")
+    sp.add_argument(
+        "--platforms",
+        default="",
+        help="优先级列表；也可先用 docs/platform-select.html 勾选生成 platforms.selected",
+    )
+    sp.add_argument("--limit", type=int, default=0, help="试跑条数，0=全量")
+    sp.add_argument("--login-wait", type=int, default=90, help="每平台登录等待秒数")
+    sp.add_argument("--skip-login", action="store_true")
+    sp.add_argument("--auto-install", action="store_true", help="缺依赖自动 pip/playwright")
+    sp.add_argument("--force-config", action="store_true")
+    sp.add_argument("--no-skip-existing", action="store_true")
+    sp.set_defaults(func=cmd_run)
 
     sp = sub.add_parser("merge", help="evidence JSON → Excel")
     sp.add_argument("--input", required=True)
