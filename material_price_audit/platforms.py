@@ -45,39 +45,41 @@ BUILTIN: dict[str, PlatformSpec] = {
     "guangcai": PlatformSpec(
         id="guangcai",
         name="广材网",
-        # 实测 2026-07：首页标题「广材网-建筑工程造价行业材料价格查询平台」
+        # 实测：标题「广材网-建筑工程造价行业材料价格查询平台」
         login_url="https://www.gldjc.com/login",
         search_url_template="https://www.gldjc.com/scj/so.html?l=1&keyword={query}",
         handler="gldjc",
         item_link_contains="gldjc.com",
         item_link_selector='a[href*="gldjc.com"]',
         detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
-        notes="官网 https://www.gldjc.com/ （广联达平方）· 检索需登录",
+        notes="官网 https://www.gldjc.com/ · 登录 https://www.gldjc.com/login",
     ),
     "huixun": PlatformSpec(
         id="huixun",
-        name="慧讯网（现广材网）",
-        # 公开事实：原「广联达慧讯网」材料价格服务现统一品牌为「广材网」，
-        # 可访问官网即 gldjc.com，登录页标题为「登录-广材网…」。
-        # 因此与 guangcai 共用同一登录/搜索 URL，登录时自动去重只弹一次。
-        login_url="https://www.gldjc.com/login",
-        search_url_template="https://www.gldjc.com/scj/so.html?l=1&keyword={query}",
-        handler="gldjc",
-        item_link_contains="gldjc.com",
-        item_link_selector='a[href*="gldjc.com"]',
-        detail_price_selectors=[".price", "[class*='price']"],
-        same_login_as="guangcai",
-        notes="【重要】慧讯网公开入口已更名为广材网 https://www.gldjc.com/ ；与 guangcai 同一站点，登录不重复弹窗。若你司仍有旧独立域名，用 definitions.huixun 覆盖。",
+        name="慧讯网",
+        # 实测 2026-07：标题「慧讯网-RCC瑞达恒旗下_建筑行业价格信息查询平台」
+        # 用户指定入口 apply_trial；业务首页 iccHome；登录页 /login
+        login_url="https://services.iccchina.com/apply_trial",
+        search_url_template="https://services.iccchina.com/iccHome",
+        handler="generic",
+        item_link_contains="iccchina.com",
+        item_link_selector='a[href*="iccchina.com"]',
+        detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
+        same_login_as="",
+        notes="官网入口 https://services.iccchina.com/apply_trial · 首页 https://services.iccchina.com/iccHome · 登录 https://services.iccchina.com/login · RCC瑞达恒，非广材网",
     ),
     "lingcai": PlatformSpec(
         id="lingcai",
         name="领材网",
-        # 禁止默认跳广材！领材网若为独立产品，必须由用户配置真实 URL。
-        login_url="",
-        search_url_template="",
+        # 实测 2026-07：标题「领材网-首页」
+        login_url="https://www.hylcw.cn/lcIndex.html",
+        search_url_template="https://www.hylcw.cn/lcIndex.html?keyword={query}",
         handler="generic",
-        requires_config=True,
-        notes="【须配置】未找到可公开访问的独立官网。请在 config.yaml → platforms.definitions.lingcai 填写 login_url 与 search_url（含 {query}）。禁止误用广材网地址。",
+        item_link_contains="hylcw.cn",
+        item_link_selector='a[href*="hylcw.cn"]',
+        detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
+        requires_config=False,
+        notes="官网 https://www.hylcw.cn/lcIndex.html · 域名 hylcw.cn · 非广材网",
     ),
     "gldjc_hangqing": PlatformSpec(
         id="gldjc_hangqing",
@@ -224,10 +226,14 @@ def normalize_platform_id(pid) -> str:
         "慧讯": "huixun",
         "慧讯网": "huixun",
         "huixunwang": "huixun",
-        "广联达慧讯": "huixun",
+        "iccchina": "huixun",
+        "rcc": "huixun",
+        "瑞达恒": "huixun",
         "领材": "lingcai",
         "领材网": "lingcai",
+        "领财网": "lingcai",
         "lingcaiwang": "lingcai",
+        "hylcw": "lingcai",
         "广材行情": "gldjc_hangqing",
         "广材询价": "gldjc_xunjia",
     }
@@ -299,8 +305,8 @@ def resolve_enabled_platforms(cfg: dict | None, cli_platforms: str | None) -> li
         enabled = plats.get("enabled") or plats.get("list") or []
         if enabled:
             return [normalize_platform_id(x) for x in enabled]
-    # 默认只启用「URL 已核实」的平台；领材网需用户自行配置后加入
-    return ["guangcai", "jd", "1688"]
+    # 默认：广材 + 慧讯(RCC) + 领材(hylcw) + 电商补充
+    return ["guangcai", "huixun", "lingcai", "jd", "1688"]
 
 
 def list_platforms(cfg: dict | None = None) -> list[PlatformSpec]:
@@ -384,9 +390,10 @@ def _search_1688(page, query: str, must: list[str], timeout_ms: int, min_score: 
 
 def _search_gldjc(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
     """
-    广材网 / 慧讯网 / 领材网（gldjc 体系）材料搜索。
+    广材网（gldjc.com）材料搜索。
     搜索 URL: /scj/so.html?l=1&keyword=...
     未登录会跳到 /login?hostUrl=...
+    注意：慧讯网(iccchina)、领材网(hylcw) 不是本 handler。
     """
     url = spec.search_url_template.format(query=quote(query))
     page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -440,7 +447,8 @@ def _search_gldjc(page, query: str, must: list[str], timeout_ms: int, min_score:
                 "sku": "",
             }
         )
-    cands = _filter_cands(goods, must, min_score, spec.id, "gldjc.com")
+    link_hint = spec.item_link_contains or "gldjc.com"
+    cands = _filter_cands(goods, must, min_score, spec.id, link_hint)
     # 若关键词匹配过严导致 0 条，放宽：只要有价格就收（造价站结果页通常已按 keyword 过滤）
     if not cands and goods:
         loose = []
@@ -465,14 +473,67 @@ def _search_gldjc(page, query: str, must: list[str], timeout_ms: int, min_score:
     return cands, "ok"
 
 
+def _try_fill_site_search(page, query: str) -> bool:
+    """Best-effort: type keyword into common search boxes and submit (慧讯/领材等 SPA 站)。"""
+    selectors = [
+        'input[type="search"]',
+        'input[placeholder*="搜索"]',
+        'input[placeholder*="查找"]',
+        'input[placeholder*="材料"]',
+        'input[placeholder*="关键字"]',
+        'input[placeholder*="关键词"]',
+        'input[name*="keyword" i]',
+        'input[name*="search" i]',
+        'input[id*="search" i]',
+        'input[id*="keyword" i]',
+        'input.el-input__inner',
+        'input[type="text"]',
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() == 0:
+                continue
+            if not loc.is_visible(timeout=800):
+                continue
+            loc.click(timeout=1500)
+            loc.fill("")
+            loc.fill(query[:80])
+            loc.press("Enter")
+            page.wait_for_timeout(2500)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
-    if not spec.search_url_template or "{query}" not in spec.search_url_template:
+    """
+    通用搜索：慧讯(iccchina)、领材(hylcw) 等非广材站。
+    - 模板含 {query} → 直接拼 URL
+    - 否则打开入口页，尝试页面内搜索框
+    """
+    if not spec.search_url_template:
         return None, "bad_config"
-    url = spec.search_url_template.format(query=quote(query))
-    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    page.wait_for_timeout(3000)
+
+    if "{query}" in spec.search_url_template:
+        url = spec.search_url_template.format(query=quote(query))
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(3000)
+    else:
+        page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(2000)
+        cur = page.url or ""
+        title = page.title() or ""
+        if "/login" in cur.lower() or ("登录" in title and "申请" not in title):
+            if spec.require_login_hint:
+                return None, "need_login"
+        if not _try_fill_site_search(page, query):
+            # 仍解析当前页（试用页/首页可能已有列表或导航）
+            page.wait_for_timeout(500)
+
     title = page.title() or ""
-    if "登录" in title and spec.require_login_hint:
+    if "登录" in title and spec.require_login_hint and "慧讯" not in title and "领材" not in title:
         # soft signal — still try parse
         pass
 
@@ -583,13 +644,15 @@ def search_on_platform(
         if "{query}" not in (spec.search_url_template or "") and spec.handler == "gldjc":
             return [], "not_configured"
     handler_name = spec.handler if spec.handler in HANDLERS else "generic"
-    # map built-in id to specialized handler
+    # map built-in id to specialized handler（慧讯/领材各自域名，绝不能走 gldjc）
     if pid == "jd":
         handler_name = "jd"
     elif pid == "1688":
         handler_name = "1688"
-    elif pid in ("guangcai", "huixun", "lingcai") or handler_name == "gldjc":
+    elif pid == "guangcai" or (handler_name == "gldjc" and "gldjc" in (spec.item_link_contains or "")):
         handler_name = "gldjc"
+    elif pid in ("huixun", "lingcai"):
+        handler_name = "generic"
     try:
         fn = HANDLERS[handler_name]
         result, status = fn(page, query, must, timeout_ms, min_score, spec)
@@ -606,8 +669,8 @@ def search_on_platform(
 def login_urls_for(platform_ids: list[str], registry: dict[str, PlatformSpec]) -> list[tuple[str, str, str]]:
     """
     Return list of (id, name, login_url).
-    - skip empty login_url (未配置的领材网等)
-    - dedupe by login_url so 慧讯/广材 同站只弹一次登录
+    - skip empty login_url
+    - dedupe by login_url only（广材/慧讯/领材域名不同，会分别打开）
     """
     out = []
     seen_urls: set[str] = set()

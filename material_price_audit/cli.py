@@ -24,7 +24,7 @@ except ImportError:
 
 from . import __version__
 from .env_check import check_environment, ensure_or_exit
-from .excel_io import export_rfq, load_inquiry, write_result_workbook
+from .excel_io import export_rfq, load_inquiry, resolve_inquiry_path, write_result_workbook
 from .init_wizard import detect_state, print_agent_block, run_init, write_agent_guide
 from .matcher import build_jobs
 from .matching import detail_matches_item
@@ -62,19 +62,8 @@ def load_config(path: Path | None) -> dict:
             "between_items_sleep": 1.2,
         },
         "platforms": {
-            "enabled": ["guangcai", "jd", "1688"],
-            "definitions": {
-                # 领材网：必须填你们实际使用的官网（禁止填广材 gldjc.com）
-                # "lingcai": {
-                #   "name": "领材网",
-                #   "login_url": "https://【领材网真实登录页】",
-                #   "search_url": "https://【领材网搜索】?q={query}",
-                #   "handler": "generic",
-                #   "item_link_contains": "【域名】",
-                #   "item_link_selector": "a[href]",
-                #   "detail_price_selectors": [".price"],
-                # },
-            },
+            "enabled": ["guangcai", "huixun", "lingcai", "jd", "1688"],
+            "definitions": {},
         },
         "excel": {},
     }
@@ -203,10 +192,10 @@ def cmd_platforms(args):
         print(f"{mark}{pid:<11} {spec.name:<16} {kind:<10} {spec.login_url}")
     print("")
     print("说明: 行首 * 表示当前启用。详见 docs/PLATFORMS.md")
-    print("广材网 guangcai = https://www.gldjc.com/login （实测标题：登录-广材网）")
-    print("慧讯网 huixun = 公开入口已更名广材网，与 guangcai 同登录（自动去重）")
-    print("领材网 lingcai = 须在 definitions 填真实官网，未配置不会打开广材")
-    print("示例: --platforms guangcai,jd,1688")
+    print("广材网 guangcai = https://www.gldjc.com/login")
+    print("慧讯网 huixun   = https://services.iccchina.com/apply_trial （RCC瑞达恒，非广材）")
+    print("领材网 lingcai  = https://www.hylcw.cn/lcIndex.html")
+    print("示例: --platforms guangcai,huixun,lingcai,jd,1688")
     return 0
 
 
@@ -273,16 +262,19 @@ def cmd_scrape(args):
     auto_install = bool(getattr(args, "auto_install", False))
     ensure_or_exit(require_browser=True, auto_install=auto_install)
     cfg = load_config(Path(args.config) if args.config else None)
+    root = package_root()
 
-    input_path = Path(args.input).expanduser().resolve()
+    try:
+        input_path = resolve_inquiry_path(
+            args.input or None,
+            default_dir=root / "data" / "input",
+        )
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
     output_path = Path(args.output).expanduser().resolve()
     evidence_path = Path(args.evidence).expanduser().resolve()
     profile = Path(args.profile).expanduser().resolve()
-
-    if not input_path.exists():
-        print(f"ERROR: 询价单不存在:\n  {input_path}", file=sys.stderr)
-        print("请把询价表放到 data/input/inquiry.xlsx 或改 --input", file=sys.stderr)
-        return 2
 
     tax = float(cfg["pricing"]["tax_divisor"])
     never_exceed = bool(cfg["pricing"]["never_exceed_submit"])
@@ -527,7 +519,7 @@ def cmd_run(args):
     # resolve platforms from args or HTML selection file
     plat = args.platforms or _read_platforms_file(root / "data" / "output" / "platforms.selected")
     if not plat:
-        plat = "guangcai,jd,1688"
+        plat = "guangcai,huixun,lingcai,jd,1688"
 
     print("=== RUN 全自动流水线 ===")
     print(f"platforms: {plat}")
@@ -536,32 +528,31 @@ def cmd_run(args):
     try:
         ensure_or_exit(require_browser=True, auto_install=auto_install)
     except SystemExit:
-        print("环境失败。Agent 请执行安装 hints 后重跑: python -m material_price_audit run --auto-install ...")
+        print("环境失败。Agent 请执行: python -m material_price_audit check --auto-install")
         return 2
 
     # init scaffold + config
     plats = [p.strip() for p in plat.split(",") if p.strip()]
     run_init(root=root, platforms=plats, force_config=bool(args.force_config))
 
-    input_path = Path(args.input or (root / "data/input/inquiry.xlsx")).expanduser().resolve()
+    try:
+        input_path = resolve_inquiry_path(
+            args.input or None,
+            default_dir=root / "data" / "input",
+        )
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
+        print("把任意文件名的询价 .xlsx 丢进 data/input/ 即可（不必叫 inquiry.xlsx）")
+        print("网页多选平台: docs/platform-select.html")
+        return 2
+
     output_path = Path(args.output or (root / "data/output/result.xlsx")).expanduser().resolve()
     evidence_path = Path(args.evidence or (root / "data/output/evidence.json")).expanduser().resolve()
     profile = Path(args.profile or (root / ".browser-profile")).expanduser().resolve()
     rfq_path = Path(args.rfq or (root / "data/output/rfq.xlsx")).expanduser().resolve()
 
-    if not input_path.exists():
-        print(f"ERROR: 找不到询价单 {input_path}")
-        print("请把 Excel 放到 data/input/inquiry.xlsx 后重新 run（无需再逐步问答）")
-        # write platforms file helper message
-        print(f"平台已写入配置: {plat}")
-        print("网页多选平台: 打开 docs/platform-select.html")
-        return 2
-
     # fake args namespace for scrape
-    class A:
-        pass
-
-    a = A()
+    a = type("A", (), {})()
     a.input = str(input_path)
     a.output = str(output_path)
     a.evidence = str(evidence_path)
@@ -713,7 +704,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_login)
 
     sp = sub.add_parser("scrape", help="瀑布抓取：A平台详情匹配才用，否则自动B→C")
-    sp.add_argument("--input", required=True, help="询价单 Excel（入参）")
+    sp.add_argument(
+        "--input",
+        default="",
+        help="询价 Excel 文件或目录；默认自动识别 data/input/ 下任意 .xlsx（不必叫 inquiry）",
+    )
     sp.add_argument("--output", required=True, help="核价结果 Excel（出参）")
     sp.add_argument("--evidence", required=True, help="证据 JSON（出参）")
     sp.add_argument("--profile", required=True, help="浏览器配置目录")
@@ -740,7 +735,11 @@ def build_parser() -> argparse.ArgumentParser:
         "run",
         help="【推荐】一键自动化：环境自检→配置→登录等待→瀑布抓取→导出RFQ",
     )
-    sp.add_argument("--input", default="", help="默认 data/input/inquiry.xlsx")
+    sp.add_argument(
+        "--input",
+        default="",
+        help="询价表路径或目录；默认自动识别 data/input/ 内任意 .xlsx（不必改名 inquiry）",
+    )
     sp.add_argument("--output", default="", help="默认 data/output/result.xlsx")
     sp.add_argument("--evidence", default="", help="默认 data/output/evidence.json")
     sp.add_argument("--rfq", default="", help="默认 data/output/rfq.xlsx")

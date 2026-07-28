@@ -19,7 +19,7 @@ python3 -m material_price_audit check --auto-install
 #    默认：guangcai,huixun,lingcai,jd,1688
 #    勾选页：docs/platform-select.html  → 生成 platforms 列表
 
-# 3) 一键跑（询价单默认 data/input/inquiry.xlsx）
+# 3) 一键跑（自动识别 data/input/ 下任意询价 .xlsx，不必叫 inquiry）
 python3 -m material_price_audit run \
   --platforms guangcai,huixun,lingcai,jd,1688 \
   --auto-install \
@@ -29,7 +29,7 @@ python3 -m material_price_audit run \
 **只在这两种情况停下来问用户：**
 
 1. **没有 Python / 自动安装失败** → 把安装命令甩给用户（或帮装）  
-2. **没有询价单文件** → 一句：「请把表放到 `data/input/inquiry.xlsx`」  
+2. **没有询价单文件** → 一句：「请把任意文件名的询价 Excel 放到 `data/input/`」  
 3. **登录** → 浏览器已打开，提示「请在 90 秒内登录各平台（已登录可忽略）」——**不要每个平台单独问一遍**
 
 不要：先问平台、再问路径、再问是否登录、再问是否试跑……那种傻逼流程。
@@ -133,14 +133,14 @@ python3 -m material_price_audit run --skip-login --platforms ...
 
 | 用途 | 默认路径 |
 |------|----------|
-| 询价单 | `data/input/inquiry.xlsx` |
+| 询价单 | `data/input/*.xlsx`（任意名；表头含「报送不含税单价」优先） |
 | 结果 | `data/output/result.xlsx` |
 | 证据 | `data/output/evidence.json` |
 | RFQ | `data/output/rfq.xlsx` |
 | 勾选平台文件 | `data/output/platforms.selected` |
 | 登录态 | `.browser-profile/` |
 
-用户表不在默认路径时，**一次**用 `--input` 指定，不要反复确认。
+用户表不在 `data/input/` 时，**一次**用 `--input` 指定完整路径，不要反复确认。
 
 ---
 
@@ -149,8 +149,8 @@ python3 -m material_price_audit run --skip-login --platforms ...
 ### 开场
 
 ```text
-我来自动跑核价：先检查环境，再用广材/慧讯/领材（可改）按顺序匹配详情价。
-请确认询价表在 data/input/inquiry.xlsx；浏览器弹出时登录一下各网站即可。
+我来自动跑核价：先检查环境，再用广材/慧讯(iccchina)/领材(hylcw)（可改）按顺序匹配详情价。
+请把询价表丢进 data/input/（文件名随意）；浏览器弹出时登录一下各网站即可。
 ```
 
 ### 只要平台时（可选一句）

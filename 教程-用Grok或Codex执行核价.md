@@ -47,7 +47,7 @@ material-price-audit/
 
 | 用途 | 路径（相对 material-price-audit） |
 |------|-----------------------------------|
-| **你的询价单（入参）** | `data/input/inquiry.xlsx` |
+| **你的询价单（入参）** | `data/input/*.xlsx`（任意文件名，自动识别） |
 | **核价结果（出参）** | `data/output/result.xlsx` |
 | **证据记录** | `data/output/evidence.json` |
 | **没抓到的待询价单** | `data/output/rfq.xlsx` |
@@ -55,7 +55,7 @@ material-price-audit/
 把你的 Excel 询价单 **复制/另存为** 到：
 
 ```text
-data/input/inquiry.xlsx
+data/input/   # 任意 .xlsx，如 安装专业询价材料设备.xlsx
 ```
 
 表里要有列：**报送不含税单价**（这是上限，审定不能超过它）。
@@ -296,7 +296,7 @@ Do not fabricate prices. Summarize results in Chinese.
 
 把下面当清单打勾：
 
-- [ ] **1.** 询价单放到 `data/input/inquiry.xlsx`  
+- [ ] **1.** 询价单放到 `data/input/`（任意文件名，不必叫 inquiry.xlsx）  
 - [ ] **2.** 终端执行 `check`，状态为 OK  
 - [ ] **3.** 运行 `platforms` 看可选网站，决定 `--platforms`（如 jd,1688,zkh）  
 - [ ] **4.** 让 Grok/Codex 执行 `login --platforms ...`，你在浏览器登录**指定的每一个站**  
@@ -393,7 +393,7 @@ python3 -m material_price_audit rfq \
 
 ### Q5：换一份新的询价单？
 
-1. 新文件覆盖或改名放到 `data/input/inquiry.xlsx`  
+1. 新文件放到 `data/input/`（任意文件名即可，无需改名 inquiry.xlsx）  
 2. 建议换输出文件名，避免和旧结果混：  
 
 ```bash

@@ -51,11 +51,14 @@ python -m material_price_audit guide
 
 ## 3. 准备询价单（入参）
 
-把 Excel 放到：
+把 Excel 放到 `data/input/` 即可，**文件名随意**（不必叫 `inquiry.xlsx`）：
 
 ```text
-data/input/inquiry.xlsx
+data/input/安装专业询价材料设备.xlsx
+data/input/项目A材料询价.xlsx
 ```
+
+`run` / `scrape` 不传 `--input` 时会自动扫描该目录：优先表头含「报送不含税单价」的文件。
 
 ### 表头要求
 
@@ -76,13 +79,15 @@ data/input/inquiry.xlsx
 
 ### 内置平台（节选）
 
-| ID | 名称 |
-|----|------|
-| guangcai | 广材网 |
-| huixun | 慧讯网 |
-| lingcai | 领材网 |
-| jd / 1688 | 京东 / 批发 |
-| zkh / taobao / tmall / suning | 工业品与电商 |
+| ID | 名称 | 登录入口 |
+|----|------|----------|
+| guangcai | 广材网 | https://www.gldjc.com/login |
+| huixun | 慧讯网（RCC） | https://services.iccchina.com/apply_trial |
+| lingcai | 领材网 | https://www.hylcw.cn/lcIndex.html |
+| jd / 1688 | 京东 / 批发 | 各自官网 |
+| zkh / taobao / tmall / suning | 工业品与电商 | 各自官网 |
+
+三家造价信息站域名不同，登录会**分别**打开，不会串成广材。详见 [PLATFORMS.md](./PLATFORMS.md)。
 
 ```bash
 python -m material_price_audit platforms
@@ -189,7 +194,7 @@ python -m material_price_audit guide
 
 | 角色 | 路径 |
 |------|------|
-| 入参询价单 | `data/input/inquiry.xlsx` |
+| 入参询价单 | `data/input/*.xlsx`（任意文件名，自动识别） |
 | 出参结果 | `data/output/result.xlsx` |
 | 出参证据 | `data/output/evidence.json` |
 | 出参 RFQ | `data/output/rfq.xlsx` |
@@ -219,8 +224,11 @@ A: 正常。无公开价/定制设备不会编造，请用 `rfq.xlsx` 询供应�
 **Q: 1688 在 config 里变奇怪数字？**  
 A: 写成 `"1688"`（带引号），YAML 才会当字符串。
 
-**Q: 领材网域名不是 gldjc？**  
-A: 在 `config.yaml` → `platforms.definitions.lingcai` 覆盖 `login_url` / `search_url`。
+**Q: 领材网 / 慧讯网是不是广材？**  
+A: 不是。领材 = `hylcw.cn`，慧讯 = `iccchina.com`（RCC），广材 = `gldjc.com`。内置 URL 已写死；官网变更时再在 `platforms.definitions` 覆盖。
+
+**Q: 询价表必须叫 inquiry.xlsx 吗？**  
+A: 不必。丢进 `data/input/` 任意名字即可；多文件时按表头自动选。
 
 **Q: 能 headless 吗？**  
 A: 登录场景不推荐。默认有界面，便于人工登录与风控验证。

@@ -58,9 +58,9 @@
   </div>
   <script>
     const PLATS = [
-      { id: "guangcai", name: "广材网", desc: "官网 gldjc.com · 登录页标题「登录-广材网」", cost: true },
-      { id: "huixun", name: "慧讯网（现广材网）", desc: "公开入口已更名为广材网，与 guangcai 同一登录（自动去重）", cost: true },
-      { id: "lingcai", name: "领材网", desc: "须在 config 填真实官网；未配置不会打开广材", cost: true },
+      { id: "guangcai", name: "广材网", desc: "gldjc.com · 登录 https://www.gldjc.com/login", cost: true },
+      { id: "huixun", name: "慧讯网", desc: "RCC · https://services.iccchina.com/apply_trial （非广材）", cost: true },
+      { id: "lingcai", name: "领材网", desc: "https://www.hylcw.cn/lcIndex.html （非广材）", cost: true },
       { id: "jcnet", name: "建材在线", desc: "jc.net.cn 建材信息价", cost: true },
       { id: "gldjc_hangqing", name: "广材行情", desc: "hangqing.gldjc.com", cost: true },
       { id: "gldjc_xunjia", name: "广材询价", desc: "xunjia.gldjc.com 人工询价", cost: true },
@@ -76,7 +76,7 @@
     PLATS.forEach((p, i) => {
       const lab = document.createElement("label");
       lab.className = "row";
-      const checked = p.id === "guangcai" || p.id === "jd" || p.id === "1688";
+      const checked = ["guangcai", "huixun", "lingcai", "jd", "1688"].includes(p.id);
       lab.innerHTML = `<input type="checkbox" value="${p.id}" ${checked ? "checked" : ""}>
         <span><strong>${i + 1}. ${p.name}</strong> <code>${p.id}</code><br><small>${p.desc}</small></span>`;
       list.appendChild(lab);

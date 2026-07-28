@@ -192,7 +192,7 @@
     <div class="card">
       <h2><span class="n">1</span> 放入询价表</h2>
       <p>把你的表<strong>复制</strong>到工具目录里，并改名为：</p>
-      <p class="path">data/input/inquiry.xlsx</p>
+      <p class="path">data/input/*.xlsx（任意文件名，自动识别）</p>
       <p>打开方式：进入 <code>material-price-audit</code> 文件夹 → 打开 <code>data</code> → 打开 <code>input</code> → 放进去。</p>
       <div class="box orange">表里一定要有<strong>报送不含税单价</strong>。审定结果不会高于这一列。</div>
     </div>
@@ -211,7 +211,8 @@ python -m material_price_audit login --profile .browser-profile --platforms guan
     <div class="card">
       <h2><span class="n">3</span> 先试 8 条（一定要做）</h2>
       <pre><button type="button" data-copy>复制</button><code>python -m material_price_audit scrape \
-  --input data/input/inquiry.xlsx \
+  # --input 可省略，自动识别 data/input/ 下任意 xlsx
+  --input data/input/ \
   --output data/output/result.xlsx \
   --evidence data/output/evidence.json \
   --profile .browser-profile \
@@ -232,7 +233,8 @@ python -m material_price_audit login --profile .browser-profile --platforms guan
       <h2><span class="n">4</span> 全表核价</h2>
       <p>和试跑一样，把最后的 <code>--limit 8</code> 删掉再跑一遍即可。</p>
       <pre><button type="button" data-copy>复制</button><code>python -m material_price_audit scrape \
-  --input data/input/inquiry.xlsx \
+  # --input 可省略，自动识别 data/input/ 下任意 xlsx
+  --input data/input/ \
   --output data/output/result.xlsx \
   --evidence data/output/evidence.json \
   --profile .browser-profile \
@@ -243,7 +245,8 @@ python -m material_price_audit login --profile .browser-profile --platforms guan
     <div class="card">
       <h2><span class="n">5</span> 查不到的 → 发给供应商</h2>
       <pre><button type="button" data-copy>复制</button><code>python -m material_price_audit rfq \
-  --input data/input/inquiry.xlsx \
+  # --input 可省略，自动识别 data/input/ 下任意 xlsx
+  --input data/input/ \
   --evidence data/output/evidence.json \
   --output data/output/rfq.xlsx</code></pre>
       <table>
@@ -273,7 +276,7 @@ python -m material_price_audit login --profile .browser-profile --platforms guan
     <div class="card">
       <h2>勾一下，避免漏步</h2>
       <div class="checklist" id="cl">
-        <label><input type="checkbox"> 询价表已放到 data/input/inquiry.xlsx</label>
+        <label><input type="checkbox"> 询价表已放到 data/input/（任意文件名即可）</label>
         <label><input type="checkbox"> 已登录广材 / 慧讯 / 领材</label>
         <label><input type="checkbox"> 试跑 8 条，详情链接型号正确</label>
         <label><input type="checkbox"> 全表已跑完，result.xlsx 可用</label>

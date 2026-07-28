@@ -16,35 +16,25 @@ browser:
   between_items_sleep: 1.2
 
 platforms:
-  # 只启用「官网地址已核实」的站。领材网未配置真实域名时不要写 lingcai。
+  # 三家造价信息站域名互不相同，登录页会分别打开（不会串成广材）
   enabled:
     - guangcai     # 广材网 https://www.gldjc.com/
+    - huixun       # 慧讯网 https://services.iccchina.com/apply_trial （RCC，非广材）
+    - lingcai      # 领材网 https://www.hylcw.cn/lcIndex.html （hylcw.cn，非广材）
     - jd
     - "1688"
-    # - huixun     # 与 guangcai 同站（登录自动去重），可选
-    # - lingcai    # 必须先在 definitions 填真实领材网 URL
     # - jcnet      # 建材在线 https://www.jc.net.cn/
     # - gldjc_hangqing
     # - gldjc_xunjia
 
   definitions:
-    # —— 领材网：必须填浏览器地址栏里的真实地址，禁止填 gldjc.com ——
-    # lingcai:
-    #   name: 领材网
-    #   login_url: "https://【领材网登录页】"
-    #   search_url: "https://【领材网搜索】?q={query}"
-    #   handler: generic
-    #   item_link_contains: "【域名】"
-    #   item_link_selector: 'a[href*="【域名】"]'
-    #   detail_price_selectors: [".price", "[class*='price']"]
-
-    # —— 若慧讯有旧独立域名（少见），可覆盖 ——
+    # 内置 URL 已写在 platforms.py；仅当官网变更时才覆盖，例如：
     # huixun:
-    #   name: 慧讯网
-    #   login_url: "https://【独立慧讯登录】"
-    #   search_url: "https://【搜索】?keyword={query}"
-    #   handler: generic
-    #   item_link_contains: "【域名】"
+    #   login_url: "https://services.iccchina.com/apply_trial"
+    #   search_url: "https://services.iccchina.com/iccHome"
+    # lingcai:
+    #   login_url: "https://www.hylcw.cn/lcIndex.html"
+    #   search_url: "https://www.hylcw.cn/lcIndex.html?keyword={query}"
 
 excel:
   submit_price_headers: [报送不含税单价, 报送单价, 投标单价]

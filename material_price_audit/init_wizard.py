@@ -20,8 +20,8 @@ from .env_check import check_environment
 from .platforms import BUILTIN, resolve_enabled_platforms
 
 
-# 默认：仅 URL 已核实的平台。慧讯=广材同站（登录去重）；领材须用户自配域名
-DEFAULT_PLATFORMS = ["guangcai", "jd", "1688"]
+# 默认：广材(gldjc) + 慧讯(iccchina) + 领材(hylcw) + 电商补充
+DEFAULT_PLATFORMS = ["guangcai", "huixun", "lingcai", "jd", "1688"]
 
 
 @dataclass
@@ -106,7 +106,16 @@ def detect_state(root: Path | None = None) -> ProjectState:
     root = root or package_root()
     env = check_environment(require_browser=True)
     cfg_path = root / "config.yaml"
-    input_path = root / "data" / "input" / "inquiry.xlsx"
+    input_dir = root / "data" / "input"
+    # smart detect any excel in input dir
+    try:
+        from .excel_io import resolve_inquiry_path
+
+        input_path = resolve_inquiry_path(None, default_dir=input_dir)
+        input_exists = True
+    except Exception:
+        input_path = input_dir
+        input_exists = False
     output_dir = root / "data" / "output"
     profile = root / ".browser-profile"
 
@@ -131,7 +140,7 @@ def detect_state(root: Path | None = None) -> ProjectState:
         config_path=str(cfg_path),
         config_exists=cfg_path.exists(),
         input_path=str(input_path),
-        input_exists=input_path.exists(),
+        input_exists=input_exists,
         output_dir=str(output_dir),
         profile_dir=str(profile),
         platforms_enabled=platforms,
@@ -158,21 +167,20 @@ def detect_state(root: Path | None = None) -> ProjectState:
         ]
         return st
 
-    if not input_path.exists():
+    if not input_exists:
         st.phase = "need_inquiry"
-        st.next_action = "User must place inquiry Excel at data/input/inquiry.xlsx"
+        st.next_action = "User must place any inquiry Excel under data/input/ (any filename)"
         st.next_command = (
             "python -m material_price_audit status "
-            "--input data/input/inquiry.xlsx "
             "--output data/output/result.xlsx "
             "--evidence data/output/evidence.json"
         )
         st.questions_for_user = [
-            "请把询价单 Excel 放到 data/input/inquiry.xlsx（必须含「报送不含税单价」列）。放好后回复「已放好」。",
-            f"当前启用平台为 {','.join(platforms)}，是否要修改？（可回复平台列表）",
+            "请把询价 Excel（任意文件名，如「安装专业询价材料设备.xlsx」）放到 data/input/，表头需含「报送不含税单价」。放好即可继续。",
+            f"当前启用平台为 {','.join(platforms)}，可改或打开 docs/platform-select.html 勾选。",
         ]
         st.user_checklist = [
-            f"复制询价单到: {input_path}",
+            f"把询价 .xlsx 放入: {input_dir}（不必改名 inquiry.xlsx，工具会自动识别）",
             "确认表头有: 材料名称 / 规格型号 / 报送不含税单价",
         ]
         return st
@@ -204,7 +212,6 @@ def detect_state(root: Path | None = None) -> ProjectState:
                 st.next_action = f"Already have {n} verified rows; offer full scrape or rfq"
                 st.next_command = (
                     f"python -m material_price_audit scrape "
-                    f"--input data/input/inquiry.xlsx "
                     f"--output data/output/result.xlsx "
                     f"--evidence data/output/evidence.json "
                     f"--profile .browser-profile "
@@ -326,7 +333,7 @@ cd "{st.root}"
 |-------|------|------------|
 | need_env | 缺依赖 | 引导安装 playwright/openpyxl，再 check |
 | need_config | 无 config | 运行 init，问平台列表 |
-| need_inquiry | 无询价单 | 让用户把 Excel 放到 data/input/inquiry.xlsx |
+| need_inquiry | 无询价单 | 让用户把任意文件名 Excel 放到 data/input/ |
 | need_login | 可登录 | login --platforms ...，用户浏览器登录 |
 | ready_scrape | 可抓取 | scrape --limit 8 → 全量 → rfq |
 | done | 完成 | 汇报路径与命中数 |
@@ -342,7 +349,7 @@ cd "{st.root}"
 
 | 用途 | 路径 |
 |------|------|
-| 入参询价单 | `data/input/inquiry.xlsx` |
+| 入参询价单 | `data/input/*.xlsx`（任意文件名，自动识别含「报送不含税单价」的表） |
 | 出参结果 | `data/output/result.xlsx` |
 | 出参证据 | `data/output/evidence.json` |
 | 出参 RFQ | `data/output/rfq.xlsx` |
@@ -354,8 +361,8 @@ cd "{st.root}"
 你好。我来帮你做「材料询价核价」初始化。
 
 1. 先检查电脑是否装好 Playwright  
-2. 请你选择要登录/比价的网站（京东、1688、震坤行、淘宝…或你们内部商城）  
-3. 把询价单放到固定文件夹  
+2. 请你选择要登录/比价的网站（广材 / 慧讯 iccchina / 领材 hylcw / 京东…）  
+3. 把询价单丢进 data/input/（文件名随意）  
 4. 你在浏览器登录各平台后，我再自动试跑 8 条给你核对  
 
 当前阶段：**{st.phase}**  
@@ -392,8 +399,9 @@ def print_agent_block(st: ProjectState, guide_path: Path | None = None) -> None:
     elif st.phase in ("need_config",) or not st.config_exists:
         print("已准备好项目文件夹。请告诉我：要用哪些报价网站？例如：京东+1688+震坤行。")
     elif st.phase == "need_inquiry":
-        print(f"请把询价单放到这个路径后告诉我：\n  {st.input_path}")
-        print("表里需要有「报送不含税单价」这一列。")
+        print("请把询价 Excel 放到 data/input/ 目录（任意文件名，不必叫 inquiry.xlsx）：")
+        print(f"  {Path(st.root) / 'data' / 'input'}")
+        print("表里需要有「报送不含税单价」这一列；多个 xlsx 时会按表头自动选。")
     elif st.phase == "need_login":
         print(
             f"询价单已就绪。接下来请登录这些平台：{', '.join(st.platforms_enabled)}。"

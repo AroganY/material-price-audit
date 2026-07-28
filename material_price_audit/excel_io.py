@@ -16,6 +16,116 @@ def r2(x: float) -> float:
     return round(float(x) + 1e-12, 2)
 
 
+EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
+
+
+def _inquiry_content_score(path: Path) -> int:
+    """
+    Peek workbook headers: high score if looks like 询价单
+    (报送不含税单价 / 材料名称 …). Soft-fail on unreadable files.
+    """
+    try:
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    except Exception:
+        return 0
+    score = 0
+    try:
+        for sn in wb.sheetnames[:8]:
+            ws = wb[sn]
+            for i, row in enumerate(ws.iter_rows(max_row=12, max_col=22, values_only=True)):
+                if i > 11:
+                    break
+                text = " ".join(str(c) for c in row if c is not None)
+                if not text:
+                    continue
+                if any(k in text for k in ("报送不含税单价", "报送单价", "投标单价")):
+                    score += 100
+                if any(k in text for k in ("审定不含税单价", "审定单价")):
+                    score += 20
+                if any(k in text for k in ("材料名称", "设备名称", "规格、型号", "规格型号")):
+                    score += 8
+                if "数量" in text and "单位" in text:
+                    score += 4
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+    return score
+
+
+def resolve_inquiry_path(path: str | Path | None, default_dir: Path | None = None) -> Path:
+    """
+    Smart resolve inquiry workbook:
+    - absolute/relative file path ending with xlsx/xls → use it
+    - directory → pick best Excel inside by **表头内容** + 文件名关键词 + 修改时间
+    - empty → default_dir (usually data/input)
+    Never requires fixed name inquiry.xlsx — 安装专业询价材料设备.xlsx 等原名即可。
+    """
+    if path in (None, ""):
+        if default_dir is None:
+            raise FileNotFoundError("未指定询价表路径，且无默认 data/input 目录")
+        base = Path(default_dir)
+    else:
+        base = Path(path).expanduser()
+
+    if base.is_file():
+        if base.suffix.lower() not in EXCEL_SUFFIXES:
+            raise FileNotFoundError(f"不是 Excel 文件: {base}")
+        if base.name.startswith("~$"):
+            raise FileNotFoundError(f"忽略 Excel 临时锁文件: {base}")
+        return base.resolve()
+
+    # treat as directory (may not exist yet)
+    folder = base if base.suffix.lower() not in EXCEL_SUFFIXES else base.parent
+    if not folder.exists():
+        # try default_dir
+        if default_dir and Path(default_dir).exists():
+            folder = Path(default_dir)
+        else:
+            raise FileNotFoundError(f"路径不存在: {base}")
+
+    if folder.is_file():
+        return folder.resolve()
+
+    cands: list[Path] = []
+    for pat in ("*.xlsx", "*.xlsm", "*.xls"):
+        cands.extend(folder.glob(pat))
+    cands = [c for c in cands if not c.name.startswith("~$") and not c.name.startswith(".")]
+    if not cands:
+        raise FileNotFoundError(
+            f"目录中没有 Excel 文件: {folder}\n"
+            f"请把询价表（任意文件名 .xlsx，不必叫 inquiry.xlsx）放到该目录，或用 --input 指定完整路径"
+        )
+
+    name_keywords = ("询价", "材料", "设备", "安装", "核价", "认价", "inquiry", "price", "audit")
+    # 结果表 / 导出表降权，避免误选
+    penalize = ("result", "rfq", "证据", "核价完成", "审定核价", "output", "证据型")
+
+    def score(p: Path) -> tuple:
+        name = p.name
+        name_l = name.lower()
+        kw = sum(3 for k in name_keywords if k.lower() in name_l or k in name)
+        pen = sum(15 for k in penalize if k.lower() in name_l or k in name)
+        content = _inquiry_content_score(p)
+        return (content + kw - pen, p.stat().st_mtime)
+
+    ranked = sorted(cands, key=score, reverse=True)
+    chosen = ranked[0].resolve()
+    content_hit = _inquiry_content_score(chosen) > 0
+    if len(ranked) > 1:
+        print(f"[input] 目录内发现 {len(ranked)} 个 Excel，自动选用: {chosen.name}")
+        if content_hit:
+            print("        （依据：表头含「报送不含税单价」等询价列）")
+        else:
+            print("        （依据：文件名关键词 / 最近修改；建议表头含「报送不含税单价」）")
+        print(f"        其它: {', '.join(c.name for c in ranked[1:6])}" + ("…" if len(ranked) > 6 else ""))
+        print("        指定其它文件: --input /完整路径/你的表.xlsx")
+    else:
+        print(f"[input] 自动识别询价表: {chosen.name}" + ("（表头已匹配）" if content_hit else ""))
+    return chosen
+
+
 @dataclass
 class LineItem:
     sheet: str

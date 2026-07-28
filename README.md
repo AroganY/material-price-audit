@@ -64,7 +64,7 @@
 
 | 步骤 | 做什么 |
 |------|--------|
-| ① | 询价表 → `data/input/inquiry.xlsx` |
+| ① | 询价表丢进 `data/input/`（**任意文件名**，如 `安装专业询价材料设备.xlsx`） |
 | ② | （可选）打开 `docs/platform-select.html` 勾选平台顺序 |
 | ③ | 执行下面 **一条命令**；浏览器弹出时登录即可 |
 | ④ | 打开 `data/output/result.xlsx` 核对 |
@@ -106,12 +106,12 @@ python -m material_price_audit run --platforms guangcai,huixun,lingcai --limit 8
 | ID | 名称 | 官网 / 登录 |
 |----|------|-------------|
 | `guangcai` | **广材网** | https://www.gldjc.com/ · 登录 https://www.gldjc.com/login |
-| `huixun` | **慧讯网（现广材网）** | 公开入口已更名为广材网，**同一登录页**（自动去重，不重复弹） |
-| `lingcai` | **领材网** | **必须自行配置真实地址**，未配置则跳过，**绝不会打开广材** |
+| `huixun` | **慧讯网**（RCC 瑞达恒） | https://services.iccchina.com/apply_trial · **不是**广材 |
+| `lingcai` | **领材网** | https://www.hylcw.cn/lcIndex.html · **不是**广材 |
 | `jcnet` | 建材在线 | https://www.jc.net.cn/ |
 | `jd` / `1688` 等 | 电商 | 各自官网 |
 
-默认启用：`guangcai,jd,1688`。
+默认启用：`guangcai,huixun,lingcai,jd,1688`。
 
 ---
 
@@ -122,7 +122,7 @@ python -m material_price_audit run --platforms guangcai,huixun,lingcai --limit 8
 ```text
 按 AGENTS.md 自动跑 material-price-audit：
 1) check --auto-install
-2) 询价表默认 data/input/inquiry.xlsx（没有就说一声让我放）
+2) 询价表丢进 data/input/ 即可（任意文件名，不必叫 inquiry.xlsx；没有就说一声）
 3) run --platforms guangcai,huixun,lingcai,jd,1688 --auto-install --login-wait 90
 不要一步步碎问。瀑布匹配：详情规格对上才用该平台，否则自动下一站。
 ```
