@@ -82,8 +82,8 @@ data/input/项目A材料询价.xlsx
 | ID | 名称 | 登录入口 |
 |----|------|----------|
 | guangcai | 广材网 | https://www.gldjc.com/login |
-| huixun | 慧讯网（RCC） | https://services.iccchina.com/apply_trial |
-| lingcai | 领材网 | https://www.hylcw.cn/lcIndex.html |
+| huixun | 慧讯网（RCC） | https://services.iccchina.com/login |
+| lingcai | 领材网 | https://www.hylcw.cn/userInfo/index.html |
 | jd / 1688 | 京东 / 批发 | 各自官网 |
 | zkh / taobao / tmall / suning | 工业品与电商 | 各自官网 |
 

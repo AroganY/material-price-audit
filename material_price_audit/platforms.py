@@ -57,29 +57,28 @@ BUILTIN: dict[str, PlatformSpec] = {
     "huixun": PlatformSpec(
         id="huixun",
         name="慧讯网",
-        # 实测 2026-07：标题「慧讯网-RCC瑞达恒旗下_建筑行业价格信息查询平台」
-        # 用户指定入口 apply_trial；业务首页 iccHome；登录页 /login
-        login_url="https://services.iccchina.com/apply_trial",
+        # 用户核实登录页：/login（不是 apply_trial）
+        login_url="https://services.iccchina.com/login",
         search_url_template="https://services.iccchina.com/iccHome",
         handler="generic",
         item_link_contains="iccchina.com",
         item_link_selector='a[href*="iccchina.com"]',
         detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
         same_login_as="",
-        notes="官网入口 https://services.iccchina.com/apply_trial · 首页 https://services.iccchina.com/iccHome · 登录 https://services.iccchina.com/login · RCC瑞达恒，非广材网",
+        notes="登录 https://services.iccchina.com/login · 首页 iccHome · RCC瑞达恒，非广材网",
     ),
     "lingcai": PlatformSpec(
         id="lingcai",
         name="领材网",
-        # 实测 2026-07：标题「领材网-首页」
-        login_url="https://www.hylcw.cn/lcIndex.html",
+        # 用户核实登录/用户中心：/userInfo/index.html（不是 lcIndex 首页）
+        login_url="https://www.hylcw.cn/userInfo/index.html",
         search_url_template="https://www.hylcw.cn/lcIndex.html?keyword={query}",
         handler="generic",
         item_link_contains="hylcw.cn",
         item_link_selector='a[href*="hylcw.cn"]',
         detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
         requires_config=False,
-        notes="官网 https://www.hylcw.cn/lcIndex.html · 域名 hylcw.cn · 非广材网",
+        notes="登录 https://www.hylcw.cn/userInfo/index.html · 首页 lcIndex · 域名 hylcw.cn · 非广材网",
     ),
     "gldjc_hangqing": PlatformSpec(
         id="gldjc_hangqing",

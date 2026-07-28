@@ -106,8 +106,8 @@ python -m material_price_audit run --platforms guangcai,huixun,lingcai --limit 8
 | ID | 名称 | 官网 / 登录 |
 |----|------|-------------|
 | `guangcai` | **广材网** | https://www.gldjc.com/ · 登录 https://www.gldjc.com/login |
-| `huixun` | **慧讯网**（RCC 瑞达恒） | https://services.iccchina.com/apply_trial · **不是**广材 |
-| `lingcai` | **领材网** | https://www.hylcw.cn/lcIndex.html · **不是**广材 |
+| `huixun` | **慧讯网**（RCC 瑞达恒） | 登录 https://services.iccchina.com/login · **不是**广材 |
+| `lingcai` | **领材网** | 登录 https://www.hylcw.cn/userInfo/index.html · **不是**广材 |
 | `jcnet` | 建材在线 | https://www.jc.net.cn/ |
 | `jd` / `1688` 等 | 电商 | 各自官网 |
 

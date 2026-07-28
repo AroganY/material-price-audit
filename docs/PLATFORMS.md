@@ -10,8 +10,8 @@
 | ID | 名称 | 登录 / 首页 | 搜索入口 | 实测标题 |
 |----|------|-------------|---------|----------|
 | **guangcai** | **广材网** | https://www.gldjc.com/login | https://www.gldjc.com/scj/so.html?l=1&keyword={query} | 登录-**广材网**-… / 广材网-建筑工程造价… |
-| **huixun** | **慧讯网** | https://services.iccchina.com/apply_trial | https://services.iccchina.com/iccHome | **慧讯网**-RCC瑞达恒旗下_建筑行业价格信息查询平台 |
-| **lingcai** | **领材网** | https://www.hylcw.cn/lcIndex.html | https://www.hylcw.cn/lcIndex.html?keyword={query} | **领材网**-首页 |
+| **huixun** | **慧讯网** | https://services.iccchina.com/login | https://services.iccchina.com/iccHome | 登录页 services.iccchina.com/login |
+| **lingcai** | **领材网** | https://www.hylcw.cn/userInfo/index.html | https://www.hylcw.cn/lcIndex.html?keyword={query} | 用户中心/登录 userInfo/index.html |
 | gldjc_hangqing | 广材行情 | https://hangqing.gldjc.com/ | 同域名 | 钢材行情-广材网 |
 | gldjc_xunjia | 广材询价 | https://xunjia.gldjc.com/ | 同域名 | 广材人工询价 |
 | jcnet | 建材在线 | https://www.jc.net.cn/ | 同域名 | 建材在线-建材信息价格服务 |
@@ -49,5 +49,5 @@ python -m material_price_audit login \
 应依次看到：
 
 1. 广材网登录页  
-2. 慧讯网（iccchina）试用/登录页  
-3. 领材网首页（hylcw.cn）  
+2. 慧讯网登录页 https://services.iccchina.com/login  
+3. 领材网用户中心 https://www.hylcw.cn/userInfo/index.html  

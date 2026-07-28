@@ -19,8 +19,8 @@ platforms:
   # 三家造价信息站域名互不相同，登录页会分别打开（不会串成广材）
   enabled:
     - guangcai     # 广材网 https://www.gldjc.com/
-    - huixun       # 慧讯网 https://services.iccchina.com/apply_trial （RCC，非广材）
-    - lingcai      # 领材网 https://www.hylcw.cn/lcIndex.html （hylcw.cn，非广材）
+    - huixun       # 慧讯网 登录 https://services.iccchina.com/login （RCC，非广材）
+    - lingcai      # 领材网 登录 https://www.hylcw.cn/userInfo/index.html （hylcw.cn，非广材）
     - jd
     - "1688"
     # - jcnet      # 建材在线 https://www.jc.net.cn/
@@ -30,10 +30,10 @@ platforms:
   definitions:
     # 内置 URL 已写在 platforms.py；仅当官网变更时才覆盖，例如：
     # huixun:
-    #   login_url: "https://services.iccchina.com/apply_trial"
+    #   login_url: "https://services.iccchina.com/login"
     #   search_url: "https://services.iccchina.com/iccHome"
     # lingcai:
-    #   login_url: "https://www.hylcw.cn/lcIndex.html"
+    #   login_url: "https://www.hylcw.cn/userInfo/index.html"
     #   search_url: "https://www.hylcw.cn/lcIndex.html?keyword={query}"
 
 excel:

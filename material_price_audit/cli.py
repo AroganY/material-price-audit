@@ -193,8 +193,8 @@ def cmd_platforms(args):
     print("")
     print("说明: 行首 * 表示当前启用。详见 docs/PLATFORMS.md")
     print("广材网 guangcai = https://www.gldjc.com/login")
-    print("慧讯网 huixun   = https://services.iccchina.com/apply_trial （RCC瑞达恒，非广材）")
-    print("领材网 lingcai  = https://www.hylcw.cn/lcIndex.html")
+    print("慧讯网 huixun   = https://services.iccchina.com/login （RCC瑞达恒，非广材）")
+    print("领材网 lingcai  = https://www.hylcw.cn/userInfo/index.html")
     print("示例: --platforms guangcai,huixun,lingcai,jd,1688")
     return 0
 
