@@ -42,12 +42,9 @@ from .scraper import (
     clear_agent_login_signal,
     launch_context,
     open_detail,
-    page_looks_logged_in,
     pick_manual,
     to_evidence,
-    url_looks_like_login,
     wait_for_login_agent,
-    wait_user,
 )
 
 
