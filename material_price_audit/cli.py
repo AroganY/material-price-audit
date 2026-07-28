@@ -202,11 +202,11 @@ def cmd_platforms(args):
         mark = "*" if pid in enabled else " "
         print(f"{mark}{pid:<11} {spec.name:<16} {kind:<10} {spec.login_url}")
     print("")
-    print("说明: 行首 * 表示当前启用。用 --platforms 或 config.yaml platforms.enabled 指定。")
-    print("造价常用: guangcai(广材网) huixun(慧讯网) lingcai(领材网) — 均属广联达材料价体系，需登录")
-    print("电商补充: jd 1688 taobao tmall zkh suning")
-    print("自定义站点: 在 config.yaml → platforms.definitions 添加 search_url / login_url / 选择器。")
-    print("示例: --platforms guangcai,huixun,lingcai,jd,1688")
+    print("说明: 行首 * 表示当前启用。详见 docs/PLATFORMS.md")
+    print("广材网 guangcai = https://www.gldjc.com/login （实测标题：登录-广材网）")
+    print("慧讯网 huixun = 公开入口已更名广材网，与 guangcai 同登录（自动去重）")
+    print("领材网 lingcai = 须在 definitions 填真实官网，未配置不会打开广材")
+    print("示例: --platforms guangcai,jd,1688")
     return 0
 
 
