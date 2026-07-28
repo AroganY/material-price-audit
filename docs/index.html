@@ -3,408 +3,339 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>material-price-audit · 操作引导</title>
+  <title>材料询价核价 · 造价人员操作指引</title>
   <style>
     :root {
-      --bg: #0f1419;
-      --panel: #1a2332;
-      --panel2: #243044;
-      --line: #2f3f56;
-      --text: #e8eef6;
-      --muted: #9aafc4;
-      --accent: #3d9cf0;
-      --accent2: #2dd4bf;
-      --warn: #f5a623;
-      --danger: #f07178;
-      --ok: #7fd992;
-      --code: #0d1117;
-      --radius: 12px;
-      --font: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+      --bg: #f4f6f8;
+      --card: #fff;
+      --text: #1a2332;
+      --muted: #5a6a7a;
+      --line: #e2e8f0;
+      --blue: #1a5fb4;
+      --blue-soft: #e8f1fb;
+      --green: #1b7f4e;
+      --green-soft: #e6f6ee;
+      --orange: #b86e00;
+      --orange-soft: #fff6e5;
+      --red: #b42318;
+      --red-soft: #fdecea;
+      --radius: 14px;
+      --shadow: 0 8px 28px rgba(26, 35, 50, 0.06);
+      --font: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: var(--font);
-      background: radial-gradient(1200px 600px at 10% -10%, #1a3350 0%, transparent 50%),
-                  radial-gradient(900px 500px at 100% 0%, #12352f 0%, transparent 45%),
-                  var(--bg);
+      background: var(--bg);
       color: var(--text);
-      line-height: 1.65;
-      min-height: 100vh;
+      line-height: 1.7;
     }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
-    header.hero {
-      border: 1px solid var(--line);
-      background: linear-gradient(145deg, rgba(61,156,240,.12), rgba(45,212,191,.06));
-      border-radius: 18px;
-      padding: 28px 28px 22px;
-      margin-bottom: 28px;
+    .top {
+      background: linear-gradient(120deg, #0f3d7a 0%, #1a5fb4 55%, #178a6e 100%);
+      color: #fff;
+      padding: 36px 20px 40px;
     }
-    .badge {
-      display: inline-block;
-      font-size: 12px;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: var(--accent2);
-      border: 1px solid rgba(45,212,191,.35);
-      padding: 3px 10px;
-      border-radius: 999px;
-      margin-bottom: 12px;
+    .top-inner { max-width: 820px; margin: 0 auto; }
+    .top h1 { margin: 0 0 10px; font-size: 1.7rem; font-weight: 700; }
+    .top p { margin: 0; opacity: .92; font-size: 1.05rem; max-width: 36em; }
+    .tag {
+      display: inline-block; margin-bottom: 12px;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.25);
+      padding: 4px 12px; border-radius: 999px; font-size: 13px;
     }
-    h1 { font-size: 1.75rem; margin: 0 0 10px; font-weight: 700; letter-spacing: -.02em; }
-    .lead { color: var(--muted); margin: 0 0 16px; font-size: 1.02rem; }
-    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-    .btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      border: 1px solid var(--line);
-      background: var(--panel2);
-      color: var(--text);
-      padding: 9px 14px;
-      border-radius: 10px;
-      font-size: 14px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .btn.primary { background: var(--accent); border-color: transparent; color: #041018; font-weight: 600; }
-    .btn:hover { filter: brightness(1.08); }
-    nav.toc {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 8px;
-      margin-bottom: 28px;
-    }
-    nav.toc a {
-      display: block;
-      padding: 10px 12px;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 13px;
-    }
-    nav.toc a:hover { border-color: var(--accent); text-decoration: none; }
-    section {
-      background: var(--panel);
-      border: 1px solid var(--line);
+    .wrap { max-width: 820px; margin: -24px auto 48px; padding: 0 16px; }
+    .card {
+      background: var(--card);
       border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--line);
       padding: 22px 22px 18px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
-    section h2 {
+    .card h2 {
       margin: 0 0 12px;
       font-size: 1.15rem;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: flex; align-items: center; gap: 10px;
     }
-    .step-num {
-      width: 28px; height: 28px; border-radius: 8px;
-      background: rgba(61,156,240,.18); color: var(--accent);
+    .n {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--blue-soft); color: var(--blue);
       display: inline-flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 700; flex-shrink: 0;
+      font-weight: 700; font-size: 14px; flex-shrink: 0;
     }
     p, li { color: var(--muted); }
     strong { color: var(--text); }
-    table {
-      width: 100%; border-collapse: collapse; font-size: 14px; margin: 12px 0;
+    .box {
+      border-radius: 10px; padding: 12px 14px; margin: 12px 0; font-size: 14px;
     }
-    th, td {
-      border: 1px solid var(--line);
-      padding: 8px 10px;
-      text-align: left;
-    }
-    th { background: var(--panel2); color: var(--text); }
+    .box.blue { background: var(--blue-soft); color: #234; }
+    .box.green { background: var(--green-soft); color: #234; }
+    .box.orange { background: var(--orange-soft); color: #234; }
+    .box.red { background: var(--red-soft); color: #234; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 10px 0; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; color: var(--text); }
     td { color: var(--muted); }
-    code, .path {
-      font-family: var(--mono);
-      font-size: 12.5px;
-      background: var(--code);
-      border: 1px solid var(--line);
-      padding: 1px 6px;
-      border-radius: 6px;
-      color: #c6e2ff;
+    .path {
+      font-family: ui-monospace, Consolas, monospace;
+      background: #f1f5f9; padding: 2px 8px; border-radius: 6px;
+      color: #0f3d7a; font-size: 13px;
     }
     pre {
+      background: #0f172a; color: #e2e8f0;
+      border-radius: 10px; padding: 14px 16px;
+      overflow-x: auto; font-size: 12.5px; line-height: 1.5;
       position: relative;
-      background: var(--code);
-      border: 1px solid var(--line);
+    }
+    pre button {
+      position: absolute; right: 8px; top: 8px;
+      border: 0; border-radius: 6px; padding: 4px 10px;
+      background: #334155; color: #fff; cursor: pointer; font-size: 12px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin: 14px 0;
+    }
+    .flow div {
+      background: var(--blue-soft);
       border-radius: 10px;
-      padding: 14px 14px 14px;
-      overflow-x: auto;
-      font-family: var(--mono);
-      font-size: 12.5px;
-      line-height: 1.5;
-      color: #d5e6f7;
-      margin: 12px 0;
+      padding: 12px 8px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 600;
     }
-    pre .copy {
-      position: absolute; top: 8px; right: 8px;
-      font-family: var(--font); font-size: 12px;
-      padding: 4px 8px; border-radius: 6px;
-      border: 1px solid var(--line); background: var(--panel2);
-      color: var(--text); cursor: pointer;
+    .flow div span { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+    @media (max-width: 700px) {
+      .flow { grid-template-columns: 1fr 1fr; }
+      .top h1 { font-size: 1.35rem; }
     }
-    .callout {
-      border-left: 3px solid var(--accent2);
-      background: rgba(45,212,191,.08);
-      padding: 10px 12px;
-      border-radius: 0 8px 8px 0;
-      margin: 12px 0;
-      color: var(--muted);
-      font-size: 14px;
-    }
-    .callout.warn { border-left-color: var(--warn); background: rgba(245,166,35,.08); }
-    .callout.danger { border-left-color: var(--danger); background: rgba(240,113,120,.08); }
     .checklist label {
       display: flex; gap: 10px; align-items: flex-start;
-      padding: 8px 0; border-bottom: 1px dashed var(--line);
-      color: var(--muted); cursor: pointer; font-size: 14px;
+      padding: 10px 0; border-bottom: 1px solid var(--line);
+      cursor: pointer; color: var(--muted); font-size: 14px;
     }
-    .checklist label:last-child { border-bottom: 0; }
-    .checklist input { margin-top: 4px; accent-color: var(--accent2); }
-    .pill {
-      display: inline-block; font-size: 12px; padding: 2px 8px;
-      border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
-      margin-right: 4px;
-    }
-    .pill.ok { color: var(--ok); border-color: rgba(127,217,146,.4); }
-    .pill.warn { color: var(--warn); border-color: rgba(245,166,35,.4); }
-    footer {
-      margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center;
-    }
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 720px) {
-      .two-col { grid-template-columns: 1fr; }
-      h1 { font-size: 1.4rem; }
-    }
+    .checklist input { margin-top: 4px; accent-color: var(--blue); }
+    footer { text-align: center; color: var(--muted); font-size: 13px; padding: 8px 16px 40px; }
+    a { color: var(--blue); }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="hero">
-      <div class="badge">material-price-audit · OSS Guide</div>
-      <h1>材料询价核价 · 操作引导</h1>
-      <p class="lead">
-        准确性优先：没有商品/信息站证据就不填审定单价。<br />
-        支持 <strong>广材网 / 慧讯网 / 领材网</strong> 与京东、1688 等多平台；可用 AI Agent 初始化引导。
+  <div class="top">
+    <div class="top-inner">
+      <div class="tag">给造价人员 · 不需要会写代码</div>
+      <h1>材料询价核价，怎么用？</h1>
+      <p>
+        把施工单位报的材料单价，变成<strong style="color:#fff">有链接依据、且不高于报送价</strong>的审定参考价。
+        查不到的，自动列成待询价表发给供应商。
       </p>
-      <div class="hero-actions">
-        <a class="btn primary" href="#start">从这里开始</a>
-        <a class="btn" href="#agent">AI Agent 一句话</a>
-        <a class="btn" href="#paths">路径约定</a>
-        <a class="btn" href="../README.md">README</a>
-        <a class="btn" href="./USAGE.md">完整教程 MD</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- 是什么 -->
+    <div class="card">
+      <h2>先弄懂：能帮你干什么</h2>
+      <table>
+        <tr><th style="width:40%">你现在</th><th>用工具之后</th></tr>
+        <tr>
+          <td>报送价偏高，只能凭经验砍</td>
+          <td>有公开价的，自动给出<strong>审定参考价 + 可点开的依据</strong></td>
+        </tr>
+        <tr>
+          <td>自己搜电商、截图乱七八糟</td>
+          <td>一张结果表汇总，方便对账、存档</td>
+        </tr>
+        <tr>
+          <td>查不到的硬砍容易扯皮</td>
+          <td><strong>查不到就不填</strong>，另出待询价表走书面报价</td>
+        </tr>
+      </table>
+      <div class="box green">
+        <strong>三条死规矩：</strong><br>
+        ① 没有依据 → 不填审定价<br>
+        ② 审定价 ≤ 报送不含税单价<br>
+        ③ 含税挂牌价会先大概换成不含税（÷1.13）再比较
       </div>
-    </header>
+      <div class="box blue">
+        这是<strong>认质认价 / 材料询价审核底稿</strong>工具，不是代替定额套用，也不是官方信息价发布。
+      </div>
+    </div>
 
-    <nav class="toc">
-      <a href="#start">① 安装环境</a>
-      <a href="#init">② 初始化</a>
-      <a href="#input">③ 放询价单</a>
-      <a href="#login">④ 选平台登录</a>
-      <a href="#scrape">⑤ 试跑与全量</a>
-      <a href="#result">⑥ 看结果</a>
-      <a href="#agent">⑦ 交给 Agent</a>
-      <a href="#faq">⑧ 常见问题</a>
-    </nav>
+    <!-- 五步总览 -->
+    <div class="card" id="flow">
+      <h2>只记 5 步</h2>
+      <div class="flow">
+        <div>① 放表<span>询价 Excel</span></div>
+        <div>② 登录<span>广材/慧讯/领材</span></div>
+        <div>③ 试跑 8 条<span>先核对</span></div>
+        <div>④ 跑全表<span>出审定</span></div>
+        <div>⑤ 待询价<span>发供应商</span></div>
+      </div>
+    </div>
 
-    <section id="start">
-      <h2><span class="step-num">1</span> 安装环境（做一次）</h2>
-      <p>在仓库根目录打开终端，执行：</p>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>cd material-price-audit
+    <!-- 准备 -->
+    <div class="card">
+      <h2><span class="n">0</span> 开始前准备</h2>
+      <ol>
+        <li><strong>询价 Excel</strong>：必须有一列叫「报送不含税单价」（或近似名称）。</li>
+        <li><strong>材料站账号</strong>：广材网 / 慧讯网 / 领材网会员（公司通常已有）。</li>
+        <li><strong>电脑已装好工具</strong>：若还没装，把本页发给信息同事，或看文末「请同事装环境」。</li>
+      </ol>
+    </div>
+
+    <!-- step1 -->
+    <div class="card">
+      <h2><span class="n">1</span> 放入询价表</h2>
+      <p>把你的表<strong>复制</strong>到工具目录里，并改名为：</p>
+      <p class="path">data/input/inquiry.xlsx</p>
+      <p>打开方式：进入 <code>material-price-audit</code> 文件夹 → 打开 <code>data</code> → 打开 <code>input</code> → 放进去。</p>
+      <div class="box orange">表里一定要有<strong>报送不含税单价</strong>。审定结果不会高于这一列。</div>
+    </div>
+
+    <!-- step2 -->
+    <div class="card">
+      <h2><span class="n">2</span> 登录广材 / 慧讯 / 领材</h2>
+      <p>让同事或 AI 在电脑上执行下面命令，或自己在「终端」粘贴回车：</p>
+      <pre><button type="button" data-copy>复制</button><code>cd material-price-audit
+python -m material_price_audit login --profile .browser-profile --platforms guangcai,huixun,lingcai</code></pre>
+      <p><strong>你会看到浏览器弹出来</strong>——用公司账号登录即可。登完回到终端按回车。</p>
+      <div class="box blue">密码只在你自己浏览器里输入。不要把登录文件夹 <code>.browser-profile</code> 发给别人。</div>
+    </div>
+
+    <!-- step3 -->
+    <div class="card">
+      <h2><span class="n">3</span> 先试 8 条（一定要做）</h2>
+      <pre><button type="button" data-copy>复制</button><code>python -m material_price_audit scrape \
+  --input data/input/inquiry.xlsx \
+  --output data/output/result.xlsx \
+  --evidence data/output/evidence.json \
+  --profile .browser-profile \
+  --platforms guangcai,huixun,lingcai \
+  --limit 8</code></pre>
+      <p>跑完打开：</p>
+      <p class="path">data/output/result.xlsx</p>
+      <p>点开工作表 <strong>「实抓汇总」</strong>：</p>
+      <ul>
+        <li>有没有审定价格？</li>
+        <li>点蓝色「打开详情页」，型号对不对？</li>
+      </ul>
+      <div class="box green"><strong>对得上</strong> → 做第 4 步全表。<br><strong>全是登录页 / 对不上</strong> → 回到第 2 步重新登录。</div>
+    </div>
+
+    <!-- step4 -->
+    <div class="card">
+      <h2><span class="n">4</span> 全表核价</h2>
+      <p>和试跑一样，把最后的 <code>--limit 8</code> 删掉再跑一遍即可。</p>
+      <pre><button type="button" data-copy>复制</button><code>python -m material_price_audit scrape \
+  --input data/input/inquiry.xlsx \
+  --output data/output/result.xlsx \
+  --evidence data/output/evidence.json \
+  --profile .browser-profile \
+  --platforms guangcai,huixun,lingcai</code></pre>
+    </div>
+
+    <!-- step5 -->
+    <div class="card">
+      <h2><span class="n">5</span> 查不到的 → 发给供应商</h2>
+      <pre><button type="button" data-copy>复制</button><code>python -m material_price_audit rfq \
+  --input data/input/inquiry.xlsx \
+  --evidence data/output/evidence.json \
+  --output data/output/rfq.xlsx</code></pre>
+      <table>
+        <tr><th>文件</th><th>你怎么用</th></tr>
+        <tr><td class="path">result.xlsx</td><td>审核主表，有依据的审定参考价</td></tr>
+        <tr><td class="path">rfq.xlsx</td><td>发给厂家/经销商，盖章回价</td></tr>
+      </table>
+      <div class="box green">
+        <strong>怎么跟施工单位说：</strong><br>
+        「有公开依据的，审定价不高于报送价，链接见结果表；  
+        无公开价材料请按待询价表书面报价。」
+      </div>
+    </div>
+
+    <!-- AI -->
+    <div class="card">
+      <h2>不想碰命令？让 AI 带你做</h2>
+      <p>把下面整段复制给 Grok / Codex / 单位里的 AI 助手：</p>
+      <pre><button type="button" data-copy>复制</button><code>请按 material-price-audit 的 AGENTS.md 带我做材料核价。
+先执行 init，再按 AGENT_NEXT.md 一项一项问我。
+平台用：广材网、慧讯网、领材网。
+无证据不要填审定单价；先试跑 8 条再全表。</code></pre>
+      <p>你只要回答：「表放好了」「登录完成了」「试跑型号对了」。</p>
+    </div>
+
+    <!-- checklist -->
+    <div class="card">
+      <h2>勾一下，避免漏步</h2>
+      <div class="checklist" id="cl">
+        <label><input type="checkbox"> 询价表已放到 data/input/inquiry.xlsx</label>
+        <label><input type="checkbox"> 已登录广材 / 慧讯 / 领材</label>
+        <label><input type="checkbox"> 试跑 8 条，详情链接型号正确</label>
+        <label><input type="checkbox"> 全表已跑完，result.xlsx 可用</label>
+        <label><input type="checkbox"> 无依据材料已用 rfq.xlsx 询价</label>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="card">
+      <h2>常见疑问</h2>
+      <p><strong>为什么很多材料没审定价？</strong><br>
+        因为网上没有同型号公开价（定制、人防专用等）。工具故意不瞎填，请走书面询价。</p>
+      <p><strong>必须用广材吗？</strong><br>
+        造价材料价优先用广材/慧讯/领材。也可以再加京东、1688 对比，但工程认价仍以合同品牌为准。</p>
+      <p><strong>会泄露账号吗？</strong><br>
+        登录在你自己电脑完成。开源时也不会上传登录文件夹。不要分享 <code>.browser-profile</code>。</p>
+      <div class="box red">输出仅供审核参考，最终结算以合同、签证、发票为准。</div>
+    </div>
+
+    <!-- IT -->
+    <div class="card">
+      <h2>请信息同事装环境（只做一次）</h2>
+      <pre><button type="button" data-copy>复制</button><code>cd material-price-audit
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
-python -m material_price_audit check</code></pre>
-      <div class="callout">看到 <strong style="color:var(--ok)">状态 : OK</strong> 即可继续。缺依赖时命令会打印安装提示。</div>
-    </section>
-
-    <section id="init">
-      <h2><span class="step-num">2</span> 初始化（人类 &amp; Agent 统一入口）</h2>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>python -m material_price_audit init --platforms guangcai,huixun,lingcai,jd,1688</code></pre>
-      <p>会生成：</p>
-      <ul>
-        <li><code>config.yaml</code> — 配置</li>
-        <li><code>data/input/</code> · <code>data/output/</code> — 入参/出参目录</li>
-        <li><code>data/output/AGENT_NEXT.md</code> — <strong>给 AI 的下一步</strong></li>
-        <li><code>.browser-profile/</code> — 登录态（勿提交 Git）</li>
-      </ul>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>python -m material_price_audit guide</code></pre>
-    </section>
-
-    <section id="input">
-      <h2><span class="step-num">3</span> 放入询价单</h2>
-      <p>将 Excel <strong>另存/复制</strong> 到：</p>
-      <p><span class="path">data/input/inquiry.xlsx</span></p>
-      <table>
-        <thead><tr><th>列名</th><th>说明</th></tr></thead>
-        <tbody>
-          <tr><td>材料名称 / 规格型号</td><td>建议有，便于匹配</td></tr>
-          <tr><td><strong>报送不含税单价</strong></td><td><strong>必须</strong> — 审定上限</td></tr>
-          <tr><td>审定不含税单价</td><td>可空，工具回填</td></tr>
-          <tr><td>数量 / 单位 / 品牌</td><td>建议有</td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section id="login">
-      <h2><span class="step-num">4</span> 选择平台并登录</h2>
-      <div class="two-col">
-        <div>
-          <p><span class="pill ok">造价推荐</span></p>
-          <ul>
-            <li><code>guangcai</code> 广材网</li>
-            <li><code>huixun</code> 慧讯网</li>
-            <li><code>lingcai</code> 领材网</li>
-          </ul>
-        </div>
-        <div>
-          <p><span class="pill">电商补充</span></p>
-          <ul>
-            <li><code>jd</code> 京东 · <code>1688</code> 批发</li>
-            <li><code>zkh</code> 震坤行 · <code>taobao</code> / <code>tmall</code></li>
-          </ul>
-        </div>
-      </div>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>python -m material_price_audit platforms
-
-python -m material_price_audit login \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688</code></pre>
-      <div class="callout warn">
-        <strong>广材 / 慧讯 / 领材</strong> 搜索结果通常需要会员登录。浏览器弹出后请你本人完成登录；AI 不能替你输入密码。
-      </div>
-    </section>
-
-    <section id="scrape">
-      <h2><span class="step-num">5</span> 试跑 8 条 → 全量</h2>
-      <p><strong>务必先试跑</strong>，确认登录有效且详情链接正确：</p>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>python -m material_price_audit scrape \
-  --input  data/input/inquiry.xlsx \
-  --output data/output/result.xlsx \
-  --evidence data/output/evidence.json \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688 \
-  --limit 8</code></pre>
-      <p>确认无误后再全量（去掉 <code>--limit 8</code>）。未命中导出：</p>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>python -m material_price_audit rfq \
-  --input data/input/inquiry.xlsx \
-  --evidence data/output/evidence.json \
-  --output data/output/rfq.xlsx</code></pre>
-      <div class="callout">
-        计价：<code>审定不含税 = min(挂牌含税 ÷ 1.13, 报送不含税)</code>。无证据不填审定。
-      </div>
-    </section>
-
-    <section id="result">
-      <h2><span class="step-num">6</span> 查看结果</h2>
-      <table>
-        <thead><tr><th>文件</th><th>说明</th></tr></thead>
-        <tbody>
-          <tr><td><code>data/output/result.xlsx</code></td><td>核价结果；先看「实抓汇总」</td></tr>
-          <tr><td><code>data/output/evidence.json</code></td><td>证据链（URL / 平台 / 价格）</td></tr>
-          <tr><td><code>data/output/rfq.xlsx</code></td><td>未命中，发给供应商</td></tr>
-        </tbody>
-      </table>
-      <p>在「实抓汇总」点击蓝色 <strong>打开详情页</strong>，核对型号是否一致。</p>
-    </section>
-
-    <section id="agent">
-      <h2><span class="step-num">7</span> 交给 Grok / Codex / Claude</h2>
-      <p>把下面整段复制给 Agent：</p>
-      <pre><button class="copy" type="button" data-copy>复制</button><code>请按 material-price-audit 的 AGENTS.md 协议执行。
-
-工作目录：&lt;本仓库根目录&gt;
-
-1. 运行：python -m material_price_audit init
-2. 阅读终端 AGENT_GUIDE 与 data/output/AGENT_NEXT.md
-3. 按 questions 一项一项问我（不要一次问完）
-4. 我回答后执行 next_command；每步结束后再 guide
-5. 遵守：无证据不填审定；平台由我指定；先 scrape --limit 8
-
-默认平台建议：guangcai,huixun,lingcai,jd,1688</code></pre>
-      <p>协议文件：<code>AGENTS.md</code> · 运行时引导：<code>data/output/AGENT_NEXT.md</code></p>
-    </section>
-
-    <section id="paths">
-      <h2><span class="step-num">📎</span> 路径约定（开源协作统一）</h2>
-      <table>
-        <thead><tr><th>用途</th><th>路径</th></tr></thead>
-        <tbody>
-          <tr><td>入参询价单</td><td><code>data/input/inquiry.xlsx</code></td></tr>
-          <tr><td>出参结果</td><td><code>data/output/result.xlsx</code></td></tr>
-          <tr><td>出参证据</td><td><code>data/output/evidence.json</code></td></tr>
-          <tr><td>出参 RFQ</td><td><code>data/output/rfq.xlsx</code></td></tr>
-          <tr><td>配置</td><td><code>config.yaml</code></td></tr>
-          <tr><td>登录态（勿提交）</td><td><code>.browser-profile/</code></td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section id="checklist">
-      <h2><span class="step-num">✓</span> 操作清单（可勾选）</h2>
-      <div class="checklist" id="cl">
-        <label><input type="checkbox" /> 安装依赖并通过 <code>check</code></label>
-        <label><input type="checkbox" /> 执行 <code>init</code> 生成配置与引导</label>
-        <label><input type="checkbox" /> 询价单放到 <code>data/input/inquiry.xlsx</code></label>
-        <label><input type="checkbox" /> 选择平台并 <code>login</code>（含广材/慧讯/领材）</label>
-        <label><input type="checkbox" /> <code>scrape --limit 8</code> 试跑成功</label>
-        <label><input type="checkbox" /> 打开 result.xlsx 核对详情链接</label>
-        <label><input type="checkbox" /> 全量 scrape + 导出 rfq</label>
-      </div>
-      <div class="callout">勾选状态保存在本机浏览器 localStorage，仅方便你自己跟踪。</div>
-    </section>
-
-    <section id="faq">
-      <h2><span class="step-num">?</span> 常见问题</h2>
-      <p><strong>广材一直跳登录？</strong><br />正常，材料检索需会员。先 login 再 scrape。</p>
-      <p><strong>很多行没有审定价？</strong><br />正确行为。无公开价/定制件不会编造，用 rfq 询供应商。</p>
-      <p><strong>YAML 里 1688 变数字？</strong><br />写成 <code>"1688"</code> 带引号。</p>
-      <p><strong>合规？</strong><br />仅在你有权使用的账号下登录；遵守网站条款；输出仅供审核参考。</p>
-      <div class="callout danger">
-        请勿把 <code>.browser-profile/</code> 与真实项目报价提交到公开 Git 仓库。
-      </div>
-    </section>
-
-    <footer>
-      material-price-audit · MIT License · Accuracy first ·
-      <a href="./OPEN_SOURCE.md">开源介绍</a> ·
-      <a href="./USAGE.md">使用教程</a> ·
-      <a href="../AGENTS.md">Agent 协议</a>
-    </footer>
+python -m material_price_audit check
+python -m material_price_audit init --platforms guangcai,huixun,lingcai</code></pre>
+    </div>
   </div>
 
+  <footer>
+    material-price-audit · 造价向操作指引 ·
+    <a href="./USAGE.md">技术说明</a> ·
+    <a href="./OPEN_SOURCE.md">开源介绍</a> ·
+    <a href="../给造价人员-怎么用.md">Markdown 版</a>
+  </footer>
+
   <script>
-    // copy buttons
     document.querySelectorAll("[data-copy]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const pre = btn.parentElement;
-        const code = pre.querySelector("code");
-        const text = code ? code.innerText : pre.innerText;
+        const code = btn.parentElement.querySelector("code");
         try {
-          await navigator.clipboard.writeText(text.replace(/^复制\n?/, ""));
+          await navigator.clipboard.writeText(code.innerText);
           btn.textContent = "已复制";
-          setTimeout(() => (btn.textContent = "复制"), 1500);
+          setTimeout(() => (btn.textContent = "复制"), 1200);
         } catch (e) {
-          btn.textContent = "失败";
+          btn.textContent = "请手动选中复制";
         }
       });
     });
-    // checklist persistence
-    const KEY = "mpa-guide-checklist-v1";
-    const boxes = [...document.querySelectorAll("#cl input[type=checkbox]")];
+    const KEY = "cost-user-checklist-v1";
+    const boxes = [...document.querySelectorAll("#cl input")];
     try {
-      const saved = JSON.parse(localStorage.getItem(KEY) || "[]");
-      boxes.forEach((b, i) => (b.checked = !!saved[i]));
-    } catch (_) {}
+      const s = JSON.parse(localStorage.getItem(KEY) || "[]");
+      boxes.forEach((b, i) => (b.checked = !!s[i]));
+    } catch (e) {}
     boxes.forEach((b) =>
-      b.addEventListener("change", () => {
-        localStorage.setItem(KEY, JSON.stringify(boxes.map((x) => x.checked)));
-      })
+      b.addEventListener("change", () =>
+        localStorage.setItem(KEY, JSON.stringify(boxes.map((x) => x.checked)))
+      )
     );
   </script>
 </body>

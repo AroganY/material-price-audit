@@ -1,144 +1,167 @@
-# material-price-audit
+# material-price-audit · 材料询价核价工具
+
+> **给造价审核用的「有依据核价」工具**  
+> 施工单位报多少，就以报送价为上限；网上能查到的，自动给更低的审定参考价，并留下可点开的依据链接。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
-[![Accuracy First](https://img.shields.io/badge/accuracy-first-teal.svg)](./docs/OPEN_SOURCE.md)
-
-**造价材料询价核价工具（准确性优先）**
-
-- 询价单 Excel **入参** → 多平台登录比价 → 审定结果 / 证据 JSON **出参**
-- 内置 **广材网 · 慧讯网 · 领材网**（广联达 gldjc 体系）+ 京东 / 1688 / 震坤行等
-- **无证据不填审定单价**；`审定 = min(挂牌含税÷1.13, 报送不含税)`
-- **AI Agent 可初始化引导**：`init` / `guide` + [AGENTS.md](./AGENTS.md)
 
 ---
 
-## 30 秒上手
+## 先看哪个文档？
+
+| 你是谁 | 打开这个 |
+|--------|----------|
+| **造价员 / 审核员（推荐先看）** | **[给造价人员-怎么用.md](./给造价人员-怎么用.md)** |
+| **想用网页跟着点** | **[docs/index.html](./docs/index.html)**（双击用浏览器打开） |
+| 信息中心 / 开发 | [docs/USAGE.md](./docs/USAGE.md) |
+| 开源说明与合规 | [docs/OPEN_SOURCE.md](./docs/OPEN_SOURCE.md) |
+| 让 AI（Grok/Codex）带着做 | [AGENTS.md](./AGENTS.md) |
+
+---
+
+## 1. 解决什么问题？
+
+造价审核里，安装/装饰材料经常遇到：
+
+- 施工单位 **报送不含税单价** 偏高  
+- 自己百度、电商搜，**型号对不齐、截图乱、说不清依据**  
+- 经验「砍一刀」对方不服，**没有可追溯链接**
+
+本工具做的事很具体：
+
+```text
+询价 Excel（含报送价）
+    ↓
+登录广材网 / 慧讯网 / 领材网（等）自动查价
+    ↓
+输出：审定不含税单价（≤报送）+ 可点击依据链接
+    ↓
+查不到的 → 待询价表，发给供应商盖章
+```
+
+### 和「信息价 / 定额」的区别
+
+| 概念 | 干什么 |
+|------|--------|
+| 定额 / 信息价 | 计价依据、发布价、套用规则 |
+| **本工具** | **认质认价 / 材料询价审核底稿**：针对表里每一条材料找公开挂牌或信息站价，形成可核对的审定建议 |
+
+---
+
+## 2. 审价规则（三句话）
+
+1. **有依据才填审定**——查不到同型号公开价，**宁可不填**，不编造。  
+2. **审定 ≤ 报送不含税单价**——施工单位报的是上限。  
+3. **含税挂牌会折成不含税**（默认 ÷1.13，可配置），再和报送价取低。
+
+---
+
+## 3. 造价人怎么用（极简 5 步）
+
+> 详细白话版见 **[给造价人员-怎么用.md](./给造价人员-怎么用.md)**
+
+| 步骤 | 做什么 | 结果 |
+|------|--------|------|
+| ① | 把询价表放到 `data/input/inquiry.xlsx` | 表里要有「报送不含税单价」 |
+| ② | 登录广材 / 慧讯 / 领材（浏览器弹出后自己登） | 能看到会员价 |
+| ③ | **先只跑 8 条试一试** | 打开 `result.xlsx` 点链接核对型号 |
+| ④ | 型号对了再跑全表 | 得到全部可查材料的审定价 |
+| ⑤ | 查不到的导出 `rfq.xlsx` | 发给供应商书面报价 |
+
+**命令（可交给信息同事或 AI 执行）：**
 
 ```bash
-git clone <your-repo-url> material-price-audit
+# 登录
+python -m material_price_audit login \
+  --profile .browser-profile \
+  --platforms guangcai,huixun,lingcai
+
+# 试跑 8 条
+python -m material_price_audit scrape \
+  --input data/input/inquiry.xlsx \
+  --output data/output/result.xlsx \
+  --evidence data/output/evidence.json \
+  --profile .browser-profile \
+  --platforms guangcai,huixun,lingcai \
+  --limit 8
+```
+
+---
+
+## 4. 结果文件怎么用？
+
+| 文件 | 造价怎么用 |
+|------|------------|
+| `data/output/result.xlsx` | 主成果。先看 **「实抓汇总」**，点开详情链接存档 |
+| `data/output/rfq.xlsx` | 没查到的材料，发给厂家/经销商盖章回价 |
+| `data/output/evidence.json` | 技术底稿，一般不用打开 |
+
+和对方沟通时可说：
+
+> 审定价不高于贵司报送价；依据见结果表中的链接。  
+> 无公开价材料请按待询价表书面报价。
+
+---
+
+## 5. 支持哪些网站？
+
+### 造价材料站（默认推荐）
+
+| 名称 | 说明 |
+|------|------|
+| **广材网** | 广联达材料价格查询（gldjc.com），通常要登录 |
+| **慧讯网** | 广联达材料价产品线，与广材同体系 |
+| **领材网** | 默认同检索入口；若有独立域名可在配置里改 |
+
+### 也可叠加
+
+京东、1688、震坤行、淘宝、天猫、苏宁、我的钢铁网，以及你们自己的商城（配置登录页和搜索地址即可）。
+
+---
+
+## 6. 不想敲命令？让 AI 带你
+
+复制给 Grok / Codex / Claude：
+
+```text
+请按 AGENTS.md 带我做材料核价。
+先运行 init，再按 AGENT_NEXT.md 一项一项问我。
+平台用：广材网、慧讯网、领材网。
+无证据不要填审定；先试跑 8 条。
+```
+
+或：
+
+```bash
+bash examples/agent_bootstrap.sh guangcai,huixun,lingcai
+```
+
+---
+
+## 7. 第一次安装（信息中心代劳）
+
+```bash
 cd material-price-audit
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
-
-# 初始化（人类或 Agent 统一入口）
-python -m material_price_audit init --platforms guangcai,huixun,lingcai,jd,1688
-
-# 浏览器打开操作引导
-open docs/index.html   # macOS；Windows 可双击该文件
-```
-
-| 文档 | 说明 |
-|------|------|
-| **[docs/index.html](./docs/index.html)** | 网页操作引导（推荐用户打开） |
-| **[docs/USAGE.md](./docs/USAGE.md)** | 完整使用教程 |
-| **[docs/OPEN_SOURCE.md](./docs/OPEN_SOURCE.md)** | 开源介绍 / 原则 / 合规 |
-| **[AGENTS.md](./AGENTS.md)** | AI Agent 协议（先 init） |
-| **[教程-用Grok或Codex执行核价.md](./教程-用Grok或Codex执行核价.md)** | 小白提示词 |
-
----
-
-## 路径约定
-
-| 用途 | 路径 |
-|------|------|
-| 入参询价单 | `data/input/inquiry.xlsx` |
-| 出参结果 | `data/output/result.xlsx` |
-| 出参证据 | `data/output/evidence.json` |
-| 出参 RFQ | `data/output/rfq.xlsx` |
-| Agent 下一步 | `data/output/AGENT_NEXT.md` |
-| 登录态（**勿提交 git**） | `.browser-profile/` |
-
----
-
-## 标准流程
-
-```bash
-# 1) 环境
 python -m material_price_audit check
-
-# 2) 初始化 + 引导
-python -m material_price_audit init --platforms guangcai,huixun,lingcai,jd,1688
-python -m material_price_audit guide
-
-# 3) 询价单放到 data/input/inquiry.xlsx
-
-# 4) 登录（浏览器弹出，你自己登）
-python -m material_price_audit login \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688
-
-# 5) 试跑 8 条
-python -m material_price_audit scrape \
-  --input  data/input/inquiry.xlsx \
-  --output data/output/result.xlsx \
-  --evidence data/output/evidence.json \
-  --profile .browser-profile \
-  --platforms guangcai,huixun,lingcai,jd,1688 \
-  --limit 8
-
-# 6) 全量 + 未命中询价单
-python -m material_price_audit scrape ...   # 去掉 --limit
-python -m material_price_audit rfq \
-  --input data/input/inquiry.xlsx \
-  --evidence data/output/evidence.json \
-  --output data/output/rfq.xlsx
+python -m material_price_audit init --platforms guangcai,huixun,lingcai
 ```
 
-### Agent 一键引导
-
-```bash
-bash examples/agent_bootstrap.sh
-# 或指定平台：
-bash examples/agent_bootstrap.sh guangcai,huixun,lingcai,jd,1688
-```
-
-对 Grok / Codex / Claude 说：
-
-```text
-请按 AGENTS.md 执行：先 init，读 AGENT_NEXT.md，按 questions 一项项问我。
-```
+网页引导：浏览器打开 `docs/index.html`。
 
 ---
 
-## 内置平台
+## 8. 开源说明
 
-| ID | 名称 | 备注 |
-|----|------|------|
-| `guangcai` | 广材网 | gldjc.com，需登录 |
-| `huixun` | 慧讯网 | 广联达材料价，与广材同体系 |
-| `lingcai` | 领材网 | 默认同检索；独立域名可覆盖 |
-| `gldjc_hangqing` | 广材行情 | 钢材行情 |
-| `gldjc_xunjia` | 广材询价 | 人工询价入口 |
-| `jd` / `1688` / `zkh` / … | 电商 | 零售/批发补充 |
-
-中文别名：`--platforms 广材网,慧讯网,领材网,京东`
-
-自定义网站见 `config.example.yaml` → `platforms.definitions`。
+- 协议：**MIT**（[LICENSE](./LICENSE)）  
+- 介绍与合规：[docs/OPEN_SOURCE.md](./docs/OPEN_SOURCE.md)  
+- **请勿上传**：登录目录 `.browser-profile/`、真实项目询价表与核价结果  
 
 ---
 
-## 原则（Accuracy First）
+## 一句话总结
 
-1. **无 verified 证据 → 不填审定单价**  
-2. `审定 = min(挂牌含税 ÷ tax_divisor, 报送不含税)`  
-3. 尽量详情页二次确认；禁止搜索页冒充  
-4. 平台由用户指定；Agent 先问再跑  
-
----
-
-## 开发
-
-```bash
-pip install -e .
-python -m material_price_audit platforms
-```
-
-结构说明与合规见 [docs/OPEN_SOURCE.md](./docs/OPEN_SOURCE.md)。
-
----
-
-## License
-
-[MIT](./LICENSE)
+**把「报送材料价」变成「带链接的审定参考价」；查不到的，自动列出给供应商询价——专为造价审核底稿服务。**
