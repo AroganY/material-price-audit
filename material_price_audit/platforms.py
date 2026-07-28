@@ -341,12 +341,28 @@ def save_platforms_selected(path: Path, platform_ids: list[str]) -> None:
     path.write_text(body + ("\n" if body else ""), encoding="utf-8")
 
 
-def pick_platforms_interactive(registry: dict[str, PlatformSpec] | None = None) -> list[str]:
+def pick_platforms_interactive(
+    registry: dict[str, PlatformSpec] | None = None,
+    *,
+    preselected: list[str] | None = None,
+    prefer_dialog: bool = True,
+) -> list[str]:
     """
-    终端多选平台。用户输入编号或 id，例如：1,3 或 guangcai,jd
-    回车取消（返回空）。
+    优先弹窗勾选；弹窗失败再退回终端输入编号。
     """
     reg = registry or load_platform_registry({})
+    if prefer_dialog:
+        try:
+            from .platform_dialog import can_show_dialog, pick_platforms_dialog
+
+            if can_show_dialog():
+                print("[platforms] 打开选择平台弹窗…")
+                picked = pick_platforms_dialog(reg, preselected=preselected)
+                return picked  # [] = 用户取消
+            print("[platforms] 当前环境无法弹窗，改用终端选择")
+        except Exception as e:
+            print(f"[platforms] 弹窗失败，改用终端选择: {e}")
+
     choices: list[tuple[str, PlatformSpec]] = []
     for pid in SELECTABLE_PLATFORM_IDS:
         if pid in reg:
@@ -358,10 +374,11 @@ def pick_platforms_interactive(registry: dict[str, PlatformSpec] | None = None) 
     print("")
     print("========== 选择要比价的平台（必选，只登录你勾的） ==========")
     print("输入编号（逗号分隔）如 1,4,5   或 id 如 guangcai,jd")
-    print("只选你有账号/要查的站；不选的不会打开登录页。")
+    print("没广材会员就不要选 guangcai；只选你能用的站。")
     print("-" * 60)
     for i, (pid, spec) in enumerate(choices, 1):
-        print(f"  {i:>2}. {spec.name:<10}  {pid:<14}  {spec.login_url}")
+        mark = "*" if preselected and pid in preselected else " "
+        print(f" {mark}{i:>2}. {spec.name:<10}  {pid:<14}  {spec.login_url}")
     print("-" * 60)
     try:
         raw = input("你的选择 > ").strip()
@@ -385,7 +402,6 @@ def pick_platforms_interactive(registry: dict[str, PlatformSpec] | None = None) 
             selected.append(pid)
         else:
             print(f"  [忽略未知] {part}")
-    # 去重保序
     seen = set()
     out = []
     for p in selected:
@@ -474,20 +490,57 @@ def _search_1688(page, query: str, must: list[str], timeout_ms: int, min_score: 
     return _filter_cands(goods, must, min_score, "1688", "detail.1688.com"), "ok"
 
 
+def _page_membership_blocked(page) -> bool:
+    """广材等站：无会员/权限不足/付费墙 → 应跳过整站，别死等。"""
+    try:
+        url = (page.url or "").lower()
+        title = page.title() or ""
+        body = ""
+        try:
+            body = (page.inner_text("body") or "")[:2000]
+        except Exception:
+            body = ""
+        text = f"{title}\n{body}"
+        keys = (
+            "开通会员",
+            "购买会员",
+            "会员专享",
+            "请开通",
+            "权限不足",
+            "无访问权限",
+            "续费",
+            "升级会员",
+            "非会员",
+            "成为会员",
+            "充值",
+            "套餐已过期",
+            "vip",
+            "VIP",
+        )
+        if any(k in text for k in keys):
+            return True
+        if "member" in url and ("buy" in url or "open" in url or "pay" in url):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _search_gldjc(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
     """
     广材网（gldjc.com）材料搜索。
     搜索 URL: /scj/so.html?l=1&keyword=...
-    未登录会跳到 /login?hostUrl=...
-    注意：慧讯网(iccchina)、领材网(hylcw) 不是本 handler。
+    未登录 → need_login；无会员 → no_membership（调用方应跳过整站）。
     """
     url = spec.search_url_template.format(query=quote(query))
     page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    page.wait_for_timeout(3500)
+    page.wait_for_timeout(2500)
     cur = page.url or ""
     title = page.title() or ""
     if "/login" in cur or "登录" in title:
         return None, "need_login"
+    if _page_membership_blocked(page):
+        return None, "no_membership"
 
     # 结果页：尽量从列表卡片提取 名称/价格/链接
     cards = page.eval_on_selector_all(
@@ -598,6 +651,7 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
     通用搜索：慧讯(iccchina)、领材(hylcw) 等非广材站。
     - 模板含 {query} → 直接拼 URL
     - 否则打开入口页，尝试页面内搜索框
+    - 无会员/权限 → no_membership（跳过整站）
     """
     if not spec.search_url_template:
         return None, "bad_config"
@@ -605,7 +659,7 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
     if "{query}" in spec.search_url_template:
         url = spec.search_url_template.format(query=quote(query))
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(2500)
     else:
         page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
         page.wait_for_timeout(2000)
@@ -614,13 +668,15 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
         if "/login" in cur.lower() or ("登录" in title and "申请" not in title):
             if spec.require_login_hint:
                 return None, "need_login"
+        if _page_membership_blocked(page):
+            return None, "no_membership"
         if not _try_fill_site_search(page, query):
-            # 仍解析当前页（试用页/首页可能已有列表或导航）
             page.wait_for_timeout(500)
 
+    if _page_membership_blocked(page):
+        return None, "no_membership"
     title = page.title() or ""
     if "登录" in title and spec.require_login_hint and "慧讯" not in title and "领材" not in title:
-        # soft signal — still try parse
         pass
 
     link_sel = spec.item_link_selector or "a[href]"

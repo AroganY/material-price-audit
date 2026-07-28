@@ -225,10 +225,14 @@ def resolve_user_platforms(
     *,
     interactive: bool = True,
     root: Path | None = None,
+    force_dialog: bool = False,
 ) -> list[str]:
     """
     用户显式选择的平台（顺序=优先级）。
-    优先级：CLI → platforms.selected 文件 → config.enabled → 终端交互勾选。
+    优先级：
+      1) CLI --platforms
+      2) 交互：弹窗勾选（默认；上次选择预勾）
+      3) platforms.selected / config（仅非交互或弹窗不可用时）
     绝不静默默认全站登录。
     """
     root = root or package_root()
@@ -236,48 +240,56 @@ def resolve_user_platforms(
         return resolve_enabled_platforms(cfg, cli_platforms)
 
     selected_file = _platforms_selected_path(root)
+    prev = resolve_enabled_platforms(cfg, _read_platforms_file(selected_file) or None)
+    if not prev:
+        prev = resolve_enabled_platforms(cfg, None)
+
+    # 交互路径：弹窗让用户选（有上次选择则预勾）
+    if interactive or force_dialog:
+        reg = load_platform_registry(cfg)
+        try:
+            picked = pick_platforms_interactive(reg, preselected=prev or None, prefer_dialog=True)
+        except Exception as e:
+            print(f"[platforms] 选择失败: {e}")
+            picked = []
+        if picked:
+            save_platforms_selected(selected_file, picked)
+            print(f"[platforms] 用户勾选: {', '.join(picked)}")
+            return picked
+        # 用户取消弹窗
+        if force_dialog or sys.stdin.isatty():
+            print("未选择平台（弹窗已取消）。")
+            return []
+
+    # 非交互回退：文件 / config
     from_file = _read_platforms_file(selected_file)
     if from_file:
         ids = resolve_enabled_platforms(cfg, from_file)
-        print(f"[platforms] 使用已选文件: {selected_file.name} → {', '.join(ids)}")
+        print(f"[platforms] 非交互，使用已选文件 → {', '.join(ids)}")
         return ids
-
     from_cfg = resolve_enabled_platforms(cfg, None)
     if from_cfg:
-        print(f"[platforms] 使用 config.yaml enabled → {', '.join(from_cfg)}")
+        print(f"[platforms] 非交互，使用 config → {', '.join(from_cfg)}")
         return from_cfg
 
     html = root / "docs" / "platform-select.html"
-    if interactive and sys.stdin.isatty():
-        reg = load_platform_registry(cfg)
-        picked = pick_platforms_interactive(reg)
-        if picked:
-            save_platforms_selected(selected_file, picked)
-            print(f"[platforms] 已保存选择 → {selected_file}")
-            print(f"           {', '.join(picked)}")
-            return picked
-        print("未选择平台。也可打开网页勾选：")
-        print(f"  {html}")
-        return []
-
-    print("ERROR: 未选择比价平台。必须先选，不会默认全站登录。", file=sys.stderr)
-    print("任选一种方式：", file=sys.stderr)
-    print("  1) --platforms guangcai,jd          # 只登录你写的", file=sys.stderr)
-    print(f"  2) 打开网页勾选: {html}", file=sys.stderr)
-    print("     生成后保存到 data/output/platforms.selected", file=sys.stderr)
-    print("  3) 交互: python -m material_price_audit select-platforms", file=sys.stderr)
+    print("ERROR: 未选择比价平台。", file=sys.stderr)
+    print("  弹窗: python -m material_price_audit select-platforms", file=sys.stderr)
+    print("  或:   --platforms jd,1688   （没广材会员就别写 guangcai）", file=sys.stderr)
+    print(f"  或网页: {html}", file=sys.stderr)
     return []
 
 
 def cmd_select_platforms(args):
-    """终端勾选平台并写入 platforms.selected + 可选写回 config。"""
+    """弹窗勾选平台并写入 platforms.selected。"""
     root = package_root()
     cfg = load_config(Path(args.config) if args.config else None)
     reg = load_platform_registry(cfg)
     if args.platforms:
         picked = resolve_enabled_platforms(cfg, args.platforms)
     else:
-        picked = pick_platforms_interactive(reg)
+        prev = resolve_enabled_platforms(cfg, _read_platforms_file(_platforms_selected_path(root)) or None)
+        picked = pick_platforms_interactive(reg, preselected=prev or None, prefer_dialog=True)
     if not picked:
         print("未选择任何平台。")
         return 2
@@ -285,12 +297,11 @@ def cmd_select_platforms(args):
     save_platforms_selected(path, picked)
     print(f"已保存: {path}")
     print(f"平台  : {', '.join(picked)}")
-    print("登录只会打开上述站点，不会挨个强登未选项。")
+    print("只会登录你勾的站。没广材会员就别勾广材网。")
     if getattr(args, "write_config", False):
         run_init(root=root, platforms=picked, force_config=True)
         print(f"已写 config.yaml enabled: {', '.join(picked)}")
-    print("下一步: python -m material_price_audit run --skip-login   # 若已登录")
-    print("   或: python -m material_price_audit run               # 只登录所选平台")
+    print("下一步: python -m material_price_audit run")
     return 0
 
 
@@ -493,8 +504,9 @@ def cmd_scrape(args):
     pw, ctx, page = launch_context(
         profile, channel=cfg["browser"]["channel"], headless=bool(cfg["browser"]["headless"])
     )
-    # 本会话已处理过登录的平台：抓取中途 need_login 不再反复 goto 刷页
+    # 本会话：已登录处理 / 永久跳过（无会员、登录失败）
     session_login_done: set[str] = set()
+    session_skip_platforms: set[str] = set()  # no_membership / dead login
     try:
         if not skip_login:
             urls = login_urls_for(enabled, reg)
@@ -502,12 +514,13 @@ def cmd_scrape(args):
                 f"登录预检：每个站最多打开 1 次；被动等 URL/Agent 信号，绝不循环刷新。"
             )
             print(f"Agent 确认: touch {agent_login_signal_path(root)}")
+            print("提示: 没广材/慧讯会员就别勾它们；登录页可直接关，程序会跳过该站。")
             for pid, name, url in urls:
                 print(f"  · {name}  {url}")
             session_login_done |= _do_platform_logins(
                 page, urls, root=root, timeout_s=login_timeout, timeout_ms=timeout_ms
             )
-            print("登录预检结束 → 开始抓取（不再回登录页循环）")
+            print("登录预检结束 → 开始抓取（无会员站会自动跳过）")
         else:
             print("[login] --skip-login：不打开登录页，直接抓取")
 
@@ -519,9 +532,13 @@ def cmd_scrape(args):
                 print(f"skip {it.name[:32]}")
                 continue
 
-            order = _platform_order(job.platform, enabled, strategy)
+            order = [
+                p
+                for p in _platform_order(job.platform, enabled, strategy)
+                if p not in session_skip_platforms
+            ]
             print(f"→ [{it.sheet}] {it.name[:40]}")
-            print(f"   waterfall: {' → '.join(order)}")
+            print(f"   waterfall: {' → '.join(order) if order else '(无可用平台)'}")
 
             attempts = []
             chosen = None
@@ -529,18 +546,33 @@ def cmd_scrape(args):
                 if strategy == "waterfall":
                     # A then B then C: first platform with detail match wins
                     for pid in order:
+                        if pid in session_skip_platforms:
+                            continue
                         cands, st = search_on_platform(
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
+                        if st == "no_membership":
+                            session_skip_platforms.add(pid)
+                            attempts.append({"platform": pid, "status": "no_membership"})
+                            print(
+                                f"   [{pid}] 无会员/无权限 → 本会话跳过该站，改试下一平台"
+                            )
+                            continue
                         if st == "need_login":
                             if pid in session_login_done:
-                                # 本会话已做过登录，禁止再刷登录页
-                                attempts.append({"platform": pid, "status": "need_login_again"})
-                                print(f"   [{pid}] 仍需登录但本会话已处理过，跳过该站（不刷新）")
+                                # 已处理过登录仍要登 → 当无权限/无会员，跳过整站
+                                session_skip_platforms.add(pid)
+                                attempts.append({"platform": pid, "status": "need_login_skip"})
+                                print(
+                                    f"   [{pid}] 仍需登录（可能无会员）→ 跳过该站，不刷新死等"
+                                )
                                 continue
                             spec = reg.get(pid)
                             login_url = (spec.login_url if spec else "") or ""
-                            print(f"   [{pid}] 首次需登录：打开登录页 1 次，等 Agent/URL…")
+                            print(
+                                f"   [{pid}] 需要登录：打开 1 次。"
+                                f"没账号/没会员可关页面或 touch LOGIN_CONTINUE 跳过"
+                            )
                             if login_url:
                                 try:
                                     page.goto(
@@ -550,18 +582,28 @@ def cmd_scrape(args):
                                     )
                                 except Exception as e:
                                     print(f"   [{pid}] 打开登录页失败: {e}")
-                            wait_for_login_agent(
+                            st_login = wait_for_login_agent(
                                 page,
                                 platform_id=pid,
                                 name=spec.name if spec else pid,
                                 login_url=login_url or page.url,
                                 package_root=root,
-                                timeout_s=login_timeout,
+                                timeout_s=min(login_timeout, 120),  # 别死等 10 分钟
                             )
                             session_login_done.add(pid)
+                            if st_login == "timeout":
+                                session_skip_platforms.add(pid)
+                                print(f"   [{pid}] 登录超时 → 跳过该站")
+                                attempts.append({"platform": pid, "status": "login_timeout"})
+                                continue
                             cands, st = search_on_platform(
                                 page, pid, job.query, job.must, timeout_ms, min_score, reg
                             )
+                            if st in ("need_login", "no_membership"):
+                                session_skip_platforms.add(pid)
+                                print(f"   [{pid}] 登录后仍不可用({st}) → 跳过该站")
+                                attempts.append({"platform": pid, "status": st})
+                                continue
                         if not cands:
                             attempts.append({"platform": pid, "status": st or "no_list"})
                             print(f"   [{pid}] 列表无结果，切换下一平台")
@@ -607,36 +649,23 @@ def cmd_scrape(args):
                     # legacy multi: collect then pick best, still detail-check
                     all_cands = []
                     for pid in order:
+                        if pid in session_skip_platforms:
+                            continue
                         cands, st = search_on_platform(
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
-                        if st == "need_login":
-                            if pid in session_login_done:
-                                print(f"   [{pid}] 仍需登录且已处理过，跳过（不刷新）")
-                                continue
-                            spec = reg.get(pid)
-                            login_url = (spec.login_url if spec else "") or ""
-                            if login_url:
-                                try:
-                                    page.goto(
-                                        login_url,
-                                        wait_until="domcontentloaded",
-                                        timeout=timeout_ms,
-                                    )
-                                except Exception:
-                                    pass
-                            wait_for_login_agent(
-                                page,
-                                platform_id=pid,
-                                name=spec.name if spec else pid,
-                                login_url=login_url or page.url,
-                                package_root=root,
-                                timeout_s=login_timeout,
-                            )
-                            session_login_done.add(pid)
-                            cands, st = search_on_platform(
-                                page, pid, job.query, job.must, timeout_ms, min_score, reg
-                            )
+                        if st in ("no_membership", "need_login") and pid in session_login_done:
+                            session_skip_platforms.add(pid)
+                            print(f"   [{pid}] {st} → 跳过该站")
+                            continue
+                        if st == "no_membership":
+                            session_skip_platforms.add(pid)
+                            print(f"   [{pid}] 无会员 → 跳过该站")
+                            continue
+                        if st == "need_login" and pid not in session_login_done:
+                            session_skip_platforms.add(pid)  # multi 模式不打断流程等登录
+                            print(f"   [{pid}] 需登录 → multi 模式跳过，请先 login")
+                            continue
                         if cands:
                             all_cands.extend(cands[:5])
                     if args.manual and all_cands:
@@ -733,10 +762,14 @@ def cmd_run(args):
         return 2
 
     cfg = load_config(Path(args.config) if args.config else None)
-    # 平台必须用户选：CLI / selected 文件 / 终端勾选（TTY）
-    interactive = sys.stdin.isatty() and not bool(getattr(args, "yes", False))
+    # 平台：有 --platforms 用 CLI；否则弹窗勾选（即使用 --yes 也尽量弹窗，Agent 可关）
+    want_dialog = not bool(args.platforms)
     enabled = resolve_user_platforms(
-        cfg, args.platforms or None, interactive=interactive, root=root
+        cfg,
+        args.platforms or None,
+        interactive=want_dialog,
+        force_dialog=want_dialog,
+        root=root,
     )
     if not enabled:
         return 2
@@ -915,7 +948,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser(
         "select-platforms",
-        help="【必做】终端勾选比价平台，写入 platforms.selected（只登录所选）",
+        help="【弹窗】勾选比价平台，写入 platforms.selected（只登录所选）",
     )
     sp.add_argument(
         "--platforms",
