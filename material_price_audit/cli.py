@@ -38,11 +38,15 @@ from .platforms import (
     search_on_platform,
 )
 from .scraper import (
+    agent_login_signal_path,
+    clear_agent_login_signal,
     launch_context,
     open_detail,
+    page_looks_logged_in,
     pick_manual,
     to_evidence,
-    wait_until_logged_in,
+    url_looks_like_login,
+    wait_for_login_agent,
     wait_user,
 )
 
@@ -294,10 +298,7 @@ def cmd_select_platforms(args):
 
 
 def _login_timeout_s(args, cfg: dict) -> int:
-    """
-    自动检测登录的最长等待。不是固定 sleep。
-    --login-wait 表示「超时上限」；默认 180s。
-    """
+    """登录等待超时上限（秒）。成功/Agent 信号会立刻返回。默认 600。"""
     w = getattr(args, "login_wait", None)
     if w is not None and int(w) > 0:
         return int(w)
@@ -305,18 +306,54 @@ def _login_timeout_s(args, cfg: dict) -> int:
     return int(
         b.get("login_timeout_seconds")
         or b.get("login_wait_seconds")
-        or 180
+        or 600
     )
+
+
+def _do_platform_logins(
+    page,
+    urls: list[tuple[str, str, str]],
+    *,
+    root: Path,
+    timeout_s: int,
+    timeout_ms: int = 60000,
+) -> set[str]:
+    """
+    每个站最多 goto 一次，然后被动等（URL / Agent 信号 / 回车）。
+    绝不在等待中刷新页面。返回本会话视为已处理的 platform id。
+    """
+    done: set[str] = set()
+    clear_agent_login_signal(root)
+    n = len(urls)
+    for i, (pid, name, url) in enumerate(urls, 1):
+        print(f"\n[{i}/{n}] {name} ({pid})")
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        except Exception as e:
+            print(f"  [{name}] 打开失败: {e}（仍等待 Agent 确认）")
+        st = wait_for_login_agent(
+            page,
+            platform_id=pid,
+            name=name,
+            login_url=url,
+            package_root=root,
+            timeout_s=timeout_s,
+            allow_stdin=True,
+        )
+        print(f"  [{name}] 登录阶段结束: {st}")
+        done.add(pid)
+    return done
 
 
 def cmd_login(args):
     ensure_or_exit(require_browser=False, quiet=True)
     cfg = load_config(Path(args.config) if args.config else None)
+    root = package_root()
     profile = Path(args.profile).expanduser().resolve()
     timeout_s = _login_timeout_s(args, cfg)
 
     enabled = resolve_user_platforms(
-        cfg, args.platforms or None, interactive=not args.yes, root=package_root()
+        cfg, args.platforms or None, interactive=not args.yes, root=root
     )
     if not enabled:
         return 2
@@ -326,7 +363,8 @@ def cmd_login(args):
         print("ERROR: 没有可登录的平台 URL", file=sys.stderr)
         return 2
 
-    print(f"只登录你选的 {len(urls)} 个站（自动检测成功，不傻等固定秒数）：")
+    print(f"只打开你选的 {len(urls)} 个登录页各 1 次；登录后不刷新。")
+    print(f"Agent 确认信号文件: {agent_login_signal_path(root)}")
     for pid, name, url in urls:
         print(f"  - [{pid}] {name}: {url}")
 
@@ -334,19 +372,13 @@ def cmd_login(args):
         profile, channel=cfg["browser"]["channel"], headless=False
     )
     try:
-        n = len(urls)
-        for i, (pid, name, url) in enumerate(urls, 1):
-            print(f"\n[{i}/{n}] {name}")
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            wait_until_logged_in(
-                page,
-                platform_id=pid,
-                name=name,
-                login_url=url,
-                timeout_s=timeout_s,
-            )
+        _do_platform_logins(page, urls, root=root, timeout_s=timeout_s)
         print(f"\n登录流程结束。profile={profile}")
-        print(f"已处理: {', '.join(p for p, _, _ in urls)}")
+        print("下一步抓取请加 --skip-login，避免再进登录预检：")
+        print(
+            "  python -m material_price_audit run --skip-login --platforms "
+            + ",".join(enabled)
+        )
     finally:
         ctx.close()
         pw.stop()
@@ -464,23 +496,23 @@ def cmd_scrape(args):
     pw, ctx, page = launch_context(
         profile, channel=cfg["browser"]["channel"], headless=bool(cfg["browser"]["headless"])
     )
+    # 本会话已处理过登录的平台：抓取中途 need_login 不再反复 goto 刷页
+    session_login_done: set[str] = set()
     try:
         if not skip_login:
             urls = login_urls_for(enabled, reg)
-            print(f"登录预检：只打开你选的 {len(urls)} 个站（自动检测，已登录秒过）：")
+            print(
+                f"登录预检：每个站最多打开 1 次；被动等 URL/Agent 信号，绝不循环刷新。"
+            )
+            print(f"Agent 确认: touch {agent_login_signal_path(root)}")
             for pid, name, url in urls:
                 print(f"  · {name}  {url}")
-            n = len(urls)
-            for i, (pid, name, url) in enumerate(urls, 1):
-                print(f"\n[{i}/{n}] {name}")
-                page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                wait_until_logged_in(
-                    page,
-                    platform_id=pid,
-                    name=name,
-                    login_url=url,
-                    timeout_s=login_timeout,
-                )
+            session_login_done |= _do_platform_logins(
+                page, urls, root=root, timeout_s=login_timeout, timeout_ms=timeout_ms
+            )
+            print("登录预检结束 → 开始抓取（不再回登录页循环）")
+        else:
+            print("[login] --skip-login：不打开登录页，直接抓取")
 
         done = 0
         for job in jobs:
@@ -504,15 +536,32 @@ def cmd_scrape(args):
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
                         if st == "need_login":
+                            if pid in session_login_done:
+                                # 本会话已做过登录，禁止再刷登录页
+                                attempts.append({"platform": pid, "status": "need_login_again"})
+                                print(f"   [{pid}] 仍需登录但本会话已处理过，跳过该站（不刷新）")
+                                continue
                             spec = reg.get(pid)
-                            print(f"   [{pid}] 抓取中途需登录，自动检测…")
-                            wait_until_logged_in(
+                            login_url = (spec.login_url if spec else "") or ""
+                            print(f"   [{pid}] 首次需登录：打开登录页 1 次，等 Agent/URL…")
+                            if login_url:
+                                try:
+                                    page.goto(
+                                        login_url,
+                                        wait_until="domcontentloaded",
+                                        timeout=timeout_ms,
+                                    )
+                                except Exception as e:
+                                    print(f"   [{pid}] 打开登录页失败: {e}")
+                            wait_for_login_agent(
                                 page,
                                 platform_id=pid,
                                 name=spec.name if spec else pid,
-                                login_url=(spec.login_url if spec else page.url) or "",
+                                login_url=login_url or page.url,
+                                package_root=root,
                                 timeout_s=login_timeout,
                             )
+                            session_login_done.add(pid)
                             cands, st = search_on_platform(
                                 page, pid, job.query, job.must, timeout_ms, min_score, reg
                             )
@@ -565,15 +614,29 @@ def cmd_scrape(args):
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
                         if st == "need_login":
+                            if pid in session_login_done:
+                                print(f"   [{pid}] 仍需登录且已处理过，跳过（不刷新）")
+                                continue
                             spec = reg.get(pid)
-                            print(f"   [{pid}] 抓取中途需登录，自动检测…")
-                            wait_until_logged_in(
+                            login_url = (spec.login_url if spec else "") or ""
+                            if login_url:
+                                try:
+                                    page.goto(
+                                        login_url,
+                                        wait_until="domcontentloaded",
+                                        timeout=timeout_ms,
+                                    )
+                                except Exception:
+                                    pass
+                            wait_for_login_agent(
                                 page,
                                 platform_id=pid,
                                 name=spec.name if spec else pid,
-                                login_url=(spec.login_url if spec else page.url) or "",
+                                login_url=login_url or page.url,
+                                package_root=root,
                                 timeout_s=login_timeout,
                             )
+                            session_login_done.add(pid)
                             cands, st = search_on_platform(
                                 page, pid, job.query, job.must, timeout_ms, min_score, reg
                             )

@@ -28,9 +28,14 @@ python3 -m material_price_audit run --platforms guangcai,jd --limit 8
 1. **缺包装失败** → 给安装命令（只装缺失，不升级 Python）  
 2. **没有询价单** → 「把任意文件名 Excel 放到 data/input/」  
 3. **没选平台** → 「要比哪些网站？例如 guangcai,jd / huixun / lingcai」  
-4. **登录** → 只打开用户选的站，每站回车继续（不要 90 秒×全站）
+4. **登录** → 程序每个站只 `goto` 一次，然后**被动等**（不刷新页面）。  
+   用户说「登完了」后 Agent 执行：
+   ```bash
+   touch data/output/LOGIN_CONTINUE
+   ```
+   或分两步：`login` 完成后再 `run --skip-login`。
 
-不要默认全站挨个登录；不要每次先折腾 Python 环境是否更新。
+不要默认全站挨个登录；不要循环刷新登录页；不要固定 sleep 90 秒。
 
 ---
 

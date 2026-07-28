@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -52,199 +53,230 @@ def launch_context(profile_dir: Path, channel: str = "chrome", headless: bool = 
 
 
 def wait_user(msg: str, seconds: int, non_interactive: bool) -> None:
-    """Legacy helper. Prefer wait_until_logged_in for platform logins."""
+    """Legacy helper. Prefer wait_for_login_agent for platform logins."""
     print(msg)
     if non_interactive:
-        # 不再默认傻等 90s：seconds<=0 则几乎不等
         if seconds and seconds > 0:
-            print(f"[wait] {seconds}s（建议改用自动检测登录）…")
             time.sleep(seconds)
         else:
-            time.sleep(0.3)
+            time.sleep(0.2)
     else:
         input("完成后按回车 Continue > ")
 
 
-# URL/标题里这些信号 ≈ 还在登录页
+# 仅 URL 判定登录态 —— 禁止狂扫 DOM（会触发 SPA 反复重绘/像刷新）
 _LOGIN_URL_MARKERS = (
     "/login",
     "/signin",
     "/sign-in",
     "/passport",
-    "/sso",
-    "/oauth",
-    "login.",
     "passport.",
-    "accounts.",
-    "auth.",
+    "login.taobao",
+    "login.1688",
+    "login.jd",
+    "/sso",
     "apply_trial",
 )
-_LOGIN_TITLE_MARKERS = ("登录", "登陆", "sign in", "log in", "账号登录", "会员登录")
 
 
-def _url_title(page) -> tuple[str, str]:
+def _safe_url(page) -> str:
     try:
-        url = (page.url or "").lower()
+        return page.url or ""
     except Exception:
-        url = ""
+        return ""
+
+
+def _safe_title(page) -> str:
     try:
-        title = page.title() or ""
+        return page.title() or ""
     except Exception:
-        title = ""
-    return url, title
+        return ""
+
+
+def url_looks_like_login(url: str) -> bool:
+    u = (url or "").lower()
+    if not u:
+        return False
+    return any(m in u for m in _LOGIN_URL_MARKERS)
+
+
+def url_left_login(start_url: str, cur_url: str, platform_id: str = "") -> bool:
+    """Passive: user navigated away from login URL → success."""
+    s = (start_url or "").lower().split("?")[0]
+    c = (cur_url or "").lower()
+    if not c:
+        return False
+    # still on a hard login URL
+    if url_looks_like_login(c) and "/userinfo" not in c:
+        return False
+    # URL changed from the page we opened
+    c0 = c.split("?")[0]
+    if s and c0 != s and not url_looks_like_login(c):
+        return True
+    # opened login, now not login
+    if url_looks_like_login(s) and not url_looks_like_login(c):
+        return True
+    pid = (platform_id or "").lower()
+    if pid == "lingcai":
+        # 领材登录在 userInfo；已登录时往往仍在同域用户页，靠 cookie/不再跳转
+        # 仅当从明确 login 子路径离开，或 title 不再含登录
+        if "hylcw.cn" in c and "/login" not in c:
+            return not url_looks_like_login(c)
+    return False
 
 
 def page_looks_like_login(page) -> bool:
-    """Heuristic: still on a login / SSO / password form page."""
-    url, title = _url_title(page)
-    title_l = title.lower()
-    if any(m in url for m in _LOGIN_URL_MARKERS):
-        # 用户中心有时 URL 含 login 片段以外的；纯 /login 明确
-        if "/login" in url or "passport" in url or "signin" in url or "sso" in url:
-            return True
-        if "apply_trial" in url:
-            return True
-    if any(m in title or m in title_l for m in _LOGIN_TITLE_MARKERS):
-        # 「登录-广材网」类标题
-        if "管理" not in title and "控制台" not in title:
-            return True
-    try:
-        # 可见密码框 = 几乎肯定要登录
-        n = page.locator('input[type="password"]:visible').count()
-        if n and n > 0:
-            return True
-    except Exception:
-        pass
-    try:
-        # 常见登录按钮文案
-        if page.get_by_role("button", name=re.compile(r"^(登录|登陆|立即登录)$")).count() > 0:
-            # 同时有账号输入才算
-            if page.locator('input[type="password"], input[type="text"], input[type="tel"]').count() > 0:
-                return True
-    except Exception:
-        pass
-    return False
+    """URL-only（兼容旧调用）。禁止扫 password 控件。"""
+    return url_looks_like_login(_safe_url(page))
 
 
 def page_looks_logged_in(page, platform_id: str = "", login_url: str = "") -> bool:
-    """
-    Heuristic: session already usable.
-    - 不在登录页，且 URL/标题已离开登录态
-    - 或平台特征 cookie / 用户入口出现
-    """
-    if page_looks_like_login(page):
+    """URL-only 粗判，不碰 DOM。"""
+    cur = _safe_url(page)
+    if url_looks_like_login(cur) and "userinfo" not in cur.lower():
         return False
-
-    url, title = _url_title(page)
-    login_l = (login_url or "").lower()
-
-    # 从明确登录 URL 跳走了
-    if login_l and any(m in login_l for m in ("/login", "passport", "signin", "sso")):
-        if not any(m in url for m in ("/login", "passport", "signin", "sso", "apply_trial")):
-            return True
-
-    pid = (platform_id or "").lower()
-    # 平台特判（轻量）
-    if pid == "jd":
-        if "passport.jd.com" not in url and "login" not in url:
-            return True
-        try:
-            cookies = page.context.cookies()
-            names = {c.get("name") for c in cookies if "jd" in (c.get("domain") or "")}
-            if names & {"pin", "pt_key", "pwdt_id", "thor"}:
-                return not page_looks_like_login(page)
-        except Exception:
-            pass
-    if pid == "1688":
-        if "login.taobao.com" not in url and "login.1688.com" not in url and "passport" not in url:
-            return True
-    if pid in ("guangcai", "gldjc_hangqing", "gldjc_xunjia"):
-        if "gldjc.com" in url and "/login" not in url:
-            return True
-    if pid == "huixun":
-        if "iccchina.com" in url and "/login" not in url:
-            return True
-    if pid == "lingcai":
-        # 用户中心：无密码框且页面已加载 → 多半已登录
-        if "hylcw.cn" in url and not page_looks_like_login(page):
-            return True
-
-    # 通用：有「退出/我的/用户中心」且无密码框
-    try:
-        if page.get_by_text(re.compile(r"退出|注销|个人中心|我的账户|用户中心")).count() > 0:
-            return True
-    except Exception:
-        pass
-
-    # 仍说不清：不在 login 页就算过（避免误杀）—— 仅当 login_url 是登录页时
-    if login_l and "/login" in login_l and "/login" not in url and not page_looks_like_login(page):
+    if login_url and url_left_login(login_url, cur, platform_id):
         return True
-
+    # 不在登录 URL 上 → 倾向已可用
+    if not url_looks_like_login(cur):
+        return True
     return False
 
 
+def agent_login_signal_path(package_root: Path | None = None) -> Path:
+    root = package_root or Path(__file__).resolve().parents[1]
+    return root / "data" / "output" / "LOGIN_CONTINUE"
+
+
+def clear_agent_login_signal(package_root: Path | None = None) -> None:
+    p = agent_login_signal_path(package_root)
+    try:
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+
+
+def agent_login_signaled(package_root: Path | None = None) -> bool:
+    return agent_login_signal_path(package_root).exists()
+
+
+def wait_for_login_agent(
+    page,
+    *,
+    platform_id: str,
+    name: str,
+    login_url: str,
+    package_root: Path | None = None,
+    timeout_s: int = 600,
+    poll_s: float = 1.5,
+    allow_stdin: bool = True,
+) -> str:
+    """
+    Agent 友好登录等待：
+    - **绝不** page.reload / 重复 goto / 扫 DOM
+    - 只读 page.url（被动）
+    - Agent 可 touch data/output/LOGIN_CONTINUE 立刻放行
+    - TTY 下也可回车放行
+    返回: already_ok | logged_in | agent_continue | timeout
+    """
+    root = package_root or Path(__file__).resolve().parents[1]
+    clear_agent_login_signal(root)
+    start_url = _safe_url(page) or login_url
+
+    # 已不在登录 URL → 秒过，不折腾
+    if page_looks_logged_in(page, platform_id, login_url):
+        print(f"  [{name}] ✓ 已离开登录页 / 会话可用，不刷新、不等待")
+        return "already_ok"
+    if not url_looks_like_login(start_url) and not url_looks_like_login(login_url):
+        print(f"  [{name}] ✓ 当前不是登录 URL，继续")
+        return "already_ok"
+
+    sig = agent_login_signal_path(root)
+    print("")
+    print("========== LOGIN_WAIT (agent) ==========")
+    print(f"platform : {platform_id} / {name}")
+    print(f"login_url: {login_url}")
+    print(f"browser  : {_safe_url(page)[:100]}")
+    print("请用户在【已打开的浏览器窗口】登录。")
+    print("程序只被动看 URL，不会刷新页面。")
+    print("Agent 在用户说「登完了」后任选：")
+    print(f"  1) touch {sig}")
+    print("  2) 终端回车（若有 TTY）")
+    print("  3) URL 自动离开登录页也会继续")
+    print("========================================")
+
+    deadline = time.time() + max(30, int(timeout_s))
+    last_log = 0.0
+    stdin_ok = allow_stdin and sys.stdin.isatty()
+
+    # 非阻塞读回车：用 select
+    while time.time() < deadline:
+        cur = _safe_url(page)
+        if url_left_login(start_url, cur, platform_id) or (
+            not url_looks_like_login(cur) and url_looks_like_login(start_url)
+        ):
+            print(f"  [{name}] ✓ URL 已离开登录页 → {_safe_url(page)[:80]}")
+            clear_agent_login_signal(root)
+            return "logged_in"
+
+        if agent_login_signaled(root):
+            print(f"  [{name}] ✓ Agent 信号 LOGIN_CONTINUE")
+            clear_agent_login_signal(root)
+            return "agent_continue"
+
+        if stdin_ok:
+            try:
+                import select
+
+                r, _, _ = select.select([sys.stdin], [], [], 0)
+                if r:
+                    try:
+                        sys.stdin.readline()
+                    except Exception:
+                        pass
+                    print(f"  [{name}] ✓ 终端回车确认")
+                    clear_agent_login_signal(root)
+                    return "agent_continue"
+            except Exception:
+                # Windows 等无 select：不读 stdin 循环，只靠 URL/文件
+                stdin_ok = False
+
+        now = time.time()
+        if now - last_log >= 12:
+            left = int(deadline - now)
+            print(f"  [{name}] 等待登录中… 剩余~{left}s  url={cur[:70]}  (不刷新)")
+            last_log = now
+
+        # 纯 sleep，不碰 page 的 locator / reload
+        time.sleep(poll_s)
+
+    print(f"  [{name}] ⚠ 等待超时，不再刷新；由后续抓取结果判断")
+    clear_agent_login_signal(root)
+    return "timeout"
+
+
+# 兼容旧名
 def wait_until_logged_in(
     page,
     *,
     platform_id: str,
     name: str,
     login_url: str,
-    timeout_s: int = 180,
-    poll_ms: int = 800,
+    timeout_s: int = 600,
+    poll_ms: int = 1500,
+    package_root: Path | None = None,
 ) -> str:
-    """
-    智能等登录：轮询页面状态，登录成功立刻返回。
-    返回: already_ok | logged_in | timeout
-    绝不固定 sleep 90 秒。
-    """
-    try:
-        page.wait_for_timeout(800)
-    except Exception:
-        time.sleep(0.8)
-
-    if page_looks_logged_in(page, platform_id, login_url):
-        print(f"  [{name}] ✓ 已登录，跳过等待")
-        return "already_ok"
-
-    if not page_looks_like_login(page):
-        # 打开的不是登录页，也可能 session 有效
-        print(f"  [{name}] ✓ 当前页无需登录，继续")
-        return "already_ok"
-
-    print(f"  [{name}] 请在浏览器登录（自动检测成功，无需傻等/回车）…")
-    print(f"           超时上限 {timeout_s}s；登录成功会立刻下一站")
-    deadline = time.time() + max(15, int(timeout_s))
-    last_log = 0.0
-    while time.time() < deadline:
-        try:
-            if page_looks_logged_in(page, platform_id, login_url):
-                print(f"  [{name}] ✓ 检测到登录成功")
-                return "logged_in"
-            # 用户可能手动跳到首页
-            if not page_looks_like_login(page):
-                # 双检：再等一小会防闪跳
-                page.wait_for_timeout(600)
-                if not page_looks_like_login(page) or page_looks_logged_in(page, platform_id, login_url):
-                    print(f"  [{name}] ✓ 已离开登录页，视为成功")
-                    return "logged_in"
-        except Exception:
-            pass
-        now = time.time()
-        if now - last_log >= 6:
-            left = int(deadline - now)
-            try:
-                cur = (page.url or "")[:80]
-            except Exception:
-                cur = "?"
-            print(f"  [{name}] …等待中 剩余~{left}s  url={cur}")
-            last_log = now
-        try:
-            page.wait_for_timeout(poll_ms)
-        except Exception:
-            time.sleep(poll_ms / 1000.0)
-
-    print(f"  [{name}] ⚠ 超时未确认登录，继续流程（抓取时再探测）")
-    return "timeout"
+    return wait_for_login_agent(
+        page,
+        platform_id=platform_id,
+        name=name,
+        login_url=login_url,
+        package_root=package_root,
+        timeout_s=timeout_s,
+        poll_s=max(0.5, poll_ms / 1000.0),
+        allow_stdin=True,
+    )
 
 
 def jd_search(page, query: str, must: list[str], timeout_ms: int, min_score: int = 1):
