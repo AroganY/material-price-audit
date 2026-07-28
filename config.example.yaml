@@ -11,7 +11,9 @@ pricing:
 browser:
   channel: chrome
   headless: false
-  login_wait_seconds: 120
+  # 登录自动检测的超时上限（秒）；检测到成功立刻继续，不会固定傻等
+  login_timeout_seconds: 180
+  login_wait_seconds: 180  # 兼容旧字段，同 timeout
   page_timeout_ms: 60000
   between_items_sleep: 1.2
 

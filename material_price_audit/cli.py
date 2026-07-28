@@ -37,7 +37,14 @@ from .platforms import (
     save_platforms_selected,
     search_on_platform,
 )
-from .scraper import launch_context, open_detail, pick_manual, to_evidence, wait_user
+from .scraper import (
+    launch_context,
+    open_detail,
+    pick_manual,
+    to_evidence,
+    wait_until_logged_in,
+    wait_user,
+)
 
 
 def package_root() -> Path:
@@ -286,14 +293,27 @@ def cmd_select_platforms(args):
     return 0
 
 
+def _login_timeout_s(args, cfg: dict) -> int:
+    """
+    自动检测登录的最长等待。不是固定 sleep。
+    --login-wait 表示「超时上限」；默认 180s。
+    """
+    w = getattr(args, "login_wait", None)
+    if w is not None and int(w) > 0:
+        return int(w)
+    b = cfg.get("browser") or {}
+    return int(
+        b.get("login_timeout_seconds")
+        or b.get("login_wait_seconds")
+        or 180
+    )
+
+
 def cmd_login(args):
     ensure_or_exit(require_browser=False, quiet=True)
     cfg = load_config(Path(args.config) if args.config else None)
     profile = Path(args.profile).expanduser().resolve()
-    wait_s = args.login_wait if args.login_wait is not None else 0
-    # 0 = 每个站登录后回车；非交互时用 config 默认
-    if args.yes and not args.login_wait:
-        wait_s = int(cfg["browser"].get("login_wait_seconds") or 60)
+    timeout_s = _login_timeout_s(args, cfg)
 
     enabled = resolve_user_platforms(
         cfg, args.platforms or None, interactive=not args.yes, root=package_root()
@@ -306,7 +326,7 @@ def cmd_login(args):
         print("ERROR: 没有可登录的平台 URL", file=sys.stderr)
         return 2
 
-    print(f"只登录你选的 {len(urls)} 个站（不会打开未选项）：")
+    print(f"只登录你选的 {len(urls)} 个站（自动检测成功，不傻等固定秒数）：")
     for pid, name, url in urls:
         print(f"  - [{pid}] {name}: {url}")
 
@@ -316,14 +336,17 @@ def cmd_login(args):
     try:
         n = len(urls)
         for i, (pid, name, url) in enumerate(urls, 1):
+            print(f"\n[{i}/{n}] {name}")
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            wait_user(
-                f"【{i}/{n} {name}】在浏览器登录后继续（本站可跳过则直接回车）",
-                wait_s,
-                bool(args.yes),
+            wait_until_logged_in(
+                page,
+                platform_id=pid,
+                name=name,
+                login_url=url,
+                timeout_s=timeout_s,
             )
-        print(f"登录结束。profile={profile}")
-        print(f"已覆盖: {', '.join(p for p, _, _ in urls)}")
+        print(f"\n登录流程结束。profile={profile}")
+        print(f"已处理: {', '.join(p for p, _, _ in urls)}")
     finally:
         ctx.close()
         pw.stop()
@@ -390,13 +413,11 @@ def cmd_scrape(args):
     detail_min = float(cfg["pricing"].get("detail_match_min_score", 0.55))
     timeout_ms = int(cfg["browser"]["page_timeout_ms"])
     sleep_s = float(cfg["browser"]["between_items_sleep"])
-    # 登录：交互默认回车继续；--yes 才用秒数等待
-    wait_s = int(args.login_wait or 0)
+    # 登录超时上限（自动检测，不是固定 sleep）
+    login_timeout = _login_timeout_s(args, cfg)
     non_interactive = not bool(getattr(args, "interactive", False))
     if getattr(args, "yes", False):
         non_interactive = True
-        if not wait_s:
-            wait_s = int(cfg["browser"].get("login_wait_seconds") or 45)
 
     enabled = resolve_user_platforms(
         cfg,
@@ -446,16 +467,19 @@ def cmd_scrape(args):
     try:
         if not skip_login:
             urls = login_urls_for(enabled, reg)
-            print(f"只打开你选的 {len(urls)} 个登录页（未选的站不会打开）：")
+            print(f"登录预检：只打开你选的 {len(urls)} 个站（自动检测，已登录秒过）：")
             for pid, name, url in urls:
                 print(f"  · {name}  {url}")
             n = len(urls)
             for i, (pid, name, url) in enumerate(urls, 1):
+                print(f"\n[{i}/{n}] {name}")
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                wait_user(
-                    f"【{i}/{n} {name}】登录后继续（可跳过则直接回车）",
-                    wait_s if non_interactive else 0,
-                    non_interactive,
+                wait_until_logged_in(
+                    page,
+                    platform_id=pid,
+                    name=name,
+                    login_url=url,
+                    timeout_s=login_timeout,
                 )
 
         done = 0
@@ -480,7 +504,15 @@ def cmd_scrape(args):
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
                         if st == "need_login":
-                            wait_user(f"【{pid}】需要登录", wait_s, non_interactive)
+                            spec = reg.get(pid)
+                            print(f"   [{pid}] 抓取中途需登录，自动检测…")
+                            wait_until_logged_in(
+                                page,
+                                platform_id=pid,
+                                name=spec.name if spec else pid,
+                                login_url=(spec.login_url if spec else page.url) or "",
+                                timeout_s=login_timeout,
+                            )
                             cands, st = search_on_platform(
                                 page, pid, job.query, job.must, timeout_ms, min_score, reg
                             )
@@ -533,7 +565,15 @@ def cmd_scrape(args):
                             page, pid, job.query, job.must, timeout_ms, min_score, reg
                         )
                         if st == "need_login":
-                            wait_user(f"【{pid}】需要登录", wait_s, non_interactive)
+                            spec = reg.get(pid)
+                            print(f"   [{pid}] 抓取中途需登录，自动检测…")
+                            wait_until_logged_in(
+                                page,
+                                platform_id=pid,
+                                name=spec.name if spec else pid,
+                                login_url=(spec.login_url if spec else page.url) or "",
+                                timeout_s=login_timeout,
+                            )
                             cands, st = search_on_platform(
                                 page, pid, job.query, job.must, timeout_ms, min_score, reg
                             )
@@ -663,7 +703,7 @@ def cmd_run(args):
     profile = Path(args.profile or (root / ".browser-profile")).expanduser().resolve()
     rfq_path = Path(args.rfq or (root / "data/output/rfq.xlsx")).expanduser().resolve()
 
-    # TTY：交互回车登录；非 TTY/--yes：按 login-wait 秒
+    # login_wait = 自动检测超时上限（秒），不是固定傻等
     use_yes = bool(getattr(args, "yes", False)) or not sys.stdin.isatty()
     a = type("A", (), {})()
     a.input = str(input_path)
@@ -672,9 +712,9 @@ def cmd_run(args):
     a.profile = str(profile)
     a.platforms = plat
     a.limit = args.limit or 0
-    a.login_wait = int(args.login_wait or 0) if not use_yes else int(args.login_wait or 45)
+    a.login_wait = int(args.login_wait or 0)  # 0 → 默认 180s 上限，检测成功立刻走
     a.yes = use_yes
-    a.interactive = not use_yes
+    a.interactive = False  # 登录靠自动检测，不靠回车
     a.skip_existing = not args.no_skip_existing
     a.skip_login = bool(args.skip_login)
     a.open_detail = True
@@ -836,8 +876,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="逗号分隔，如 guangcai,jd；不传则读 platforms.selected / 交互勾选",
     )
-    sp.add_argument("--yes", action="store_true", help="非交互：按秒等待而非回车")
-    sp.add_argument("--login-wait", type=int, default=0, help="--yes 时每站等待秒数")
+    sp.add_argument("--yes", action="store_true", help="非交互（仍自动检测登录）")
+    sp.add_argument(
+        "--login-wait",
+        type=int,
+        default=0,
+        help="自动检测登录的超时上限秒（默认180，成功立刻下一站）",
+    )
     sp.set_defaults(func=cmd_login)
 
     sp = sub.add_parser("scrape", help="瀑布抓取：A平台详情匹配才用，否则自动B→C")
@@ -857,8 +902,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--limit", type=int, default=0)
     sp.add_argument("--yes", action="store_true", help="非交互（默认推荐）")
     sp.add_argument("--interactive", action="store_true", help="每步回车确认")
-    sp.add_argument("--login-wait", type=int, default=0, help="每平台登录等待秒数")
-    sp.add_argument("--skip-login", action="store_true", help="跳过登录页（已登录时）")
+    sp.add_argument(
+        "--login-wait",
+        type=int,
+        default=0,
+        help="登录自动检测超时上限秒数（默认180；成功立刻继续，不是傻等）",
+    )
+    sp.add_argument("--skip-login", action="store_true", help="跳过登录预检（确定会话仍有效时）")
     sp.add_argument("--manual", action="store_true", help="人工挑选（关闭瀑布自动）")
     sp.add_argument("--strategy", default="", help="waterfall|multi|preferred")
     sp.add_argument("--auto-install", action="store_true")
@@ -891,10 +941,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--login-wait",
         type=int,
         default=0,
-        help="非交互时每站等待秒数；交互模式回车继续（默认）",
+        help="登录自动检测超时上限秒（默认180；检测到登录立刻继续）",
     )
     sp.add_argument("--yes", action="store_true", help="非交互（Agent 用）")
-    sp.add_argument("--skip-login", action="store_true", help="已登录过则跳过登录页")
+    sp.add_argument("--skip-login", action="store_true", help="跳过登录预检")
     sp.add_argument(
         "--auto-install",
         action="store_true",
