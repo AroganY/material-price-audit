@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "material-price-audit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Construction material inquiry price audit with Playwright evidence (accuracy-first)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Material Price Audit Contributors" }]
 keywords = ["construction", "cost", "pricing", "playwright", "excel", "inquiry"]
 dependencies = [
@@ -17,11 +18,29 @@ dependencies = [
   "PyYAML>=6.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.0",
+  "pytest>=8.0",
+]
+
 [project.scripts]
 material-price-audit = "material_price_audit.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/example/material-price-audit"
+Homepage = "https://github.com/AroganY/material-price-audit"
+Repository = "https://github.com/AroganY/material-price-audit"
+Issues = "https://github.com/AroganY/material-price-audit/issues"
 
 [tool.setuptools.packages.find]
 include = ["material_price_audit*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "material_price_audit.__version__" }
+
+[tool.setuptools.package-data]
+"material_price_audit.webapp" = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

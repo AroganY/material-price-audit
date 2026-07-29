@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>材料询价向导</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --line: #2d3a4d;
+      --text: #e8eef6;
+      --muted: #8b9bb0;
+      --blue: #3b82f6;
+      --blue2: #2563eb;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1e3a5f 0%, transparent 50%),
+                  radial-gradient(900px 500px at 100% 0%, #1a2f1a 0%, transparent 40%),
+                  var(--bg);
+      color: var(--text); min-height: 100vh;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 28px 18px 64px; }
+    h1 { font-size: 1.55rem; margin: 0 0 6px; letter-spacing: .02em; }
+    .sub { color: var(--muted); margin: 0 0 22px; line-height: 1.5; }
+    .steps {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .step-pill {
+      padding: 6px 12px; border-radius: 999px; font-size: 12px;
+      border: 1px solid var(--line); color: var(--muted); background: #121a24;
+    }
+    .step-pill.on { border-color: var(--blue); color: #bfdbfe; background: #172554; }
+    .step-pill.done { border-color: #166534; color: #bbf7d0; background: #052e16; }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 14px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+    label.plat {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+      cursor: pointer; background: #121a24;
+    }
+    label.plat:hover { border-color: #3b4f6b; }
+    label.plat input { margin-top: 3px; }
+    label.plat strong { display: block; font-size: 14px; }
+    label.plat small { color: var(--muted); font-size: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 10px 0; }
+    label.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+    input[type=number], select {
+      background: #0b1220; border: 1px solid var(--line); color: var(--text);
+      border-radius: 8px; padding: 8px 10px; min-width: 100px; font-size: 14px;
+    }
+    .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button {
+      border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer;
+      font-size: 14px; font-weight: 600;
+    }
+    button.primary { background: linear-gradient(180deg, var(--blue), var(--blue2)); color: #fff; }
+    button.primary:disabled { opacity: .45; cursor: not-allowed; }
+    button.ghost { background: #243044; color: var(--text); }
+    button.ok { background: #15803d; color: #fff; }
+    button.danger { background: #7f1d1d; color: #fecaca; }
+    .bar {
+      height: 10px; background: #0b1220; border-radius: 999px; overflow: hidden;
+      border: 1px solid var(--line); margin: 10px 0;
+    }
+    .bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #2563eb, #22c55e); transition: width .3s; }
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; }
+    .stat {
+      flex: 1; min-width: 100px; background: #121a24; border: 1px solid var(--line);
+      border-radius: 10px; padding: 10px 12px;
+    }
+    .stat b { display: block; font-size: 1.3rem; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .stat.g b { color: var(--green); }
+    .stat.a b { color: var(--amber); }
+    .stat.r b { color: var(--red); }
+    .log {
+      background: #0b1220; border: 1px solid var(--line); border-radius: 10px;
+      padding: 10px 12px; max-height: 220px; overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px; line-height: 1.45; color: #cbd5e1; white-space: pre-wrap;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+      background: #1e293b; color: #cbd5e1;
+    }
+    .badge.full { background: #14532d; color: #bbf7d0; }
+    .badge.partial { background: #78350f; color: #fde68a; }
+    .badge.none { background: #7f1d1d; color: #fecaca; }
+    .drop {
+      border: 1.5px dashed #3b4f6b; border-radius: 12px; padding: 22px;
+      text-align: center; color: var(--muted); background: #121a24; cursor: pointer;
+    }
+    .drop.drag { border-color: var(--blue); color: #bfdbfe; }
+    .msg { margin-top: 8px; font-size: 14px; }
+    .msg.err { color: #fca5a5; }
+    .msg.ok { color: #86efac; }
+    footer { margin-top: 18px; color: var(--muted); font-size: 12px; text-align: center; }
+    .login-card {
+      border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+      background: #121a24; margin-bottom: 10px;
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    }
+    .login-card .meta { flex: 1; min-width: 200px; }
+    .login-card .meta strong { font-size: 15px; }
+    .login-card .meta small { display: block; color: var(--muted); margin-top: 4px; font-size: 12px; word-break: break-all; }
+    .login-card .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .login-card .actions button { padding: 8px 12px; font-size: 13px; }
+    .badge.verified { background: #14532d; color: #bbf7d0; }
+    .badge.opened { background: #1e3a5f; color: #bfdbfe; }
+    .badge.failed { background: #7f1d1d; color: #fecaca; }
+    .badge.pending { background: #334155; color: #e2e8f0; }
+    .login-summary {
+      padding: 10px 12px; border-radius: 10px; background: #0b1220;
+      border: 1px solid var(--line); margin-bottom: 12px; font-size: 13px;
+    }
+  </style>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --surface-subtle: #f8fafc;
+      --line: #dce3ec;
+      --line-strong: #c7d1df;
+      --text: #172033;
+      --muted: #64748b;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --blue-soft: #eff6ff;
+      --green: #15803d;
+      --green-soft: #f0fdf4;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+      --red: #b91c1c;
+      --red-soft: #fef2f2;
+      --radius: 10px;
+      --shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 8px 24px rgba(15, 23, 42, .04);
+    }
+    * { box-sizing: border-box; }
+    html { color-scheme: light; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select { font: inherit; }
+    button, label.plat, .drop, a { -webkit-tap-highlight-color: transparent; }
+    .topbar {
+      height: 64px;
+      background: rgba(255,255,255,.96);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(10px);
+    }
+    .topbar-inner {
+      width: min(1120px, calc(100% - 36px));
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .brand-mark {
+      width: 34px; height: 34px; border-radius: 8px;
+      display: grid; place-items: center;
+      background: var(--blue); color: #fff;
+      font-size: 15px; font-weight: 750; letter-spacing: -.04em;
+      box-shadow: 0 5px 14px rgba(37, 99, 235, .18);
+    }
+    .brand-copy strong { display: block; font-size: 15px; letter-spacing: .01em; }
+    .brand-copy span { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
+    .local-status {
+      display: inline-flex; align-items: center; gap: 7px;
+      color: #475569; font-size: 12px; font-weight: 600;
+      padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--surface-subtle);
+    }
+    .local-status::before {
+      content: ""; width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
+      box-shadow: 0 0 0 3px #dcfce7;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 30px 18px 64px; }
+    .page-intro { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 22px; }
+    .eyebrow { margin: 0 0 7px; color: var(--blue); font-weight: 700; font-size: 12px; letter-spacing: .08em; }
+    h1 { margin: 0; font-size: clamp(24px, 3vw, 32px); line-height: 1.2; letter-spacing: -.035em; color: #0f172a; }
+    .sub { max-width: 760px; margin: 9px 0 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+    .quality-note {
+      width: 254px; flex: 0 0 auto; color: #334155; font-size: 12px; line-height: 1.55;
+      padding: 10px 12px; border-left: 3px solid var(--blue); background: var(--blue-soft);
+      border-radius: 0 7px 7px 0;
+    }
+    .steps {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+      margin: 0 0 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,.03);
+    }
+    .step-pill {
+      position: relative; min-height: 54px; padding: 0 10px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      border: 0; border-right: 1px solid var(--line); border-radius: 0;
+      background: var(--surface); color: #64748b; font-size: 12px; font-weight: 600;
+    }
+    .step-pill:last-child { border-right: 0; }
+    .step-pill::before {
+      content: attr(data-s); width: 22px; height: 22px; border-radius: 50%;
+      display: grid; place-items: center; flex: 0 0 auto;
+      border: 1px solid var(--line-strong); background: #fff; color: #64748b;
+      font-size: 11px;
+    }
+    .step-pill.on { color: var(--blue-dark); background: var(--blue-soft); box-shadow: inset 0 -2px var(--blue); }
+    .step-pill.on::before { border-color: var(--blue); background: var(--blue); color: #fff; }
+    .step-pill.done { color: #166534; background: #f7fdf9; }
+    .step-pill.done::before { content: "✓"; color: #fff; background: var(--green); border-color: var(--green); }
+    .card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 24px; margin-bottom: 14px; box-shadow: var(--shadow);
+    }
+    .card h2 { margin: 0 0 7px; color: #0f172a; font-size: 17px; line-height: 1.4; letter-spacing: -.01em; }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 0 0 16px; }
+    .hint strong { color: #334155; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    label.plat {
+      position: relative; display: flex; gap: 10px; align-items: flex-start; min-height: 74px;
+      padding: 13px; border: 1px solid var(--line); border-radius: 8px;
+      cursor: pointer; background: #fff; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+    label.plat:hover { border-color: #93b4f4; background: #fbfdff; }
+    label.plat:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); box-shadow: inset 0 0 0 1px rgba(37,99,235,.06); }
+    label.plat input { width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--blue); }
+    label.plat strong { display: block; color: #1e293b; font-size: 14px; line-height: 1.35; }
+    label.plat small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.35; word-break: break-all; }
+    .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin: 14px 0 0; }
+    label.field { display: flex; flex-direction: column; gap: 7px; color: #475569; font-size: 12px; font-weight: 650; }
+    input[type=number], select {
+      height: 40px; min-width: 124px; padding: 0 11px;
+      color: #172033; background: #fff; border: 1px solid var(--line-strong); border-radius: 7px; font-size: 14px;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    select { width: 100%; }
+    input[type=number]:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); outline: none; }
+    .btns { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin-top: 18px; }
+    button {
+      min-height: 40px; border: 1px solid transparent; border-radius: 7px; padding: 0 15px;
+      cursor: pointer; font-size: 13px; font-weight: 680; line-height: 1;
+      transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
+    }
+    button:hover:not(:disabled) { box-shadow: 0 3px 10px rgba(15,23,42,.09); }
+    button:focus-visible, label.plat:focus-within, .drop:focus-visible, a:focus-visible {
+      outline: 3px solid rgba(37,99,235,.22); outline-offset: 2px;
+    }
+    button.primary { background: var(--blue); color: #fff; }
+    button.primary:hover:not(:disabled) { background: var(--blue-dark); }
+    button.primary:disabled, button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    button.ghost { background: #fff; color: #334155; border-color: var(--line-strong); }
+    button.ghost:hover:not(:disabled) { background: var(--surface-subtle); border-color: #aebbc9; }
+    button.ok { background: var(--green); color: #fff; }
+    button.danger { background: #fff; color: var(--red); border-color: #fecaca; }
+    .drop {
+      min-height: 152px; border: 1px dashed #93a4b8; border-radius: 9px; padding: 24px;
+      display: grid; place-items: center; text-align: center; color: #475569; background: var(--surface-subtle); cursor: pointer;
+      transition: border-color .18s ease, background .18s ease;
+    }
+    .drop:hover, .drop.drag { border-color: var(--blue); color: var(--blue-dark); background: var(--blue-soft); }
+    .drop-content { display: grid; justify-items: center; gap: 8px; }
+    .drop-icon { width: 34px; height: 34px; color: var(--blue); }
+    .drop-title { color: #1e293b; font-weight: 700; font-size: 14px; }
+    .drop-meta { color: var(--muted); font-size: 12px; }
+    .msg { min-height: 20px; margin-top: 10px; font-size: 13px; line-height: 1.5; color: #475569; }
+    .msg.err { color: var(--red); }
+    .msg.ok { color: var(--green); }
+    .bar { height: 7px; margin: 18px 0 14px; border: 0; border-radius: 999px; overflow: hidden; background: #e8edf3; }
+    .bar > i { display: block; height: 100%; width: 0; background: var(--blue); transition: width .3s ease; }
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
+    .stat { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-subtle); }
+    .stat b { display: block; color: #0f172a; font-size: 20px; line-height: 1.2; }
+    .stat span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .stat.g b { color: var(--green); } .stat.a b { color: var(--amber); } .stat.r b { color: var(--red); }
+    .log {
+      max-height: 250px; overflow: auto; padding: 13px 14px; border: 1px solid #273449; border-radius: 8px;
+      background: #111827; color: #cbd5e1; font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px; line-height: 1.6; white-space: pre-wrap;
+    }
+    .table-wrap { overflow: auto; max-height: 320px; border: 1px solid var(--line); border-radius: 8px; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+    th, td { padding: 10px 11px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); background: #fff; }
+    tr:last-child td { border-bottom: 0; }
+    th { position: sticky; top: 0; z-index: 1; color: #475569; background: var(--surface-subtle); font-weight: 700; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; background: #eef2f7; color: #475569; font-size: 10px; font-weight: 700; }
+    .badge.full, .badge.verified { background: var(--green-soft); color: #166534; }
+    .badge.partial { background: var(--amber-soft); color: #92400e; }
+    .badge.none, .badge.failed { background: var(--red-soft); color: #991b1b; }
+    .badge.opened { background: var(--blue-soft); color: var(--blue-dark); }
+    .badge.pending, .badge.remembered { background: #f1f5f9; color: #475569; }
+    .login-summary { margin-bottom: 12px; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 7px; background: var(--blue-soft); color: #1e40af; font-size: 12px; }
+    .login-card {
+      display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
+      margin-bottom: 8px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    }
+    .login-card .meta { flex: 1; min-width: 220px; }
+    .login-card .meta strong { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #1e293b; font-size: 14px; }
+    .login-card .meta small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.45; word-break: break-all; }
+    .login-card .actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .login-card .actions button { min-height: 34px; padding: 0 11px; font-size: 12px; }
+    .result-actions a { text-decoration: none; }
+    footer { margin-top: 20px; color: #94a3b8; font-size: 11px; text-align: center; }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .quality-note { display: none; }
+      .steps { grid-template-columns: repeat(3, 1fr); }
+      .step-pill:nth-child(3) { border-right: 0; }
+      .step-pill:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+      .stats { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 560px) {
+      .topbar { height: 58px; }
+      .topbar-inner { width: calc(100% - 28px); }
+      .brand-copy span, .local-status { display: none; }
+      .wrap { padding: 22px 14px 44px; }
+      .page-intro { margin-bottom: 17px; }
+      .sub { font-size: 13px; }
+      .steps { display: flex; overflow-x: auto; }
+      .step-pill { min-width: 116px; border-bottom: 0 !important; }
+      .card { padding: 18px 15px; }
+      .grid { grid-template-columns: 1fr; }
+      label.plat { min-height: 66px; }
+      .btns button, .result-actions a { flex: 1 1 auto; }
+      .result-actions a button { width: 100%; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .login-card .actions { width: 100%; }
+      .login-card .actions button { flex: 1 1 140px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">价</div>
+        <div class="brand-copy"><strong>材料询价工作台</strong><span>Material Price Audit</span></div>
+      </div>
+      <div class="local-status">本地服务已连接</div>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="page-intro">
+      <div>
+        <p class="eyebrow">询价任务</p>
+        <h1>从询价表到可复核价格</h1>
+        <p class="sub">选择平台并上传 Excel。系统只收录名称、型号和规格证据一致的价格；明确冲突直接拒绝，证据不足单独待核。</p>
+      </div>
+      <div class="quality-note">结果原则：不确定就留空。每个正式价格都保留商品标题、来源平台和复核链接。</div>
+    </div>
+
+    <div class="steps" id="steps">
+      <div class="step-pill on" data-s="1">平台与价数</div>
+      <div class="step-pill" data-s="2">询价表</div>
+      <div class="step-pill" data-s="3">识表确认</div>
+      <div class="step-pill" data-s="4">登录面板</div>
+      <div class="step-pill" data-s="5">执行询价</div>
+      <div class="step-pill" data-s="6">下载结果</div>
+    </div>
+
+    <!-- Step 1 -->
+    <section class="card" id="card1">
+      <h2>① 选择询价网站（可多选，顺序=优先级）</h2>
+      <p class="hint">当前平台搜不到完全匹配时，会自动切换到下一个你勾选的站。全部没有则留空。</p>
+      <div class="grid" id="platList"></div>
+      <div class="row" style="margin-top:16px">
+        <label class="field">每条材料询几个价？
+          <input type="number" id="quotes" min="1" max="10" value="3" />
+        </label>
+        <label class="field">试跑条数（0=全部）
+          <input type="number" id="limit" min="0" max="9999" value="8" />
+        </label>
+      </div>
+      <div class="btns">
+        <button type="button" class="ghost" id="btnCost">选择核心五站</button>
+        <button type="button" class="ghost" id="btnClear">清空</button>
+        <button type="button" class="primary" id="btnSave1">保存并下一步</button>
+      </div>
+      <div class="msg" id="msg1"></div>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="card" id="card2" style="display:none">
+      <h2>② 准备询价表</h2>
+      <p class="hint">表头不用改成固定格式。把 Excel 拖进来，或选择已在 data/input 的文件。</p>
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="上传 Excel 文件">
+        <div class="drop-content">
+          <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
+          <span class="drop-title">拖入 Excel，或点击选择文件</span>
+          <span class="drop-meta">支持 .xlsx / .xlsm，表头无需改模板</span>
+        </div>
+      </div>
+      <input type="file" id="file" accept=".xlsx,.xlsm" hidden />
+      <div class="row">
+        <label class="field" style="flex:1">或选择已有文件
+          <select id="existFiles"><option value="">-- 选择 --</option></select>
+        </label>
+      </div>
+      <div class="btns">
+        <button type="button" class="ghost" id="btnBack1">上一步</button>
+        <button type="button" class="primary" id="btnParse">识别表结构</button>
+      </div>
+      <div class="msg" id="msg2"></div>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="card" id="card3" style="display:none">
+      <h2>③ 识表结果（抽查名称/规格）</h2>
+      <p class="hint" id="parseSummary">—</p>
+      <div class="table-wrap" style="max-height:280px">
+        <table>
+          <thead><tr><th>表</th><th>行</th><th>名称</th><th>规格</th><th>报送</th></tr></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+      <div class="btns">
+        <button type="button" class="ghost" id="btnBack2">上一步</button>
+        <button type="button" class="primary" id="btnToLogin">确认，进入登录面板</button>
+      </div>
+    </section>
+
+    <!-- Step 4: 独立登录面板 -->
+    <section class="card" id="card4" style="display:none">
+      <h2>④ 登录面板（每个站单独登录、单独校验）</h2>
+      <p class="hint">
+        对每个勾选的网站：点「打开登录页」→ 在弹出的浏览器里登录 → 再点「本站已登录，校验」。
+        <strong>只有状态变成「已通过」的站才会参与询价</strong>，避免只登一个站却去搜另一个站。
+      </p>
+      <div class="login-summary" id="loginSummary">加载中…</div>
+      <div id="loginList"></div>
+      <div class="btns">
+        <button type="button" class="ghost" id="btnBack3">上一步</button>
+        <button type="button" class="ghost" id="btnLoginRefresh">刷新状态</button>
+        <button type="button" class="ghost" id="btnLoginClose">关闭登录浏览器</button>
+        <button type="button" class="primary" id="btnLoginNext" disabled>全部通过，去询价</button>
+      </div>
+      <div class="msg" id="msgLogin"></div>
+    </section>
+
+    <!-- Step 5: 询价 -->
+    <section class="card" id="card5" style="display:none">
+      <h2>⑤ 开始询价</h2>
+      <p class="hint">
+        将仅使用<strong>登录面板已通过</strong>的平台搜索。只收录名称+规格完全匹配的价，并尽量抓详情链接、厂家、电话。
+      </p>
+      <div class="login-summary" id="runLoginSummary">—</div>
+      <div class="btns">
+        <button type="button" class="ghost" id="btnBack4">返回登录面板</button>
+        <button type="button" class="primary" id="btnStart">开始询价</button>
+      </div>
+      <div class="msg" id="msg4"></div>
+      <div class="bar"><i id="prog"></i></div>
+      <div class="stats">
+        <div class="stat g"><b id="stFull">0</b><span>凑满 K 价</span></div>
+        <div class="stat a"><b id="stPart">0</b><span>部分命中</span></div>
+        <div class="stat a"><b id="stReview">0</b><span>候选待核</span></div>
+        <div class="stat r"><b id="stNone">0</b><span>没查到</span></div>
+        <div class="stat"><b id="stCur">-</b><span>进度</span></div>
+      </div>
+      <p class="hint" id="curName" style="margin-top:12px"></p>
+      <div class="log" id="log"></div>
+    </section>
+
+    <!-- Step 6 -->
+    <section class="card" id="card6" style="display:none">
+      <h2>⑥ 询价结果</h2>
+      <p class="hint" id="doneMsg">—</p>
+      <div class="btns result-actions">
+        <a href="/api/download/result"><button type="button" class="primary">下载结果 Excel</button></a>
+        <a href="/api/download/rfq"><button type="button" class="ghost">下载未查到 RFQ</button></a>
+        <button type="button" class="ghost" id="btnRestart">再询一批</button>
+      </div>
+      <div class="table-wrap" style="margin-top:14px">
+        <table>
+          <thead><tr><th>材料</th><th>状态</th><th>价数</th><th>说明</th></tr></thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>材料询价工作台 · 本地运行 · 文件与登录信息保留在当前电脑</footer>
+  </div>
+
+  <script>
+    let step = 1;
+    let state = {};
+    let platformsRendered = false; // 避免轮询刷新把用户勾选冲掉
+
+    const $ = (id) => document.getElementById(id);
+    const on = (id, ev, fn) => {
+      const el = $(id);
+      if (el) el[ev] = fn;
+    };
+
+    function setBusy(id, busy, busyLabel) {
+      const el = $(id);
+      if (!el) return;
+      if (busy) {
+        el.dataset.idleLabel = el.textContent;
+        el.textContent = busyLabel || "处理中…";
+        el.disabled = true;
+        el.setAttribute("aria-busy", "true");
+      } else {
+        if (el.dataset.idleLabel) el.textContent = el.dataset.idleLabel;
+        el.disabled = false;
+        el.removeAttribute("aria-busy");
+      }
+    }
+
+    function setStep(n) {
+      step = n;
+      for (let i = 1; i <= 6; i++) {
+        const el = $("card" + i);
+        if (el) el.style.display = i === n ? "block" : "none";
+      }
+      document.querySelectorAll(".step-pill").forEach((el) => {
+        const s = +el.dataset.s;
+        el.classList.toggle("on", s === n);
+        el.classList.toggle("done", s < n);
+      });
+      if (n === 4) {
+        initLoginPanel();
+        renderLoginPanel();
+      }
+      if (n === 5) {
+        const lp = state.login_panel || {};
+        $("runLoginSummary").textContent = lp.message
+          || `已验证：${(lp.verified || []).join("、") || "无"}`;
+      }
+    }
+
+    function statusBadge(st) {
+      const map = {
+        verified: ["verified", "已通过"],
+        opened: ["opened", "已打开登录页"],
+        failed: ["failed", "未通过"],
+        pending: ["pending", "待登录"],
+        remembered: ["remembered", "待复核"],
+      };
+      const [cls, label] = map[st] || ["pending", st || "待登录"];
+      return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function renderLoginPanel() {
+      const lp = state.login_panel || {};
+      const list = $("loginList");
+      const rows = lp.platforms || [];
+      $("loginSummary").textContent = lp.message || "请先保存平台勾选";
+      const allOk = !!lp.all_verified && rows.length > 0;
+      $("btnLoginNext").disabled = !allOk;
+      list.innerHTML = "";
+      if (!rows.length) {
+        list.innerHTML = `<p class="hint">暂无平台。请回第①步勾选并保存。</p>`;
+        return;
+      }
+      rows.forEach((p) => {
+        const div = document.createElement("div");
+        div.className = "login-card";
+        const isOk = p.status === "verified";
+        div.innerHTML = `
+          <div class="meta">
+            <strong>${esc(p.name)} <code style="color:#94a3b8;font-weight:400">${esc(p.id)}</code>
+              ${statusBadge(p.status)}</strong>
+            <small>${esc(p.message || "")}</small>
+            <small>登录页：${esc(p.login_url || "")}</small>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost btn-open" data-id="${esc(p.id)}" ${lp.busy ? "disabled" : ""}>打开登录页</button>
+            <button type="button" class="ok btn-verify" data-id="${esc(p.id)}" ${lp.busy ? "disabled" : ""}>本站已登录，校验</button>
+            <button type="button" class="ghost btn-force" data-id="${esc(p.id)}" title="自动校验失败时，确认你已登录可点此强制通过">强制确认已登录</button>
+          </div>`;
+        if (isOk) div.style.borderColor = "#166534";
+        list.appendChild(div);
+      });
+      list.querySelectorAll(".btn-open").forEach((btn) => {
+        btn.onclick = () => openLogin(btn.dataset.id);
+      });
+      list.querySelectorAll(".btn-verify").forEach((btn) => {
+        btn.onclick = () => verifyLogin(btn.dataset.id, false);
+      });
+      list.querySelectorAll(".btn-force").forEach((btn) => {
+        btn.onclick = () => verifyLogin(btn.dataset.id, true);
+      });
+    }
+
+    async function initLoginPanel() {
+      const plats = state.platforms || selectedPlatforms();
+      if (!plats.length) return;
+      // 仅当面板为空时 init，避免反复 reset 冲掉已通过状态
+      const cur = (state.login_panel && state.login_panel.platforms) || [];
+      const same =
+        cur.length === plats.length &&
+        plats.every((p) => cur.some((r) => r.id === p));
+      if (same && cur.length) return;
+      const r = await fetch("/api/login/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platforms: plats }),
+      });
+      try {
+        const j = await r.json();
+        state.login_panel = j;
+      } catch (e) {}
+    }
+
+    async function openLogin(pid) {
+      $("msgLogin").textContent = `正在打开 ${pid} 登录页…`;
+      $("msgLogin").className = "msg";
+      const r = await fetch("/api/login/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: pid }),
+      });
+      const j = await r.json();
+      state.login_panel = j;
+      renderLoginPanel();
+      if (!j.ok) {
+        $("msgLogin").textContent = j.error || "打开失败";
+        $("msgLogin").className = "msg err";
+      } else {
+        $("msgLogin").textContent = `已打开 ${pid}，请在浏览器登录后点「本站已登录，校验」`;
+        $("msgLogin").className = "msg ok";
+      }
+    }
+
+    async function verifyLogin(pid, force) {
+      $("msgLogin").textContent = force
+        ? `正在强制确认 ${pid}…`
+        : `正在校验 ${pid}（打开首页检测，请稍候）…`;
+      $("msgLogin").className = "msg";
+      try {
+        const r = await fetch("/api/login/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform: pid, force: !!force }),
+        });
+        const j = await r.json();
+        state.login_panel = j;
+        renderLoginPanel();
+        if (j.verified) {
+          $("msgLogin").textContent = `✓ ${pid} 已通过${j.reason ? "：" + j.reason : ""}`;
+          $("msgLogin").className = "msg ok";
+        } else {
+          $("msgLogin").textContent =
+            (j.reason || j.error || j.message || "校验未通过") +
+            "。若你确认已登录，可点「强制确认已登录」";
+          $("msgLogin").className = "msg err";
+        }
+      } catch (e) {
+        $("msgLogin").textContent = "校验请求失败：" + e;
+        $("msgLogin").className = "msg err";
+      }
+    }
+
+    function selectedPlatforms() {
+      return [...document.querySelectorAll("#platList input:checked")].map((x) => x.value);
+    }
+
+    function renderPlatforms(catalog, selected) {
+      const box = $("platList");
+      if (!box) {
+        console.error("platList 节点不存在");
+        return;
+      }
+      box.innerHTML = "";
+      const list = catalog || [];
+      if (!list.length) {
+        box.innerHTML = `<p class="hint" style="color:#fca5a5">未加载到平台列表，请刷新页面或重启 serve</p>`;
+        return;
+      }
+      list.forEach((p) => {
+        const lab = document.createElement("label");
+        lab.className = "plat";
+        const checked = (selected || []).includes(p.id) ? "checked" : "";
+        const type = p.cost ? "会员材料站" : "电商 / 工业品";
+        lab.innerHTML = `<input type="checkbox" value="${esc(p.id)}" ${checked}/>
+          <div><strong>${esc(p.name)}</strong><small>${type} · 登录后按所选顺序搜索</small></div>`;
+        box.appendChild(lab);
+      });
+    }
+
+    function renderFiles(files) {
+      const sel = $("existFiles");
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">-- 选择 data/input 内文件 --</option>';
+      (files || []).forEach((f) => {
+        const o = document.createElement("option");
+        o.value = f.name;
+        o.textContent = f.name;
+        sel.appendChild(o);
+      });
+      if (cur) sel.value = cur;
+    }
+
+    function renderPreview(items) {
+      const tb = $("previewBody");
+      if (!tb) return;
+      tb.innerHTML = "";
+      (items || []).slice(0, 40).forEach((it) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${esc(it.sheet)}</td><td>${it.row}</td><td>${esc(it.name)}</td>
+          <td>${esc(it.spec || "")}</td><td>${it.submit ?? ""}</td>`;
+        tb.appendChild(tr);
+      });
+    }
+
+    function renderResults(rows) {
+      const tb = $("resultBody");
+      if (!tb) return;
+      tb.innerHTML = "";
+      (rows || []).forEach((r) => {
+        const st = r.status || "";
+        let cls = "badge";
+        let label = st;
+        if (st === "full_k") { cls += " full"; label = "已凑满"; }
+        else if (st === "partial") { cls += " partial"; label = "部分"; }
+        else if (st === "need_review") { cls += " partial"; label = "候选待核"; }
+        else if (st === "no_match") { cls += " none"; label = "没查到"; }
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${esc(r.name || "")}</td><td><span class="${cls}">${label}</span></td>
+          <td>${r.quotes ?? 0}</td><td>${esc(r.message || "")}</td>`;
+        tb.appendChild(tr);
+      });
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[c]);
+    }
+
+    async function refresh() {
+      try {
+        const r = await fetch("/api/state");
+        state = await r.json();
+        // 平台列表：有 catalog 就渲染（列表为空也强制重绘一次）
+        if (state.catalog && state.catalog.length) {
+          if (!platformsRendered || !$("platList") || !$("platList").children.length) {
+            renderPlatforms(state.catalog, state.platforms || []);
+            platformsRendered = true;
+          }
+          if (state.quotes_per_item && $("quotes")) $("quotes").value = state.quotes_per_item;
+        }
+        renderFiles(state.input_files || []);
+        if ($("stFull")) $("stFull").textContent = state.full_k ?? 0;
+        if ($("stPart")) $("stPart").textContent = state.partial ?? 0;
+        if ($("stReview")) $("stReview").textContent = state.need_review ?? 0;
+        if ($("stNone")) $("stNone").textContent = state.no_match ?? 0;
+        if ($("stCur")) $("stCur").textContent = state.total ? `${state.current || 0}/${state.total}` : "-";
+        if ($("prog")) $("prog").style.width = (state.progress_pct || 0) + "%";
+        if ($("curName")) {
+          $("curName").textContent = state.current_name
+            ? `当前：${state.current_name} — ${state.message || ""}`
+            : (state.message || "");
+        }
+        if ($("log")) $("log").textContent = (state.logs || []).join("\n");
+        if (state.login_panel && step === 4) {
+          renderLoginPanel();
+        }
+        if (state.phase === "done") {
+          if ($("doneMsg")) $("doneMsg").textContent = state.message || "完成";
+          renderResults(state.item_results || []);
+          if (step === 5 || step === 4) setStep(6);
+        }
+        if (state.phase === "error" && $("msg4")) {
+          $("msg4").textContent = state.error || state.message || "出错";
+          $("msg4").className = "msg err";
+        }
+        if (state.phase === "running" && step < 5) {
+          setStep(5);
+        }
+      } catch (e) {
+        console.error("refresh failed", e);
+      }
+    }
+
+    on("btnCost", "onclick", () => {
+      document.querySelectorAll("#platList input").forEach((el) => {
+        el.checked = ["guangcai", "lingcai", "huixun", "jd", "1688"].includes(el.value);
+      });
+    });
+    on("btnClear", "onclick", () => {
+      document.querySelectorAll("#platList input").forEach((el) => (el.checked = false));
+    });
+
+    on("btnSave1", "onclick", async () => {
+      const platforms = selectedPlatforms();
+      if (!platforms.length) {
+        $("msg1").textContent = "请至少勾选一个平台";
+        $("msg1").className = "msg err";
+        return;
+      }
+      const body = {
+        platforms,
+        quotes_per_item: +($("quotes") && $("quotes").value) || 3,
+        limit: +($("limit") && $("limit").value) || 0,
+      };
+      setBusy("btnSave1", true, "正在保存…");
+      let j;
+      try {
+        const r = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        j = await r.json();
+      } catch (e) {
+        $("msg1").textContent = "保存失败：" + e;
+        $("msg1").className = "msg err";
+        setBusy("btnSave1", false);
+        return;
+      }
+      setBusy("btnSave1", false);
+      if (!j.ok && j.error) {
+        $("msg1").textContent = j.error;
+        $("msg1").className = "msg err";
+        return;
+      }
+      $("msg1").textContent = `已保存（仅这些站会登录）：${platforms.join("、")}，每条询 ${body.quotes_per_item} 个价`;
+      $("msg1").className = "msg ok";
+      state.platforms = platforms;
+      if (state.catalog && state.catalog.length) {
+        renderPlatforms(state.catalog, platforms);
+        platformsRendered = true;
+      } else if (j.catalog && j.catalog.length) {
+        state.catalog = j.catalog;
+        renderPlatforms(j.catalog, platforms);
+        platformsRendered = true;
+      }
+      setStep(2);
+      refresh();
+    });
+
+    on("btnBack1", "onclick", () => setStep(1));
+    on("btnBack2", "onclick", () => setStep(2));
+    on("btnBack3", "onclick", () => setStep(3));
+    on("btnBack4", "onclick", () => setStep(4));
+    on("btnToLogin", "onclick", async () => {
+      await initLoginPanel();
+      setStep(4);
+      await refresh();
+      renderLoginPanel();
+    });
+    on("btnLoginNext", "onclick", () => setStep(5));
+    on("btnLoginRefresh", "onclick", async () => {
+      const r = await fetch("/api/login/status");
+      const j = await r.json();
+      state.login_panel = j;
+      renderLoginPanel();
+    });
+    on("btnLoginClose", "onclick", async () => {
+      await fetch("/api/login/close", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if ($("msgLogin")) {
+        $("msgLogin").textContent = "已关闭登录浏览器（登录状态仍保留）";
+        $("msgLogin").className = "msg ok";
+      }
+      await refresh();
+      renderLoginPanel();
+    });
+
+    const drop = $("drop");
+    const file = $("file");
+    if (drop && file) {
+      drop.onclick = () => file.click();
+      drop.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); file.click(); }
+      };
+      drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("drag"); };
+      drop.ondragleave = () => drop.classList.remove("drag");
+      drop.ondrop = (e) => {
+        e.preventDefault();
+        drop.classList.remove("drag");
+        if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+      };
+      file.onchange = () => { if (file.files[0]) uploadFile(file.files[0]); };
+    }
+
+    async function uploadFile(f) {
+      $("msg2").textContent = "上传中…";
+      $("msg2").className = "msg";
+      const r = await fetch("/api/upload-file", {
+        method: "POST",
+        headers: { "X-Filename": encodeURIComponent(f.name), "Content-Type": "application/octet-stream" },
+        body: f,
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        $("msg2").textContent = j.error || "上传失败";
+        $("msg2").className = "msg err";
+        return;
+      }
+      $("msg2").textContent = "已上传：" + j.name;
+      $("msg2").className = "msg ok";
+      refresh();
+    }
+
+    on("existFiles", "onchange", async () => {
+      const name = $("existFiles").value;
+      if (!name) return;
+      await fetch("/api/select-input", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      $("msg2").textContent = "已选择：" + name;
+      $("msg2").className = "msg ok";
+    });
+
+    on("btnParse", "onclick", async () => {
+      $("msg2").textContent = "正在识别表头…";
+      setBusy("btnParse", true, "正在识别…");
+      let j;
+      try {
+        const r = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        j = await r.json();
+      } catch (e) {
+        $("msg2").textContent = "识表请求失败：" + e;
+        $("msg2").className = "msg err";
+        setBusy("btnParse", false);
+        return;
+      }
+      setBusy("btnParse", false);
+      if (!j.ok) {
+        $("msg2").textContent = j.error || "识表失败";
+        $("msg2").className = "msg err";
+        return;
+      }
+      $("parseSummary").textContent = `共 ${j.items || state.items_count || 0} 条材料；请抽查名称/规格是否正确`;
+      renderPreview(j.items_preview || state.items_preview);
+      await refresh();
+      renderPreview(state.items_preview);
+      $("parseSummary").textContent = `共 ${state.items_preview?.length || j.items || 0} 条材料（预览前 40 条）`;
+      setStep(3);
+    });
+
+    on("btnStart", "onclick", async () => {
+      $("msg4").textContent = "正在启动…";
+      $("msg4").className = "msg";
+      let plats = state.platforms || selectedPlatforms();
+      if (!plats.length) {
+        $("msg4").textContent = "未找到已选平台，请回到第一步勾选";
+        $("msg4").className = "msg err";
+        setStep(1);
+        return;
+      }
+      const body = {
+        platforms: plats,
+        quotes_per_item: +($("quotes") && $("quotes").value) || state.quotes_per_item || 3,
+        limit: +($("limit") && $("limit").value) || 0,
+        require_all_login: true,
+      };
+      setBusy("btnStart", true, "正在启动…");
+      let j;
+      try {
+        const r = await fetch("/api/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        j = await r.json();
+      } catch (e) {
+        $("msg4").textContent = "启动失败：" + e;
+        $("msg4").className = "msg err";
+        setBusy("btnStart", false);
+        return;
+      }
+      setBusy("btnStart", false);
+      if (!j.ok) {
+        $("msg4").textContent = j.error || "启动失败";
+        $("msg4").className = "msg err";
+        if (j.pending && j.pending.length) setStep(4);
+        return;
+      }
+      $("msg4").textContent = `已开始询价。平台：${(j.platforms || plats).join("、")}；已验证登录：${(j.verified || []).join("、") || "—"}`;
+      $("msg4").className = "msg ok";
+    });
+
+    on("btnRestart", "onclick", () => {
+      setStep(1);
+      platformsRendered = false;
+      refresh();
+    });
+
+    // 首次强制拉平台列表
+    refresh().then(() => {
+      if (state.catalog && state.catalog.length && $("platList") && !$("platList").children.length) {
+        renderPlatforms(state.catalog, state.platforms || []);
+        platformsRendered = true;
+      }
+    });
+    setInterval(refresh, 1500);
+  </script>
+</body>
+</html>

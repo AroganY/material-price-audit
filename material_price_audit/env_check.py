@@ -266,7 +266,7 @@ def ensure_or_exit(
     quiet: bool = True,
 ) -> None:
     """
-    日常 run/scrape：静默快检，OK 就一行。
+    日常 serve/parse：静默快检，OK 就一行。
     只有缺依赖才报错；--auto-install 只补缺，不升级。
     """
     r = check_environment(require_browser=require_browser, use_cache=True)

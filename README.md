@@ -1,163 +1,122 @@
-# material-price-audit · 材料询价核价工具
+# Material Price Audit · 材料询价助手
 
-> **给造价审核用的「有依据核价」工具**  
-> 施工单位报多少，就以报送价为上限；网上能查到的，自动给更低的审定参考价，并留下可点开的依据链接。
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22C55E.svg)](./LICENSE)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://www.python.org/)
+把造价员逐条执行的“搜索材料 → 核对名称规格 → 抄价 → 写 Excel”，变成一个浏览器向导。
 
----
+上传无需固定模板的询价 Excel，选择平台并登录后，程序会逐条搜索并导出多价比价结果。名称或任一关键规格对不上时，正式价格保持为空；找到相似结果但证据不足时，只进入“规格待核”，不会冒充合格报价。
 
-## 先看哪个文档？
+## 当前能力
 
-| 你是谁 | 打开这个 |
-|--------|----------|
-| **造价员 / 审核员（推荐先看）** | **[给造价人员-怎么用.md](./给造价人员-怎么用.md)** |
-| **想用网页跟着点** | **[docs/index.html](./docs/index.html)**（双击用浏览器打开） |
-| 信息中心 / 开发 | [docs/USAGE.md](./docs/USAGE.md) |
-| 开源说明与合规 | [docs/OPEN_SOURCE.md](./docs/OPEN_SOURCE.md) |
-| 让 AI（Grok/Codex）带着做 | [AGENTS.md](./AGENTS.md) |
+- 自动识别名称、规格、品牌、单位、数量、报送价等常见列，不要求固定模板。
+- 只打开用户勾选的平台，勾选顺序就是询价优先级。
+- 每条材料可收集 1～10 个报价；当前站不足会继续下一个站。
+- 严格校验型号、尺寸、电压、功率、色温、防护等级、端口、联机/脱机和计价单位。
+- 输出来源价格、税口径、不含税参考价、商品标题、供应商和可点击证据链接。
+- 不完全匹配的候选单列待核；所有平台都无合格结果时标记“没查到”。
+- 生成 `rfq.xlsx`，用于继续向供应商询价。
+- 可选 LLM 只处理陌生表头和语义灰区，不能越过数值、型号、尺寸等硬规则。
 
----
+## 快速开始
 
-## 1. 解决什么问题？
-
-造价审核里，安装/装饰材料经常遇到：
-
-- 施工单位 **报送不含税单价** 偏高  
-- 自己百度、电商搜，**型号对不齐、截图乱、说不清依据**  
-- 经验「砍一刀」对方不服，**没有可追溯链接**
-
-本工具做的事很具体：
-
-```text
-询价 Excel（含报送价）
-    ↓
-登录广材网 / 慧讯网 / 领材网（等）自动查价
-    ↓
-输出：审定不含税单价（≤报送）+ 可点击依据链接
-    ↓
-查不到的 → 待询价表，发给供应商盖章
-```
-
-### 和「信息价 / 定额」的区别
-
-| 概念 | 干什么 |
-|------|--------|
-| 定额 / 信息价 | 计价依据、发布价、套用规则 |
-| **本工具** | **认质认价 / 材料询价审核底稿**：针对表里每一条材料找公开挂牌或信息站价，形成可核对的审定建议 |
-
----
-
-## 2. 审价规则（三句话）
-
-1. **有依据才填审定**——查不到同型号公开价，**宁可不填**，不编造。  
-2. **审定 ≤ 报送不含税单价**——施工单位报的是上限。  
-3. **含税挂牌会折成不含税**（默认 ÷1.13，可配置），再和报送价取低。
-
----
-
-## 3. 造价人怎么用（一键）
-
-> 白话版：**[给造价人员-怎么用.md](./给造价人员-怎么用.md)**  
-> 勾选平台页：**[docs/platform-select.html](./docs/platform-select.html)**
-
-| 步骤 | 做什么 |
-|------|--------|
-| ① | 询价表丢进 `data/input/`（**任意文件名**，如 `安装专业询价材料设备.xlsx`） |
-| ② | （可选）打开 `docs/platform-select.html` 勾选平台顺序 |
-| ③ | 执行下面 **一条命令**；浏览器弹出时登录即可 |
-| ④ | 打开 `data/output/result.xlsx` 核对 |
+要求 Python 3.10+，建议使用 Chrome 或 Chromium。
 
 ```bash
-# 环境自检+自动装依赖+登录等待+瀑布抓价+导出RFQ
-python -m material_price_audit run \
-  --platforms guangcai,huixun,lingcai,jd,1688 \
-  --auto-install \
-  --login-wait 90
-
-# 第一次建议先试 8 条
-python -m material_price_audit run --platforms guangcai,huixun,lingcai --limit 8 --auto-install --login-wait 90
-```
-
-**匹配规则：** 平台 A 的**详情页规格/型号匹配**才用 A；否则自动 B→C→…；全失败则不填审定，进 `rfq.xlsx`。
-
----
-
-## 4. 结果文件怎么用？
-
-| 文件 | 造价怎么用 |
-|------|------------|
-| `data/output/result.xlsx` | 主成果。先看 **「实抓汇总」**，点开详情链接存档 |
-| `data/output/rfq.xlsx` | 没查到的材料，发给厂家/经销商盖章回价 |
-| `data/output/evidence.json` | 技术底稿，一般不用打开 |
-
-和对方沟通时可说：
-
-> 审定价不高于贵司报送价；依据见结果表中的链接。  
-> 无公开价材料请按待询价表书面报价。
-
----
-
-## 5. 支持哪些网站？（URL 已核对）
-
-详见 **[docs/PLATFORMS.md](./docs/PLATFORMS.md)**。
-
-| ID | 名称 | 官网 / 登录 |
-|----|------|-------------|
-| `guangcai` | **广材网** | https://www.gldjc.com/ · 登录 https://www.gldjc.com/login |
-| `huixun` | **慧讯网**（RCC 瑞达恒） | 登录 https://services.iccchina.com/login · **不是**广材 |
-| `lingcai` | **领材网** | 登录 https://www.hylcw.cn/userInfo/index.html · **不是**广材 |
-| `jcnet` | 建材在线 | https://www.jc.net.cn/ |
-| `jd` / `1688` 等 | 电商 | 各自官网 |
-
-默认启用：`guangcai,huixun,lingcai,jd,1688`。
-
----
-
-## 6. 不想敲命令？让 AI 带你
-
-复制给 Grok / Codex / Claude：
-
-```text
-按 AGENTS.md 自动跑 material-price-audit：
-1) check --auto-install
-2) 询价表丢进 data/input/ 即可（任意文件名，不必叫 inquiry.xlsx；没有就说一声）
-3) run --platforms guangcai,huixun,lingcai,jd,1688 --auto-install --login-wait 90
-不要一步步碎问。瀑布匹配：详情规格对上才用该平台，否则自动下一站。
-```
-
-```bash
-bash examples/agent_bootstrap.sh guangcai,huixun,lingcai,jd,1688
-# 试跑 8 条：
-bash examples/agent_bootstrap.sh guangcai,huixun,lingcai 8
-```
-
----
-
-## 7. 第一次安装（信息中心代劳）
-
-```bash
+git clone https://github.com/AroganY/material-price-audit.git
 cd material-price-audit
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e .
 python -m playwright install chromium
-python -m material_price_audit check
-python -m material_price_audit init --platforms guangcai,huixun,lingcai
+python -m material_price_audit serve
 ```
 
-网页引导：浏览器打开 `docs/index.html`。
+浏览器会自动打开 `http://127.0.0.1:8765/`。之后只在页面操作：
 
----
+1. 勾选平台并调整优先级。
+2. 设置每条材料需要几个价格。
+3. 上传或选择 Excel，确认识表结果。
+4. 分站打开登录窗口并完成校验。
+5. 开始询价，完成后下载结果 Excel 和 RFQ。
 
-## 8. 开源说明
+不需要把表头改成固定模板，也不需要为每次任务拼一长串命令。
 
-- 协议：**MIT**（[LICENSE](./LICENSE)）  
-- 介绍与合规：[docs/OPEN_SOURCE.md](./docs/OPEN_SOURCE.md)  
-- **请勿上传**：登录目录 `.browser-profile/`、真实项目询价表与核价结果  
+## 维护中的平台
 
----
+| ID | 平台 | 专用适配 | 说明 |
+|---|---|---:|---|
+| `guangcai` | 广材网 | 是 | 会员市场价与厂家报价行 |
+| `lingcai` | 领材网 | 是 | 市场价结果行；已处理双重 URL 解码 |
+| `huixun` | 慧讯网 | 是 | SPA 产品库，使用页面搜索框 |
+| `jd` | 京东 | 是 | 商品列表与限流检测 |
+| `1688` | 1688 | 是 | GBK 搜索编码、详情价与风控检测 |
 
-## 一句话总结
+网站会改版，也可能要求验证码或限制访问。适配器遇到登录失效、验证码或访问频繁时会停止当前站，不会把异常页当成“0 条结果”连续刷新。平台细节见 [docs/PLATFORMS.md](./docs/PLATFORMS.md)。
 
-**把「报送材料价」变成「带链接的审定参考价」；查不到的，自动列出给供应商询价——专为造价审核底稿服务。**
+## 匹配和收价规则
+
+```text
+Excel 材料行
+  → 生成“原始名称优先”的搜索词
+  → 按用户勾选顺序搜索平台
+  → 从同一商品/厂家报价行提取名称、规格、价格和单位
+  → strict_name_spec_match 校验全部硬规格
+      ├─ 全部满足：写入正式价
+      ├─ 无冲突但证据不足：只写入待核候选
+      └─ 型号/数值/语义冲突：拒绝
+  → 未凑满 K 个价格时继续下一平台
+```
+
+程序不会根据报送价“猜”一个市场价，也不会让 LLM 放行硬规格冲突。详情见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
+
+## 输出
+
+运行数据默认写入：
+
+| 文件 | 内容 |
+|---|---|
+| `data/output/result.xlsx` | Sheet `询价比价结果`，包含价 1～K、税口径、来源、供应商和链接 |
+| `data/output/rfq.xlsx` | 未凑满 K 个合格价的材料 |
+| `data/output/evidence.json` | 每次搜索、拒绝原因和证据的机器可读记录 |
+| `data/user/settings.json` | 用户勾选的平台和每条目标价数 |
+
+真实询价表、结果、登录 Cookie 和用户设置均已在 `.gitignore` 中排除。
+
+## 可选配置
+
+程序无需 `config.yaml` 也能运行。需要自定义税率、浏览器或 LLM 时：
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+LLM 默认关闭。开启前配置 `OPENAI_API_KEY`，也可通过兼容 OpenAI Chat Completions 的 `api_base` 接入其它服务。启用后，表头预览或待核材料证据会发送到该接口；涉及保密项目时请保持关闭。即使 LLM 不可用，规则识表和严格匹配仍能运行。
+
+## 开发
+
+```bash
+pip install -e ".[dev]"
+pytest
+python -m material_price_audit parse --no-llm
+```
+
+核心模块：
+
+- `schema_map.py` / `normalize.py`：识表与标准材料行
+- `matching.py`：严格名称规格判定
+- `platforms.py`：平台注册和搜索适配器
+- `inquiry.py`：跨平台瀑布询价编排
+- `export_quotes.py`：结果与 RFQ 导出
+- `webapp/`：浏览器向导、登录面板和后台任务
+
+贡献指南见 [CONTRIBUTING.md](./CONTRIBUTING.md)，安全问题见 [SECURITY.md](./SECURITY.md)。
+
+## 合规与边界
+
+- 只使用你有权访问的账号，并遵守平台服务协议、robots 规则和当地法律。
+- 保持正常访问节奏，不绕过验证码、付费权限或其它访问控制。
+- 输出是询价与审核底稿，不构成最终造价咨询执业意见。
+- 零售价、批发价、地区价、税费和运费口径不同，正式采用前必须点击证据链接复核。
+
+本项目采用 [MIT License](./LICENSE)。

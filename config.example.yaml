@@ -3,39 +3,30 @@
 pricing:
   tax_divisor: 1.13
   never_exceed_submit: true
-  open_detail: true
   min_title_score: 1
-  platform_strategy: waterfall
-  detail_match_min_score: 0.55
+
+inquiry:
+  quotes_per_item: 3
+  # side_sheet | append_cols | both
+  write_back_mode: side_sheet
+
+# 默认关闭；开启后只辅助陌生表头和语义灰区，不参与定价或放宽硬规格
+llm:
+  enabled: false
+  api_base: ""   # 兼容 OpenAI 协议，如 https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+  model: gpt-4o-mini
+  use_for: [schema, match_review]
 
 browser:
   channel: chrome
   headless: false
-  # 登录自动检测的超时上限（秒）；检测到成功立刻继续，不会固定傻等
   login_timeout_seconds: 180
-  login_wait_seconds: 180  # 兼容旧字段，同 timeout
   page_timeout_ms: 60000
   between_items_sleep: 1.2
 
 platforms:
-  # 空 = 尚未选择。请先：
-  #   python -m material_price_audit select-platforms
-  # 或 run --platforms guangcai,jd
-  # 登录页只会打开你选的站。
+  # 平台和优先级由浏览器向导保存；这里仅作为首次运行的可选预设。
   enabled: []
-  # 示例（用户选完后才会有内容）：
-  # enabled:
-  #   - guangcai     # 登录 https://www.gldjc.com/login
-  #   - huixun       # 登录 https://services.iccchina.com/login
-  #   - lingcai      # 登录 https://www.hylcw.cn/userInfo/index.html
-  #   - jd
+  # 可选的通用平台定义，格式见 docs/PLATFORMS.md。
   definitions: {}
-
-excel:
-  submit_price_headers: [报送不含税单价, 报送单价, 投标单价]
-  audit_price_headers: [审定不含税单价, 审定单价]
-  name_headers: [材料名称, 名称, 设备名称]
-  spec_headers: [规格、型号, 规格型号, 规格, 型号]
-  unit_headers: [单位]
-  qty_headers: [数量]
-  brand_headers: [产地、品牌及特殊要求, 品牌, 产地品牌]

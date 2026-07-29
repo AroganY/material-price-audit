@@ -7,8 +7,6 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-from urllib.parse import quote
 
 
 def parse_price(text: str | None) -> float | None:
@@ -32,36 +30,152 @@ def score_title(title: str, must: list[str]) -> int:
     return sum(1 for m in must if m and m.lower() in t)
 
 
+def clean_profile_locks(profile_dir: Path) -> list[str]:
+    """
+    清理 Chromium 残留锁文件（SingletonLock 等）。
+    上一实例未退出 / 登录面板与询价抢同一 profile 时会出现。
+    """
+    removed: list[str] = []
+    profile_dir = Path(profile_dir)
+    if not profile_dir.exists():
+        return removed
+    for name in (
+        "SingletonLock",
+        "SingletonSocket",
+        "SingletonCookie",
+        "lockfile",
+        ".parentlock",
+    ):
+        p = profile_dir / name
+        try:
+            if p.exists() or p.is_symlink():
+                p.unlink()
+                removed.append(name)
+        except Exception:
+            pass
+    return removed
+
+
+def kill_stale_profile_browsers(profile_dir: Path) -> int:
+    """尽量结束占用该 user-data-dir 的 Chromium（仅匹配本项目 profile 路径）。"""
+    import subprocess
+
+    target = str(Path(profile_dir).resolve())
+    killed = 0
+    try:
+        # macOS / Linux
+        out = subprocess.check_output(["ps", "ax", "-o", "pid=,command="], text=True)
+    except Exception:
+        return 0
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if target not in line:
+            continue
+        if "chrome" not in line.lower() and "chromium" not in line.lower():
+            continue
+        # 避免误杀本 shell
+        try:
+            pid_s = line.split(None, 1)[0]
+            pid = int(pid_s)
+        except Exception:
+            continue
+        try:
+            import os
+            import signal
+
+            os.kill(pid, signal.SIGTERM)
+            killed += 1
+        except Exception:
+            pass
+    if killed:
+        import time as _t
+
+        _t.sleep(0.8)
+        # 仍活着的强制杀
+        try:
+            out2 = subprocess.check_output(["ps", "ax", "-o", "pid=,command="], text=True)
+            for line in out2.splitlines():
+                if target not in line:
+                    continue
+                if "chrome" not in line.lower() and "chromium" not in line.lower():
+                    continue
+                try:
+                    pid = int(line.split(None, 1)[0])
+                    import os
+                    import signal
+
+                    os.kill(pid, signal.SIGKILL)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        _t.sleep(0.3)
+    return killed
+
+
 def launch_context(profile_dir: Path, channel: str = "chrome", headless: bool = False):
+    """
+    启动持久化浏览器。
+    若 profile 被占用：先关残留进程 → 清 SingletonLock → 重试。
+    """
     from playwright.sync_api import sync_playwright
 
+    profile_dir = Path(profile_dir)
     profile_dir.mkdir(parents=True, exist_ok=True)
-    pw = sync_playwright().start()
-    kwargs = dict(
-        user_data_dir=str(profile_dir),
-        headless=headless,
-        viewport={"width": 1400, "height": 900},
-        locale="zh-CN",
-        args=["--disable-blink-features=AutomationControlled"],
-    )
-    try:
-        context = pw.chromium.launch_persistent_context(channel=channel, **kwargs)
-    except Exception:
-        context = pw.chromium.launch_persistent_context(**kwargs)
-    page = context.pages[0] if context.pages else context.new_page()
-    return pw, context, page
 
+    def _do_launch(pw):
+        kwargs = dict(
+            user_data_dir=str(profile_dir.resolve()),
+            headless=headless,
+            viewport={"width": 1400, "height": 900},
+            locale="zh-CN",
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        try:
+            return pw.chromium.launch_persistent_context(channel=channel, **kwargs)
+        except Exception:
+            return pw.chromium.launch_persistent_context(**kwargs)
 
-def wait_user(msg: str, seconds: int, non_interactive: bool) -> None:
-    """Legacy helper. Prefer wait_for_login_agent for platform logins."""
-    print(msg)
-    if non_interactive:
-        if seconds and seconds > 0:
-            time.sleep(seconds)
-        else:
-            time.sleep(0.2)
-    else:
-        input("完成后按回车 Continue > ")
+    last_err: Exception | None = None
+    for attempt in range(3):
+        pw = sync_playwright().start()
+        try:
+            context = _do_launch(pw)
+            page = context.pages[0] if context.pages else context.new_page()
+            return pw, context, page
+        except Exception as e:
+            last_err = e
+            try:
+                pw.stop()
+            except Exception:
+                pass
+            msg = str(e).lower()
+            busy = (
+                "singleton" in msg
+                or "profile is already in use" in msg
+                or "processsingleton" in msg
+                or "singletonlock" in msg
+            )
+            print(f"[browser] 启动失败 (attempt {attempt+1}/3): {type(e).__name__}: {e}")
+            if busy or attempt < 2:
+                n = kill_stale_profile_browsers(profile_dir)
+                removed = clean_profile_locks(profile_dir)
+                print(
+                    f"[browser] 释放 profile：killed≈{n} 进程，"
+                    f"清理锁文件={removed or '无'}"
+                )
+                import time as _t
+
+                _t.sleep(0.6)
+            else:
+                break
+    raise RuntimeError(
+        f"无法启动浏览器（profile 可能仍被占用）: {last_err}\n"
+        f"请关闭所有询价相关 Chrome 窗口后重试，或删除锁文件：\n"
+        f"  rm -f '{profile_dir}/SingletonLock' '{profile_dir}/SingletonSocket'"
+    ) from last_err
 
 
 # 仅 URL 判定登录态 —— 禁止狂扫 DOM（会触发 SPA 反复重绘/像刷新）
@@ -82,13 +196,6 @@ _LOGIN_URL_MARKERS = (
 def _safe_url(page) -> str:
     try:
         return page.url or ""
-    except Exception:
-        return ""
-
-
-def _safe_title(page) -> str:
-    try:
-        return page.title() or ""
     except Exception:
         return ""
 
@@ -123,11 +230,6 @@ def url_left_login(start_url: str, cur_url: str, platform_id: str = "") -> bool:
         if "hylcw.cn" in c and "/login" not in c:
             return not url_looks_like_login(c)
     return False
-
-
-def page_looks_like_login(page) -> bool:
-    """URL-only（兼容旧调用）。禁止扫 password 控件。"""
-    return url_looks_like_login(_safe_url(page))
 
 
 def page_looks_logged_in(page, platform_id: str = "", login_url: str = "") -> bool:
@@ -264,120 +366,112 @@ def wait_for_login_agent(
     return "timeout"
 
 
-# 兼容旧名
-def wait_until_logged_in(
-    page,
-    *,
-    platform_id: str,
-    name: str,
-    login_url: str,
-    timeout_s: int = 600,
-    poll_ms: int = 1500,
-    package_root: Path | None = None,
-) -> str:
-    return wait_for_login_agent(
-        page,
-        platform_id=platform_id,
-        name=name,
-        login_url=login_url,
-        package_root=package_root,
-        timeout_s=timeout_s,
-        poll_s=max(0.5, poll_ms / 1000.0),
-        allow_stdin=True,
+_DETAIL_SCOPE_SELECTORS: dict[str, tuple[str, ...]] = {
+    "jd": (
+        ".sku-name", "#detail .p-parameter", "#detail .Ptable", ".product-detail",
+        "[class*='parameter']", "[class*='specification']",
+    ),
+    "1688": (
+        "h1", ".title-text", ".offer-title", ".od-pc-offer-title",
+        "#mod-detail-attributes", ".offer-attr-list", ".detail-attributes",
+        "[class*='attribute']", "[class*='sku-info']",
+    ),
+    "lingcai": (
+        "h1", ".material-detail", ".product-detail", ".detail-content",
+        "[class*='parameter']", "[class*='specification']",
+    ),
+    "huixun": (
+        "h1", ".product-detail", ".detail-content", ".product-info",
+        "[class*='parameter']", "[class*='specification']",
+    ),
+}
+
+_DETAIL_PRICE_SELECTORS: dict[str, tuple[str, ...]] = {
+    "jd": (".p-price .price", ".summary-price-wrap .p-price span.price", "#jd-price"),
+    "1688": (
+        ".module-od-main-price", ".od-price-container", ".price-component",
+        ".price-comp", ".price-info", ".price-text", ".od-pc-offer-price", "[class*='offer-price']",
+        "[class*='price-range']",
+    ),
+    "lingcai": (".material-price", ".product-price", ".price"),
+    "huixun": (".product-price", ".unit-price", ".price"),
+}
+
+
+def _scoped_detail_text(page, platform: str) -> str:
+    selectors = _DETAIL_SCOPE_SELECTORS.get(platform) or (
+        "h1", ".product-detail", ".detail-content", ".product-info",
+        "[class*='parameter']", "[class*='specification']",
     )
-
-
-def jd_search(page, query: str, must: list[str], timeout_ms: int, min_score: int = 1):
-    url = f"https://search.jd.com/Search?keyword={quote(query)}&enc=utf-8"
-    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    page.wait_for_timeout(2500)
-    if "登录" in (page.title() or ""):
-        return None, "need_login_jd"
-
-    goods = page.eval_on_selector_all(
-        "li.gl-item",
-        """els => els.slice(0, 15).map(el => {
-            const sku = el.getAttribute('data-sku') || '';
-            const a = el.querySelector('.p-name a, a[href*="item.jd.com"]');
-            const priceEl = el.querySelector('.p-price i, .p-price em');
-            const nameEl = el.querySelector('.p-name em, .p-name a');
-            return {
-              sku,
-              href: a ? a.href : (sku ? ('https://item.jd.com/' + sku + '.html') : ''),
-              priceText: priceEl ? priceEl.innerText : '',
-              name: nameEl ? nameEl.innerText.replace(/\\s+/g,' ').trim() : ''
-            };
-        })""",
-    )
-    cands = []
-    for g in goods or []:
-        name = g.get("name") or ""
-        price = parse_price(g.get("priceText"))
-        href = g.get("href") or ""
-        sc = score_title(name + " " + href, must)
-        if price and href and "item.jd.com" in href and sc >= min_score:
-            cands.append(
-                {
-                    "title": name[:160],
-                    "price_tax": price,
-                    "url": href.split("?")[0],
-                    "sku": g.get("sku") or "",
-                    "score": sc,
-                    "platform": "jd",
+    try:
+        return page.evaluate(
+            """(selectors) => {
+              const parts = [], seen = new Set();
+              for (const selector of selectors) {
+                for (const el of document.querySelectorAll(selector)) {
+                  const text = (el.innerText || el.textContent || '')
+                    .replace(/\\s+/g, ' ').trim();
+                  if (!text || text.length < 2 || seen.has(text)) continue;
+                  // 推荐/猜你喜欢不属于当前 SKU 的证据。
+                  if (/猜你喜欢|相关推荐|看了又看|推荐商品/.test(text.slice(0, 20))) continue;
+                  seen.add(text);
+                  parts.push(text.slice(0, 1800));
+                  if (parts.join(' ').length >= 6000) break;
                 }
-            )
-    cands.sort(key=lambda x: (-x["score"], x["price_tax"]))
-    return (cands[0] if cands else None), "ok"
+                if (parts.join(' ').length >= 6000) break;
+              }
+              return parts.join(' | ').slice(0, 6000);
+            }""",
+            list(selectors),
+        ) or ""
+    except Exception:
+        return ""
 
 
-def s1688_search(page, query: str, must: list[str], timeout_ms: int, min_score: int = 1):
-    url = f"https://s.1688.com/selloffer/offer_search.htm?keywords={quote(query)}"
-    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    page.wait_for_timeout(3000)
-    if "login" in page.url.lower() or "登录" in (page.title() or ""):
-        return None, "need_login_1688"
+def _product_title(page, fallback: str = "") -> str:
+    try:
+        titles = page.evaluate(
+            """() => {
+              const nodes = document.querySelectorAll(
+                '.sku-name, .offer-title, .title-text, [class*="product-title"], [class*="offer-title"], h1'
+              );
+              const og = document.querySelector('meta[property="og:title"]');
+              const out = [...nodes].map(el => (el.innerText || '').replace(/\\s+/g, ' ').trim());
+              if (og?.content) out.push(og.content.replace(/\\s+/g, ' ').trim());
+              return out.filter(Boolean).slice(0, 30);
+            }"""
+        )
+        choices = [str(x).strip() for x in (titles or []) if str(x).strip()]
+        if fallback:
+            choices.append(fallback.strip())
+        # 商品标题通常比公司名/导航 h1 长；选最长且排除明显栏目名。
+        choices = [
+            x for x in choices
+            if x not in ("商品详情", "商品属性", "产品详情", "详情") and len(x) <= 260
+        ]
+        if choices:
+            return max(choices, key=len)[:180]
+    except Exception:
+        pass
+    try:
+        return (page.title() or fallback)[:180]
+    except Exception:
+        return fallback[:180]
 
-    cards = page.eval_on_selector_all(
-        'a[href*="detail.1688.com"]',
-        """els => {
-          const out=[], seen=new Set();
-          for (const a of els.slice(0, 40)) {
-            const href = a.href || '';
-            if (!href.includes('detail.1688.com') || seen.has(href)) continue;
-            seen.add(href);
-            let root = a;
-            for (let i=0;i<6;i++){ if(root.parentElement) root=root.parentElement; }
-            const text=(root.innerText||a.innerText||'').replace(/\\s+/g,' ').trim().slice(0,220);
-            out.push({href, text});
-          }
-          return out.slice(0, 20);
-        }""",
-    )
-    cands = []
-    for c in cards or []:
-        text = c.get("text") or ""
-        href = (c.get("href") or "").split("?")[0]
-        sc = score_title(text, must)
-        prices = re.findall(r"[¥￥]\s*(\d+\.?\d*)", text)
-        price = None
-        for p in prices:
-            v = float(p)
-            if 0.05 < v < 500000:
-                price = v
-                break
-        if price and href and sc >= min_score:
-            cands.append(
-                {
-                    "title": text[:160],
-                    "price_tax": price,
-                    "url": href,
-                    "sku": "",
-                    "score": sc,
-                    "platform": "1688",
-                }
-            )
-    cands.sort(key=lambda x: (-x["score"], x["price_tax"]))
-    return (cands[0] if cands else None), "ok"
+
+def _price_numbers(text: str) -> list[float]:
+    values: list[float] = []
+    raw = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", str(text or ""))
+    marked = re.findall(r"[¥￥]\s*(\d+(?:\.\d+)?)", raw)
+    source = marked or re.findall(r"(?<!\d)(\d+(?:\.\d+)?)(?=\s*元)", raw)
+    for value in source:
+        try:
+            number = float(value)
+            if 0.01 < number < 5_000_000 and number not in values:
+                values.append(number)
+        except Exception:
+            pass
+    return values
 
 
 def open_detail(
@@ -389,18 +483,17 @@ def open_detail(
     try:
         page.goto(cand["url"], wait_until="domcontentloaded", timeout=timeout_ms)
         page.wait_for_timeout(2500)
-        title = page.title() or ""
+        platform = str(cand.get("platform") or "")
+        title = _product_title(page, str(cand.get("title") or ""))
         price = None
-        selectors = list(extra_price_selectors or []) + [
-            ".p-price .price",
-            ".summary-price-wrap .p-price span.price",
-            "#jd-price",
-            ".price-text",
-            ".tm-price",
-            ".tb-rmb-num",
-            "#mainPrice",
-            "[class*='price']",
-        ]
+        price_text = ""
+        price_context = ""
+        selectors = list(_DETAIL_PRICE_SELECTORS.get(platform) or ())
+        # 只接受明确价格节点；[class*=price] 太宽，会抓到推荐商品或划线价。
+        selectors.extend(
+            s for s in (extra_price_selectors or [])
+            if s and "[class*='price']" not in s and '[class*="price"]' not in s
+        )
         # de-dup preserve order
         seen = set()
         ordered = []
@@ -412,76 +505,58 @@ def open_detail(
             try:
                 el = page.query_selector(sel)
                 if el:
-                    price = parse_price(el.inner_text())
+                    price_text = re.sub(
+                        r"(?<=\d)\s*\.\s*(?=\d)", ".", el.inner_text() or ""
+                    ).strip()
+                    price = parse_price(price_text)
                     if price:
+                        try:
+                            price_context = (el.evaluate(
+                                "e => (e.parentElement?.innerText || e.innerText || '').replace(/\\s+/g, ' ').trim()"
+                            ) or price_text)[:500]
+                        except Exception:
+                            price_context = price_text[:500]
                         break
             except Exception:
                 pass
-        if not price:
-            body = page.inner_text("body")[:4000]
-            m = re.search(r"[¥￥]\s*(\d+\.?\d*)", body)
-            if m:
-                price = parse_price(m.group(1))
+        body = _scoped_detail_text(page, platform)
         if price:
             cand["price_tax"] = price
             cand["detail_confirmed"] = True
+            cand["price_source"] = "detail"
         else:
             cand["detail_confirmed"] = False
-        cand["detail_title"] = title[:120]
+            # 保留搜索列表上的价，但明确标记来源，绝不从整页第一个 ¥ 乱猜。
+            price = parse_price(str(cand.get("price_tax") or ""))
+            cand["price_source"] = "search_list" if price else "missing"
+        values = _price_numbers(price_context or price_text)
+        cand["price_ambiguous"] = len(values) > 1
+        cand["price_text"] = price_text or str(cand.get("price_tax") or "")
+        cand["price_context"] = price_context
+        moq = re.search(r"(\d+(?:\.\d+)?)\s*(件|个|套|台|米|m|kg|吨)\s*起", price_context, re.I)
+        cand["moq"] = (moq.group(0) if moq else "")
+        cand["detail_title"] = title[:180]
+        cand["detail_text"] = body
         cand["final_url"] = page.url
         cand["captured_at"] = datetime.now().isoformat(timespec="seconds")
+        # 厂家 / 电话 / 联系人
+        try:
+            from .login_gate import extract_contact_fields
+
+            extra = extract_contact_fields(body, title)
+            cand["supplier"] = extra.get("supplier") or cand.get("supplier") or ""
+            cand["contact"] = extra.get("contact") or ""
+            cand["phone"] = extra.get("phone") or ""
+            cand["spec_seen"] = extra.get("spec_seen") or ""
+            if not cand.get("unit"):
+                unit = re.search(
+                    r"(?:计价单位|单位)\s*[:：]\s*([^\s|，,；;]{1,8})", body
+                )
+                cand["unit"] = unit.group(1) if unit else ""
+        except Exception:
+            pass
     except Exception as e:
         cand["detail_error"] = str(e)
         cand["detail_confirmed"] = False
         cand["captured_at"] = datetime.now().isoformat(timespec="seconds")
     return cand
-
-
-def pick_manual(cands: list[dict], query: str) -> dict | None:
-    if not cands:
-        return None
-    print(f"\n候选 / Candidates for: {query}")
-    for i, c in enumerate(cands[:10], 1):
-        plat = c.get("platform", "?")
-        print(f"  {i}. [{plat}] ¥{c['price_tax']} score={c.get('score')} | {c['title'][:60]}")
-        print(f"     {c['url']}")
-    print("  0. skip")
-    sel = input("选择序号 Select > ").strip()
-    if sel == "0":
-        return None
-    idx = int(sel) - 1 if sel.isdigit() else 0
-    return cands[idx] if 0 <= idx < len(cands) else cands[0]
-
-
-def to_evidence(
-    item_key: str,
-    item: Any,
-    cand: dict,
-    tax_divisor: float,
-    never_exceed: bool,
-) -> dict:
-    from .excel_io import r2
-
-    ex = r2(float(cand["price_tax"]) / tax_divisor)
-    submit = float(item.submit)
-    audit = min(ex, submit) if never_exceed else ex
-    return {
-        "key": item_key,
-        "status": "verified",
-        "sheet": item.sheet,
-        "row": item.row,
-        "name": item.name,
-        "spec": item.spec[:100],
-        "submit": submit,
-        "qty": item.qty,
-        "platform": cand.get("platform"),
-        "title": cand.get("detail_title") or cand.get("title"),
-        "url": cand.get("final_url") or cand.get("url"),
-        "price_tax": cand["price_tax"],
-        "price_ex_tax": ex,
-        "audit": audit,
-        "detail_confirmed": bool(cand.get("detail_confirmed")),
-        "captured_at": cand.get("captured_at"),
-        "sku": cand.get("sku"),
-        "match_score": cand.get("score"),
-    }

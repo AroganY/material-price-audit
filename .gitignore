@@ -8,6 +8,10 @@ build/
 .venv/
 venv/
 .env
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Browser profile (contains login cookies — never commit)
 .browser-profile/
@@ -19,6 +23,8 @@ data/output/*
 data/input/*
 !data/input/.gitkeep
 !data/input/README.md
+data/user/
+data/mapping-cache/
 
 # Local machine config (commit config.example.yaml only)
 config.yaml
@@ -29,13 +35,7 @@ config.yaml
 .idea/
 .vscode/
 *.xlsx
-!~$*.xlsx
+*.xlsm
+*.xls
 evidence*.json
 *.log
-
-# Keep examples structure
-!examples/**
-
-# Python cache under package
-material_price_audit/__pycache__/
-**/__pycache__/

@@ -1,21 +1,64 @@
 """
 Multi-platform registry.
 
-Users can:
-  - pick built-in platforms: jd / 1688 / taobao / tmall / zkh / suning
-  - add custom sites in config.yaml under platforms.definitions
-  - login to only the platforms they choose
+Maintained built-ins: Guangcai, Lingcai, Huixun, JD, and 1688.
+Additional sites can be registered in ``config.yaml`` with the generic adapter.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import quote
+from urllib.parse import quote, quote_from_bytes
 
 from .scraper import parse_price, score_title
+
+
+def _quote_1688_query(query: str) -> str:
+    """1688 搜索入口按 GBK 解码 keywords；UTF-8 会显示成“鍒嗘帶鍣�”。"""
+    raw = (query or "").encode("gbk", errors="replace")
+    return quote_from_bytes(raw, safe="")
+
+
+def _quote_lingcai_query(query: str) -> str:
+    """领材前端会连续 decode 两次，因此 gjz 必须双重 UTF-8 百分号编码。"""
+    return quote(quote(query or "", safe=""), safe="")
+
+
+def _normalize_1688_price_text(text: str | None) -> str:
+    """Join a visually split decimal without joining price and minimum quantity."""
+    raw = str(text or "").replace("\xa0", " ")
+    return re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", raw)
+
+
+def _page_1688_captcha(page) -> str | None:
+    """识别阿里风控页，不能把验证码页当成正常的 0 条结果。"""
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    try:
+        title = page.title() or ""
+    except Exception:
+        title = ""
+    try:
+        body = (page.inner_text("body") or "")[:2000]
+    except Exception:
+        body = ""
+    text = f"{title}\n{body}"
+    if "/punish" in url or "_____tmd_____" in url or "x5secdata=" in url:
+        return "1688 风控拦截"
+    for marker in (
+        "验证码拦截",
+        "拖动下方滑块",
+        "请按住滑块",
+        "通过验证以确保正常访问",
+        "安全验证",
+    ):
+        if marker in text:
+            return marker
+    return None
 
 
 @dataclass
@@ -60,62 +103,26 @@ BUILTIN: dict[str, PlatformSpec] = {
         name="慧讯网",
         # 用户核实登录页：/login（不是 apply_trial）
         login_url="https://services.iccchina.com/login",
-        search_url_template="https://services.iccchina.com/iccHome",
-        handler="generic",
+        search_url_template="https://services.iccchina.com/products",
+        handler="huixun",
         item_link_contains="iccchina.com",
         item_link_selector='a[href*="iccchina.com"]',
         detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
         same_login_as="",
-        notes="登录 https://services.iccchina.com/login · 首页 iccHome · RCC瑞达恒，非广材网",
+        notes="登录 https://services.iccchina.com/login · 产品库 /products · RCC瑞达恒",
     ),
     "lingcai": PlatformSpec(
         id="lingcai",
         name="领材网",
         # 用户核实登录/用户中心：/userInfo/index.html（不是 lcIndex 首页）
         login_url="https://www.hylcw.cn/userInfo/index.html",
-        search_url_template="https://www.hylcw.cn/lcIndex.html?keyword={query}",
-        handler="generic",
+        search_url_template="https://www.hylcw.cn/marketPrice/so.html?index=0&type=1&gjz={query}",
+        handler="lingcai",
         item_link_contains="hylcw.cn",
         item_link_selector='a[href*="hylcw.cn"]',
         detail_price_selectors=[".price", "[class*='price']", "[class*='Price']"],
         requires_config=False,
-        notes="登录 https://www.hylcw.cn/userInfo/index.html · 首页 lcIndex · 域名 hylcw.cn · 非广材网",
-    ),
-    "gldjc_hangqing": PlatformSpec(
-        id="gldjc_hangqing",
-        name="广材行情",
-        login_url="https://hangqing.gldjc.com/",
-        search_url_template="https://hangqing.gldjc.com/",
-        handler="generic",
-        item_link_contains="hangqing.gldjc.com",
-        item_link_selector='a[href*="hangqing.gldjc.com"]',
-        detail_price_selectors=["[class*='price']"],
-        notes="实测可打开 hangqing.gldjc.com · 钢材等行情",
-        require_login_hint=False,
-    ),
-    "gldjc_xunjia": PlatformSpec(
-        id="gldjc_xunjia",
-        name="广材询价",
-        login_url="https://xunjia.gldjc.com/",
-        search_url_template="https://xunjia.gldjc.com/",
-        handler="generic",
-        item_link_contains="xunjia.gldjc.com",
-        item_link_selector='a[href*="xunjia"]',
-        detail_price_selectors=["[class*='price']"],
-        notes="实测可打开 xunjia.gldjc.com · 人工询价入口",
-        require_login_hint=True,
-    ),
-    "jcnet": PlatformSpec(
-        id="jcnet",
-        name="建材在线",
-        login_url="https://www.jc.net.cn/",
-        search_url_template="https://www.jc.net.cn/",
-        handler="generic",
-        item_link_contains="jc.net.cn",
-        item_link_selector='a[href*="jc.net.cn"]',
-        detail_price_selectors=["[class*='price']", ".price"],
-        notes="实测标题含「建材在线-建材信息价格服务」· jc.net.cn",
-        require_login_hint=True,
+        notes="登录/用户中心 /userInfo/index.html · 市场价搜索 /marketPrice/so.html",
     ),
     # ========== 电商 / 工业品 ==========
     "jd": PlatformSpec(
@@ -143,63 +150,10 @@ BUILTIN: dict[str, PlatformSpec] = {
         detail_price_selectors=[".price-text", ".price"],
         notes="批发价，常需登录可见",
     ),
-    "taobao": PlatformSpec(
-        id="taobao",
-        name="淘宝",
-        login_url="https://www.taobao.com/",
-        search_url_template="https://s.taobao.com/search?q={query}",
-        handler="generic",
-        item_link_contains="item.taobao.com",
-        item_link_selector='a[href*="item.taobao.com"]',
-        detail_price_selectors=[".tb-rmb-num", "[class*='Price']"],
-        notes="需登录；反爬较强",
-    ),
-    "tmall": PlatformSpec(
-        id="tmall",
-        name="天猫",
-        login_url="https://www.tmall.com/",
-        search_url_template="https://list.tmall.com/search_product.htm?q={query}",
-        handler="generic",
-        item_link_contains="detail.tmall.com",
-        item_link_selector='a[href*="detail.tmall.com"]',
-        detail_price_selectors=[".tm-price", "[class*='Price']"],
-        notes="需登录；反爬较强",
-    ),
-    "zkh": PlatformSpec(
-        id="zkh",
-        name="震坤行工业品",
-        login_url="https://www.zkh.com/",
-        search_url_template="https://www.zkh.com/search?keyword={query}",
-        handler="generic",
-        item_link_contains="zkh.com",
-        item_link_selector='a[href*="/product"], a[href*="item"]',
-        detail_price_selectors=["[class*='price']", ".price"],
-        notes="工业品超市，阀门/辅材常见",
-    ),
-    "suning": PlatformSpec(
-        id="suning",
-        name="苏宁易购",
-        login_url="https://www.suning.com/",
-        search_url_template="https://search.suning.com/{query}/",
-        handler="generic",
-        item_link_contains="product.suning.com",
-        item_link_selector='a[href*="product.suning.com"]',
-        detail_price_selectors=["#mainPrice", ".mainprice", "[class*='price']"],
-        notes="零售",
-    ),
-    "mysteel": PlatformSpec(
-        id="mysteel",
-        name="我的钢铁网",
-        login_url="https://www.mysteel.com/",
-        search_url_template="https://search.mysteel.com/search.html?searchKey={query}",
-        handler="generic",
-        item_link_contains="mysteel.com",
-        item_link_selector='a[href*="mysteel.com"]',
-        detail_price_selectors=["[class*='price']"],
-        notes="钢材行情入口（多为资讯价，需人工判断）",
-        require_login_hint=False,
-    ),
 }
+
+# Product UI order and the only built-ins covered by maintained adapters/tests.
+CORE_PLATFORM_IDS = ("guangcai", "lingcai", "huixun", "jd", "1688")
 
 
 def normalize_platform_id(pid) -> str:
@@ -213,12 +167,6 @@ def normalize_platform_id(pid) -> str:
         "alibaba": "1688",
         "ali": "1688",
         "阿里": "1688",
-        "淘宝": "taobao",
-        "天猫": "tmall",
-        "震坤行": "zkh",
-        "苏宁": "suning",
-        "钢材": "mysteel",
-        "我的钢铁网": "mysteel",
         # 造价材料站
         "广材": "guangcai",
         "广材网": "guangcai",
@@ -235,8 +183,6 @@ def normalize_platform_id(pid) -> str:
         "领财网": "lingcai",
         "lingcaiwang": "lingcai",
         "hylcw": "lingcai",
-        "广材行情": "gldjc_hangqing",
-        "广材询价": "gldjc_xunjia",
     }
     if p in aliases:
         return aliases[p]
@@ -286,169 +232,80 @@ def load_platform_registry(cfg: dict | None = None) -> dict[str, PlatformSpec]:
     return reg
 
 
-def resolve_enabled_platforms(
-    cfg: dict | None,
-    cli_platforms: str | None,
-    *,
-    allow_default: bool = False,
-) -> list[str]:
-    """
-    Priority:
-      1) CLI --platforms a,b,c
-      2) config platforms.enabled list
-      3) config platforms: [jd, 1688]  (legacy list form)
-      4) 默认空列表 —— 必须由用户选择，禁止偷偷全站登录
-         allow_default=True 时仅给 platforms 列表展示用，不给 run/scrape 当默认
-    """
-    if cli_platforms:
-        ids = [normalize_platform_id(x) for x in cli_platforms.split(",") if x.strip()]
-        return ids
-
-    cfg = cfg or {}
-    plats = cfg.get("platforms")
-    if isinstance(plats, list):
-        return [normalize_platform_id(x) for x in plats]
-    if isinstance(plats, dict):
-        enabled = plats.get("enabled") or plats.get("list") or []
-        if enabled:
-            return [normalize_platform_id(x) for x in enabled]
-    if allow_default:
-        return ["guangcai", "huixun", "lingcai", "jd", "1688"]
-    return []
-
-
-# 终端/网页勾选时展示的推荐顺序（不自动启用）
-SELECTABLE_PLATFORM_IDS = [
-    "guangcai",
-    "huixun",
-    "lingcai",
-    "jd",
-    "1688",
-    "zkh",
-    "taobao",
-    "tmall",
-    "jcnet",
-    "gldjc_hangqing",
-    "gldjc_xunjia",
-    "suning",
-    "mysteel",
-]
-
-
-def save_platforms_selected(path: Path, platform_ids: list[str]) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = "\n".join(normalize_platform_id(p) for p in platform_ids if str(p).strip())
-    path.write_text(body + ("\n" if body else ""), encoding="utf-8")
-
-
-def pick_platforms_interactive(
-    registry: dict[str, PlatformSpec] | None = None,
-    *,
-    preselected: list[str] | None = None,
-    prefer_dialog: bool = True,
-) -> list[str]:
-    """
-    优先弹窗勾选；弹窗失败再退回终端输入编号。
-    """
-    reg = registry or load_platform_registry({})
-    if prefer_dialog:
-        try:
-            from .platform_dialog import can_show_dialog, pick_platforms_dialog
-
-            if can_show_dialog():
-                print("[platforms] 打开选择平台弹窗…")
-                picked = pick_platforms_dialog(reg, preselected=preselected)
-                return picked  # [] = 用户取消
-            print("[platforms] 当前环境无法弹窗，改用终端选择")
-        except Exception as e:
-            print(f"[platforms] 弹窗失败，改用终端选择: {e}")
-
-    choices: list[tuple[str, PlatformSpec]] = []
-    for pid in SELECTABLE_PLATFORM_IDS:
-        if pid in reg:
-            choices.append((pid, reg[pid]))
-    for pid, spec in reg.items():
-        if pid not in {c[0] for c in choices}:
-            choices.append((pid, spec))
-
-    print("")
-    print("========== 选择要比价的平台（必选，只登录你勾的） ==========")
-    print("输入编号（逗号分隔）如 1,4,5   或 id 如 guangcai,jd")
-    print("没广材会员就不要选 guangcai；只选你能用的站。")
-    print("-" * 60)
-    for i, (pid, spec) in enumerate(choices, 1):
-        mark = "*" if preselected and pid in preselected else " "
-        print(f" {mark}{i:>2}. {spec.name:<10}  {pid:<14}  {spec.login_url}")
-    print("-" * 60)
-    try:
-        raw = input("你的选择 > ").strip()
-    except EOFError:
-        return []
-    if not raw:
-        return []
-
-    selected: list[str] = []
-    for part in raw.replace("，", ",").replace(" ", ",").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if part.isdigit():
-            idx = int(part)
-            if 1 <= idx <= len(choices):
-                selected.append(choices[idx - 1][0])
-            continue
-        pid = normalize_platform_id(part)
-        if pid in reg:
-            selected.append(pid)
-        else:
-            print(f"  [忽略未知] {part}")
-    seen = set()
-    out = []
-    for p in selected:
-        if p not in seen:
-            seen.add(p)
-            out.append(p)
-    return out
-
-
-def list_platforms(cfg: dict | None = None) -> list[PlatformSpec]:
-    reg = load_platform_registry(cfg)
-    enabled = set(resolve_enabled_platforms(cfg, None))
-    # show all known, mark enabled in notes via order: enabled first
-    out = []
-    for pid in resolve_enabled_platforms(cfg, None):
-        if pid in reg:
-            out.append(reg[pid])
-    for pid, spec in reg.items():
-        if pid not in enabled:
-            out.append(spec)
-    return out
-
-
 # ---- search handlers ----
+
+def _jd_blocked_message(page) -> str | None:
+    """检测京东限流/风控文案。"""
+    try:
+        body = (page.inner_text("body") or "")[:1500]
+    except Exception:
+        body = ""
+    title = ""
+    try:
+        title = page.title() or ""
+    except Exception:
+        pass
+    text = f"{title}\n{body}"
+    keys = (
+        "访问频繁",
+        "无法搜索",
+        "请稍后再试",
+        "异常流量",
+        "操作过于频繁",
+        "访问太频繁",
+        "系统繁忙",
+        "验证码",
+        "安全验证",
+        "风险控制",
+    )
+    for k in keys:
+        if k in text:
+            return k
+    return None
+
 
 def _search_jd(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
     """
-    京东搜索。2026 新版列表已无 li.gl-item，改为 [data-sku] 卡片。
+    京东搜索。短词 + 等列表；命中「访问频繁」立即 rate_limited，禁止再刷。
     """
-    url = spec.search_url_template.format(query=quote(query))
+    q = (query or "").strip()[:40]
+    url = spec.search_url_template.format(query=quote(q))
     goods = []
-    for attempt in range(2):
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        page.wait_for_timeout(3500 if attempt == 0 else 4500)
-        cur = (page.url or "").lower()
-        title = page.title() or ""
-        if "passport" in cur or ("登录" in title and "商品搜索" not in title):
-            return None, "need_login"
-        goods = page.evaluate(
-            """() => {
-              return document.querySelectorAll('[data-sku], li.gl-item').length;
-            }"""
+    # 只打开 1 次；被限流就返回，绝不二次 goto 加重封禁
+    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    page.wait_for_timeout(4500)
+    try:
+        page.wait_for_selector("[data-sku], li.gl-item, .gl-i-wrap", timeout=6000)
+    except Exception:
+        pass
+
+    cur = (page.url or "").lower()
+    title = page.title() or ""
+    if "passport" in cur or ("登录" in title and "商品搜索" not in title and "京东" not in title):
+        return None, "need_login"
+
+    blocked = _jd_blocked_message(page)
+    if blocked:
+        print(f"  [jd] 风控限流：页面提示含「{blocked}」→ 本会话停止搜京东")
+        return None, "rate_limited"
+
+    goods_n = page.evaluate(
+        """() => {
+          return document.querySelectorAll('[data-sku], li.gl-item').length;
+        }"""
+    )
+    if not goods_n:
+        # 再等一次异步渲染（不再重新 goto）
+        page.wait_for_timeout(2500)
+        blocked = _jd_blocked_message(page)
+        if blocked:
+            print(f"  [jd] 风控限流：{blocked}")
+            return None, "rate_limited"
+        goods_n = page.evaluate(
+            """() => document.querySelectorAll('[data-sku], li.gl-item').length"""
         )
-        if goods and int(goods) > 0:
-            break
-        page.wait_for_timeout(1000)
+    if not goods_n:
+        return [], "empty_page"
 
     # 新版：div[data-sku]；旧版：li.gl-item
     goods = page.evaluate(
@@ -507,6 +364,9 @@ def _search_jd(page, query: str, must: list[str], timeout_ms: int, min_score: in
                     "sku": g.get("sku") or "",
                     "score": sc,
                     "platform": "jd",
+                    "price_text": str(g.get("priceText") or ""),
+                    "price_source": "search_list",
+                    "tax_mode": "tax_incl",
                 }
             )
         loose.sort(key=lambda x: (-x["score"], x["price_tax"]))
@@ -515,42 +375,110 @@ def _search_jd(page, query: str, must: list[str], timeout_ms: int, min_score: in
 
 
 def _search_1688(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
-    url = spec.search_url_template.format(query=quote(query))
+    url = spec.search_url_template.format(query=_quote_1688_query(query))
     page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
     page.wait_for_timeout(3000)
+    captcha = _page_1688_captcha(page)
+    if captcha:
+        print(f"  [1688] {captcha} → 等用户完成验证，本次不报空结果")
+        return None, "captcha"
     if "login" in page.url.lower() or "登录" in (page.title() or ""):
         return None, "need_login"
+
+    # 2026 新版列表的商品卡片本身是 a.search-offer-wrapper，链接改为
+    # detail.m.1688.com/page/index.html?offerId=... 。保留旧版选择器作回退。
+    card_selector = (
+        'a.search-offer-wrapper, '
+        'a[href*="detail.m.1688.com"], '
+        'a[href*="detail.1688.com"]'
+    )
+    try:
+        page.wait_for_selector(card_selector, timeout=min(8000, max(1500, timeout_ms // 3)))
+    except Exception:
+        # 真正的空结果/风控页会走下面的统一判定，不在这里报错。
+        pass
+    captcha = _page_1688_captcha(page)
+    if captcha:
+        print(f"  [1688] {captcha} → 等用户完成验证，本次不报空结果")
+        return None, "captcha"
     cards = page.eval_on_selector_all(
-        'a[href*="detail.1688.com"]',
+        card_selector,
         """els => {
           const out=[], seen=new Set();
-          for (const a of els.slice(0, 40)) {
+          for (const a of els.slice(0, 80)) {
             const href = a.href || '';
-            if (!href.includes('detail.1688.com') || seen.has(href)) continue;
-            seen.add(href);
-            let root = a;
-            for (let i=0;i<6;i++){ if(root.parentElement) root=root.parentElement; }
-            const text=(root.innerText||a.innerText||'').replace(/\\s+/g,' ').trim().slice(0,220);
-            out.push({href, text, name: text, priceText: text});
+            if (!href.includes('detail.1688.com') && !href.includes('detail.m.1688.com')) continue;
+            const offerMatch = href.match(/[?&]offerId=(\\d+)/i) || href.match(/\\/offer\\/(\\d+)\\.html/i);
+            const offerId = offerMatch ? offerMatch[1] : '';
+            const dedupeKey = offerId || href;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+
+            let root = a.matches('.search-offer-wrapper')
+              ? a
+              : a.closest('.search-offer-wrapper, .search-offer-item, [data-tracker="offer"]');
+            if (!root) {
+              root = a;
+              for (let i=0; i<6 && root.parentElement; i++) {
+                root = root.parentElement;
+                if ((root.innerText || '').includes('¥')) break;
+              }
+            }
+            const text=(root.innerText||a.innerText||'').replace(/\\s+/g,' ').trim().slice(0,500);
+            const titleEl = root.querySelector(
+              '.offer-title-row .title-text, .offer-title-row, [class*="title"]'
+            );
+            const priceEl = root.querySelector(
+              '.offer-price-row .price-item, .offer-price-row, [class*="price"]'
+            );
+            const supplierEl = root.querySelector(
+              '.offer-shop-row .col-left .desc-text, .offer-shop-row .desc-text, [class*="shop"] [class*="desc"]'
+            );
+            const name=(titleEl?.innerText||a.innerText||text).replace(/\\s+/g,' ').trim().slice(0,180);
+            const priceText=(priceEl?.innerText||text).replace(/\\s+/g,' ').trim();
+            const supplier=(supplierEl?.innerText||'').replace(/\\s+/g,' ').trim().slice(0,100);
+            out.push({href, text, name, priceText, supplier, offerId});
           }
-          return out.slice(0, 20);
+          return out.slice(0, 40);
         }""",
     )
-    # extract price from text
-    goods = []
+    cands = []
     for c in cards or []:
         text = c.get("text") or c.get("name") or ""
-        prices = re.findall(r"[¥￥]\s*(\d+\.?\d*)", text)
-        price_text = prices[0] if prices else ""
-        goods.append(
+        name = c.get("name") or text
+        # 1688 会把 2.09 拆成两个 DOM 节点，innerText 是“¥ 2 .09”。
+        # 只移除价格里的空白，避免把 2.09 误读为 2。
+        price_text = _normalize_1688_price_text(c.get("priceText"))
+        price = parse_price(price_text)
+        href = c.get("href") or ""
+        sc = score_title(f"{name} {text}", must)
+        if not price or not href or sc < min_score:
+            continue
+        offer_id = str(c.get("offerId") or "")
+        detail_url = (
+            f"https://detail.1688.com/offer/{offer_id}.html"
+            if offer_id
+            else href
+        )
+        cands.append(
             {
-                "href": c.get("href"),
-                "name": text[:160],
-                "priceText": price_text,
-                "sku": "",
+                "title": name[:160],
+                "price_tax": price,
+                "url": detail_url,
+                "source_url": href,
+                "sku": offer_id,
+                "score": sc,
+                "platform": "1688",
+                "supplier": c.get("supplier") or "",
+                "price_text": price_text,
+                "price_source": "search_list",
+                # 列表只负责找候选；正式收价前仍打开详情核对完整规格。
+                # 桌面详情比 detail.m 移动页稳定，也方便 Excel 点击复核。
+                "spec_seen": text,
             }
         )
-    return _filter_cands(goods, must, min_score, "1688", "detail.1688.com"), "ok"
+    cands.sort(key=lambda x: (-x["score"], x["price_tax"]))
+    return cands[:20], "ok"
 
 
 def _page_membership_blocked(page) -> bool:
@@ -605,74 +533,124 @@ def _search_gldjc(page, query: str, must: list[str], timeout_ms: int, min_score:
     if _page_membership_blocked(page):
         return None, "no_membership"
 
-    # 结果页：尽量从列表卡片提取 名称/价格/链接
-    cards = page.eval_on_selector_all(
-        "a, tr, .list-item, .material-item, li, .el-table__row",
-        """els => {
+    # 默认只展示每个材料的前几条厂家报价；逐个展开后再解析，避免漏掉精确规格。
+    try:
+        for _ in range(24):
+            more = page.get_by_text("查看更多报价", exact=True)
+            if more.count() <= 0:
+                break
+            btn = more.first
+            if not btn.is_visible(timeout=300):
+                break
+            btn.click(force=True, timeout=1500)
+            page.wait_for_timeout(120)
+        page.wait_for_timeout(500)
+    except Exception:
+        pass
+
+    # SSR 数据比可见 DOM 更完整：含联系人、电话、盖章报价单链接，以及折叠的厂家报价。
+    rows = page.evaluate(
+        """() => {
+          const data = window.__NUXT__?.data?.[0] || {};
+          const products = Array.isArray(data.searchResData) ? data.searchResData : [];
           const out = [];
-          const seen = new Set();
-          for (const el of els.slice(0, 120)) {
-            const text = (el.innerText || '').replace(/\\s+/g, ' ').trim();
-            if (!text || text.length < 4 || text.length > 300) continue;
-            // must look price-like
-            if (!/[¥￥]|\\d+(\\.\\d+)?\\s*元/.test(text) && !/\\d{2,6}(\\.\\d+)?/.test(text)) continue;
-            let href = '';
-            if (el.tagName === 'A') href = el.href || '';
-            else {
-              const a = el.querySelector && el.querySelector('a[href]');
-              href = a ? a.href : '';
+          for (const [ri, p] of products.entries()) {
+            const name = String(p?.name || p?.core_word_precise || '').trim();
+            const specParts = [];
+            for (const x of (p?.specDataArr || [])) {
+              const label = String(x?.name || '').trim();
+              const value = String(x?.desc || '').trim();
+              if (label || value) specParts.push(`${label} : ${value}`.trim());
             }
-            if (href && seen.has(href + text.slice(0,40))) continue;
-            seen.add((href||'') + text.slice(0,40));
-            out.push({ href, name: text.slice(0,160), priceText: text, text });
+            const base = specParts.join(' | ') || String(
+              p?.specificationattr_str || p?.specificationattr_all_str || ''
+            ).trim();
+            for (const [qi, c] of (p?.companies || []).entries()) {
+              const price = c?.market_price ?? c?.engineering_price ?? c?.market_price_te ?? '';
+              if (!name || price === '' || price == null) continue;
+              const quoteSpec = String(c?.resource_attrvalues || '').trim();
+              const brand = String(c?.brand_name || '').trim();
+              const supplier = String(c?.company_name || c?.name || '').trim();
+              const unit = String(c?.unit || '').trim();
+              const phone = String(c?.company_phone || '').trim();
+              const contact = String(c?.company_contact_person || '').trim();
+              const quotationUrl = String(c?.quotation_file_path || '').trim();
+              const text = [name, base, quoteSpec, brand, unit ? `单位:${unit}` : '', supplier]
+                .filter(Boolean).join(' ');
+              out.push({
+                name, base, quoteSpec, brand, supplier, unit,
+                price: String(price), phone, contact, quotationUrl, text, ri, qi
+              });
+            }
           }
-          return out.slice(0, 40);
-        }""",
+          return out.slice(0, 120);
+        }"""
     )
-    goods = []
-    for c in cards or []:
-        text = c.get("text") or c.get("priceText") or ""
-        # 优先 ¥ 或 元
-        prices = re.findall(r"[¥￥]\s*(\d+\.?\d*)", text)
-        if not prices:
-            prices = re.findall(r"(\d+\.?\d*)\s*元", text)
-        # 广材列表有时纯数字价
-        if not prices:
-            prices = re.findall(r"(?:含税|除税|单价)[^\d]{0,6}(\d+\.?\d*)", text)
-        price_text = prices[0] if prices else ""
-        href = c.get("href") or page.url
-        goods.append(
+
+    # 页面结构变化或无 SSR 数据时，再退回可见 DOM。
+    if not rows:
+        rows = page.eval_on_selector_all(
+        ".tr",
+        """rows => {
+          const out = [];
+          for (const [ri, row] of rows.entries()) {
+            const nameEl = row.querySelector('.m-name');
+            const quoteRows = [...row.querySelectorAll('.colspan-row')];
+            if (!nameEl || !quoteRows.length) continue;
+            const name = (nameEl.getAttribute('title') || nameEl.innerText || '').replace(/\\s+/g, ' ').trim();
+            const base = (row.querySelector('.m-detail-content')?.innerText || '').replace(/\\s+/g, ' ').trim();
+            for (const [qi, q] of quoteRows.entries()) {
+              const quoteSpec = (q.querySelector('.resource-attrvalues-text')?.innerText || '').replace(/\\s+/g, ' ').trim();
+              const brand = (q.querySelector('.brand-box')?.getAttribute('title') || '').trim();
+              const supplier = (q.querySelector('.supplier-name')?.innerText || '').replace(/\\s+/g, ' ').trim();
+              const price = (q.querySelector('.tax-price .change-point[title]')?.getAttribute('title') || q.querySelector('.price-block')?.innerText || '').trim();
+              const unit = (q.querySelector('.width-56')?.innerText || '').trim();
+              const text = [name, base, quoteSpec, brand, unit ? ('单位:' + unit) : '', supplier].filter(Boolean).join(' ');
+              if (!name || !price) continue;
+              out.push({name, base, quoteSpec, brand, supplier, unit, price, text, ri, qi});
+            }
+          }
+          return out.slice(0, 80);
+        }""",
+        )
+    cands = []
+    for row in rows or []:
+        price = parse_price(row.get("price"))
+        if not price:
+            continue
+        text = row.get("text") or ""
+        sc = max(1, score_title(text, must))
+        sku = "|".join(
+            str(row.get(k) or "")
+            for k in ("name", "base", "quoteSpec", "brand", "supplier", "price")
+        )[:500]
+        cands.append(
             {
-                "href": href,
-                "name": (c.get("name") or text)[:160],
-                "priceText": price_text,
-                "sku": "",
+                "title": str(row.get("name") or "")[:160],
+                "price_tax": price,
+                "url": page.url,
+                "sku": sku,
+                "score": sc,
+                "platform": spec.id,
+                "inline_detail": True,
+                "detail_text": text[:3000],
+                "spec_seen": " | ".join(
+                    x for x in (str(row.get("base") or ""), str(row.get("quoteSpec") or "")) if x
+                )[:1000],
+                "supplier": str(row.get("supplier") or ""),
+                "contact": str(row.get("contact") or ""),
+                "phone": str(row.get("phone") or ""),
+                "quotation_url": str(row.get("quotationUrl") or ""),
+                "unit": str(row.get("unit") or ""),
+                "price_text": str(row.get("price") or ""),
+                "price_context": "同一厂家报价行",
+                "price_source": "platform_quote_row",
+                "tax_mode": "tax_incl",
+                "sku_scope": "exact_quote_row",
             }
         )
-    link_hint = spec.item_link_contains or "gldjc.com"
-    cands = _filter_cands(goods, must, min_score, spec.id, link_hint)
-    # 若关键词匹配过严导致 0 条，放宽：只要有价格就收（造价站结果页通常已按 keyword 过滤）
-    if not cands and goods:
-        loose = []
-        for g in goods:
-            price = parse_price(g.get("priceText"))
-            if not price:
-                continue
-            loose.append(
-                {
-                    "title": (g.get("name") or "")[:160],
-                    "price_tax": price,
-                    "url": (g.get("href") or page.url).split("?")[0]
-                    if g.get("href")
-                    else page.url,
-                    "sku": "",
-                    "score": max(1, score_title(g.get("name") or "", must)),
-                    "platform": spec.id,
-                }
-            )
-        loose.sort(key=lambda x: (-x["score"], x["price_tax"]))
-        return loose[:15], "ok"
-    return cands, "ok"
+    cands.sort(key=lambda x: (-x["score"], x["price_tax"]))
+    return cands[:60], "ok" if cands else "empty_page"
 
 
 def _try_fill_site_search(page, query: str) -> bool:
@@ -709,12 +687,205 @@ def _try_fill_site_search(page, query: str) -> bool:
     return False
 
 
+def _member_page_state(page, platform_id: str) -> tuple[str, str]:
+    """会员站公共状态：只做明确判断，不把空壳/登录页当 0 条结果。"""
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    try:
+        title = page.title() or ""
+    except Exception:
+        title = ""
+    try:
+        body = (page.inner_text("body") or "")[:2200]
+    except Exception:
+        body = ""
+    text = f"{title}\n{body}"
+    if "/login" in url or "passport" in url:
+        return "need_login", body
+    if platform_id == "lingcai" and "/userinfo/index.html" in url:
+        # 搜索路由跳回用户中心是未登录/无权限，不是搜索无结果。
+        return "need_login", body
+    if any(k in text for k in ("账号登录", "扫码登录", "微信扫码登录", "登录后查看", "请先登录")):
+        return "need_login", body
+    if _page_membership_blocked(page):
+        return "no_membership", body
+    if any(k in body for k in ("暂无数据", "暂无结果", "没有找到", "未找到相关", "无搜索结果")):
+        return "empty_page", body
+    if len(body.strip()) < 40:
+        return "empty_page", body
+    return "ok", body
+
+
+def _extract_member_rows(page, platform_id: str) -> list[dict[str, Any]]:
+    """从同一结果行提取标题、规格、价格、单位，避免跨卡片串价。"""
+    # 领材的每一条厂家报价就是一个 .list-item。只取这一层，避免再把内部
+    # price-item 当成第二条记录，造成标题、规格和价格重复或错位。
+    selectors = (
+        ".list-item"
+        if platform_id == "lingcai"
+        else (
+            ".el-table__row, .ant-table-row, tbody > tr, "
+            "[class*='product-item'], [class*='material-item'], [class*='price-item']"
+        )
+    )
+    try:
+        rows = page.eval_on_selector_all(
+            selectors,
+            """(rows, platformId) => {
+              const out = [], seen = new Set();
+              for (const [index, row] of rows.entries()) {
+                const text = (row.innerText || '').replace(/\\s+/g, ' ').trim();
+                if (!text || text.length < 4 || text.length > 1600) continue;
+                if (/登录|注册|网站导航/.test(text) && text.length < 60) continue;
+                const a = row.querySelector('a[href]');
+                const href = a?.href || '';
+                const titleEl = row.querySelector(
+                  '[class*="name"], [class*="title"], [class*="material"], td:nth-child(1), td:nth-child(2)'
+                );
+                let name = (titleEl?.getAttribute('title') || titleEl?.innerText || a?.innerText || '')
+                  .replace(/\\s+/g, ' ').trim().slice(0, 180);
+                if (!name) name = text.slice(0, 180);
+                const priceEl = row.querySelector(
+                  '[class*="price"], [class*="amount"], [class*="market"]'
+                );
+                const priceText = (priceEl?.innerText || text).replace(/\\s+/g, ' ').trim();
+                const key = `${href}|${name}|${priceText.slice(0, 80)}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const dataId = row.querySelector('input[data-id]')?.getAttribute('data-id') || '';
+                out.push({index, href, name, text, priceText, hasPriceNode: !!priceEl, dataId, platformId});
+                if (out.length >= 80) break;
+              }
+              return out;
+            }""",
+            platform_id,
+        )
+        return list(rows or [])
+    except Exception:
+        return []
+
+
+def _member_rows_to_candidates(
+    page,
+    rows: list[dict[str, Any]],
+    query: str,
+    must: list[str],
+    min_score: int,
+    spec: PlatformSpec,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    current_url = page.url or spec.search_url_template
+    for row in rows:
+        text = str(row.get("text") or "")
+        name = str(row.get("name") or text)[:180]
+        if spec.id == "lingcai" and "价格因子" in text:
+            name = text.split("价格因子", 1)[0].strip()[:180] or name
+        href = str(row.get("href") or "")
+        if href and spec.item_link_contains and spec.item_link_contains not in href:
+            href = ""
+        sc = score_title(f"{name} {text}", must)
+        # 会员站结果页已经按 query 做过服务端筛选。这里不能再用“所有必选规格
+        # 命中数”砍候选：例如搜索“8端口分控器”时，领材标题只有“分控器”，
+        # “8端口”在规格字段内，旧逻辑会把整页 29 条误报为 0 条。
+        # 精度由后续 strict_name_spec_match 统一把关，缺一项也不会进入正式价。
+        price_text = str(row.get("priceText") or "")
+        labeled_price = re.search(
+            r"(含税价|除税价|市场价|信息价|单价|价格)\s*[:：]\s*[¥￥]?\s*(\d+(?:\.\d+)?)"
+            r"(?:\s*/\s*(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨))?",
+            text,
+            re.I,
+        )
+        if labeled_price:
+            price = parse_price(labeled_price.group(2))
+            price_text = labeled_price.group(0)
+            unit_value = labeled_price.group(3) or ""
+            label = labeled_price.group(1)
+            tax_mode = "tax_excl" if "除税" in label else "tax_incl" if "含税" in label else "unknown"
+        else:
+            has_money_marker = bool(re.search(r"[¥￥]|\d+(?:\.\d+)?\s*元", price_text))
+            price = parse_price(price_text) if (row.get("hasPriceNode") and has_money_marker) else None
+            unit_match = re.search(
+                r"(?:单位|计价单位)\s*[:：]?\s*(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨)",
+                text,
+                re.I,
+            )
+            unit_value = unit_match.group(1) if unit_match else ""
+            tax_mode = "unknown"
+        supplier_match = re.search(
+            r"查看联系方式\s*(?:[\u4e00-\u9fff]{2,10})?\s*([^\s]{4,60}(?:公司|商行|经营部|厂))\s*报价时间",
+            text,
+        )
+        cand = {
+            "title": name,
+            "price_tax": price or 0.01,
+            "url": href or current_url,
+            "sku": str(row.get("dataId") or f"{spec.id}:{row.get('index', '')}:{_norm_row_key(name, text)}"),
+            "score": max(sc, 1),
+            "platform": spec.id,
+            "supplier": supplier_match.group(1) if supplier_match else "",
+            "unit": unit_value,
+            "tax_mode": tax_mode,
+            "price_text": price_text[:300],
+            "price_context": text[:500],
+            "price_source": "platform_result_row" if price else "missing",
+            "spec_seen": text[:1200],
+        }
+        if price:
+            cand.update(
+                inline_detail=True,
+                detail_text=text[:4000],
+                sku_scope="exact_result_row",
+            )
+        else:
+            cand["needs_detail_price"] = True
+        out.append(cand)
+    out.sort(key=lambda x: (-x.get("score", 0), x.get("price_tax", 1e18)))
+    return out[:40]
+
+
+def _norm_row_key(name: str, text: str) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", f"{name}|{text}".lower())[:120]
+
+
+def _search_lingcai(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
+    url = spec.search_url_template.format(query=_quote_lingcai_query(query))
+    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+    page.wait_for_timeout(2600)
+    state, _body = _member_page_state(page, "lingcai")
+    if state != "ok":
+        return ([] if state == "empty_page" else None), state
+    rows = _extract_member_rows(page, "lingcai")
+    cands = _member_rows_to_candidates(page, rows, query, must, min_score, spec)
+    return cands, "ok" if cands else "empty_page"
+
+
+def _search_huixun(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
+    # 慧讯是 SPA：进入产品库后用页面搜索框输入 Unicode，不在 URL 二次编码。
+    current = (page.url or "").lower()
+    if "iccchina.com/products" not in current:
+        page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(1800)
+    state, _body = _member_page_state(page, "huixun")
+    if state not in ("ok", "empty_page"):
+        return None, state
+    if not _try_fill_site_search(page, query):
+        return [], "search_control_missing"
+    page.wait_for_timeout(1800)
+    state, _body = _member_page_state(page, "huixun")
+    if state != "ok":
+        return ([] if state == "empty_page" else None), state
+    rows = _extract_member_rows(page, "huixun")
+    cands = _member_rows_to_candidates(page, rows, query, must, min_score, spec)
+    return cands, "ok" if cands else "empty_page"
+
+
 def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
     """
     通用搜索：慧讯(iccchina)、领材(hylcw) 等非广材站。
-    - 模板含 {query} → 直接拼 URL
-    - 否则打开入口页，尝试页面内搜索框
-    - 无会员/权限 → no_membership（跳过整站）
+    - 模板含 {query} → 直接拼 URL（只 goto 一次，禁止空结果连环刷新）
+    - 未登录/空壳页 → need_login / empty_page，交给上层换站
     """
     if not spec.search_url_template:
         return None, "bad_config"
@@ -722,7 +893,7 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
     if "{query}" in spec.search_url_template:
         url = spec.search_url_template.format(query=quote(query))
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        page.wait_for_timeout(2500)
+        page.wait_for_timeout(2800)
     else:
         page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
         page.wait_for_timeout(2000)
@@ -736,32 +907,51 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
         if not _try_fill_site_search(page, query):
             page.wait_for_timeout(500)
 
+    cur = (page.url or "").lower()
+    title = page.title() or ""
+    try:
+        body = (page.inner_text("body") or "")[:1500]
+    except Exception:
+        body = ""
+
+    # 未登录硬判断（领材空壳页常见）
+    if spec.require_login_hint:
+        if "/login" in cur or "passport" in cur:
+            return None, "need_login"
+        if any(k in f"{title}\n{body}" for k in ("请登录", "立即登录", "用户登录", "登录后查看", "登录后可见")):
+            return None, "need_login"
     if _page_membership_blocked(page):
         return None, "no_membership"
-    title = page.title() or ""
-    if "登录" in title and spec.require_login_hint and "慧讯" not in title and "领材" not in title:
-        pass
+
+    # 明显空页：无结果话术或几乎无内容
+    if any(k in body for k in ("暂无数据", "暂无结果", "没有找到", "未找到相关", "0条结果", "无搜索结果")):
+        return [], "empty_page"
+    if len(body.strip()) < 40:
+        return [], "empty_page"
 
     link_sel = spec.item_link_selector or "a[href]"
     contains = spec.item_link_contains or ""
-    # Pull anchors + nearby text
     cards = page.eval_on_selector_all(
         link_sel,
         """(els, contains) => {
           const out=[], seen=new Set();
-          for (const a of els.slice(0, 80)) {
+          for (const a of els.slice(0, 100)) {
             let href = a.href || '';
             if (!href || href.startsWith('javascript')) continue;
             if (contains && !href.includes(contains)) continue;
+            // 过滤导航/登录无用链接
+            const low = href.toLowerCase();
+            if (low.includes('/login') || low.includes('userinfo') || low.endsWith('.css')) continue;
             if (seen.has(href)) continue;
             seen.add(href);
             let root = a;
             for (let i=0;i<5;i++){ if(root.parentElement) root=root.parentElement; }
             const text=(root.innerText||a.innerText||'').replace(/\\s+/g,' ').trim().slice(0,240);
             const name=(a.innerText||text).replace(/\\s+/g,' ').trim().slice(0,160);
+            if (!name || name.length < 2) continue;
             out.push({href, name, priceText: text, text});
           }
-          return out.slice(0, 25);
+          return out.slice(0, 30);
         }""",
         contains,
     )
@@ -780,7 +970,37 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
                 "sku": "",
             }
         )
-    return _filter_cands(goods, must, min_score, spec.id, contains), "ok"
+    cands = _filter_cands(goods, must, min_score, spec.id, contains)
+    # 领材/慧讯列表价常藏在表格，过滤过严时放宽：有名有链即可进详情抽价
+    if not cands and goods and spec.id in ("lingcai", "huixun", "guangcai"):
+        loose = []
+        for g in goods:
+            href = g.get("href") or ""
+            name = g.get("name") or ""
+            if not href or not name or len(name) < 4:
+                continue
+            price = parse_price(g.get("priceText"))
+            sc = score_title(name + " " + href, must)
+            if sc < 1 and must:
+                # 至少命中 must 里一个字或直接放行进详情（造价站已按 keyword 过滤）
+                if not any((m or "")[:2] in name for m in must if m):
+                    continue
+            loose.append(
+                {
+                    "title": name[:160],
+                    "price_tax": price or 0.01,  # 占位，详情页再修正；0 会被详情覆盖
+                    "url": href.split("?")[0],
+                    "sku": "",
+                    "score": max(sc, 1),
+                    "platform": spec.id,
+                    "needs_detail_price": not bool(price),
+                }
+            )
+        loose.sort(key=lambda x: -x["score"])
+        cands = loose[:12]
+    if not cands:
+        return [], "empty_page"
+    return cands, "ok"
 
 
 def _filter_cands(goods, must, min_score, platform_id, link_hint) -> list[dict] | None:
@@ -792,10 +1012,9 @@ def _filter_cands(goods, must, min_score, platform_id, link_hint) -> list[dict] 
         sc = score_title(name + " " + href, must)
         if not price or not href:
             continue
-        if link_hint and link_hint not in href and platform_id not in ("zkh", "mysteel", "jd"):
-            # jd 新版常无 item 锚点，href 由 sku 拼出；zkh/suning 链接松
-            if platform_id not in ("zkh", "suning", "mysteel", "jd"):
-                continue
+        if link_hint and link_hint not in href and platform_id != "jd":
+            # 京东新版常无 item 锚点，href 由 SKU 拼出。
+            continue
         if sc >= min_score:
             cands.append(
                 {
@@ -805,6 +1024,9 @@ def _filter_cands(goods, must, min_score, platform_id, link_hint) -> list[dict] 
                     "sku": g.get("sku") or "",
                     "score": sc,
                     "platform": platform_id,
+                    "price_text": str(g.get("priceText") or ""),
+                    "price_source": "search_list",
+                    "tax_mode": "tax_incl" if platform_id == "jd" else "unknown",
                 }
             )
     cands.sort(key=lambda x: (-x["score"], x["price_tax"]))
@@ -815,6 +1037,8 @@ HANDLERS: dict[str, Callable] = {
     "jd": _search_jd,
     "1688": _search_1688,
     "gldjc": _search_gldjc,
+    "lingcai": _search_lingcai,
+    "huixun": _search_huixun,
     "generic": _search_generic,
 }
 
@@ -856,8 +1080,10 @@ def search_on_platform(
         handler_name = "1688"
     elif pid == "guangcai" or (handler_name == "gldjc" and "gldjc" in (spec.item_link_contains or "")):
         handler_name = "gldjc"
-    elif pid in ("huixun", "lingcai"):
-        handler_name = "generic"
+    elif pid == "huixun":
+        handler_name = "huixun"
+    elif pid == "lingcai":
+        handler_name = "lingcai"
     try:
         fn = HANDLERS[handler_name]
         result, status = fn(page, query, must, timeout_ms, min_score, spec)
@@ -913,10 +1139,3 @@ def login_urls_for(platform_ids: list[str], registry: dict[str, PlatformSpec]) -
         seen_ids.add(pid)
         out.append((spec.id, spec.name, login_url))
     return out
-
-
-def pick_best_candidate(cands: list[dict]) -> dict | None:
-    if not cands:
-        return None
-    # highest score, then lowest price
-    return sorted(cands, key=lambda x: (-x.get("score", 0), x.get("price_tax", 1e18)))[0]
