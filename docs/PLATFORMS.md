@@ -7,6 +7,7 @@
 | `guangcai` | `https://www.gldjc.com/login` | `/scj/so.html?keyword=...` | 解析同一厂家报价行及 SSR 数据 |
 | `lingcai` | `https://www.hylcw.cn/userInfo/index.html` | `/marketPrice/so.html?...&gjz=...` | 搜索词双重 UTF-8 编码；`.list-item` 同行抽价 |
 | `huixun` | `https://services.iccchina.com/login` | 产品库 SPA 搜索框 | 直接填入 Unicode，不拼错误 URL |
+| `yize` | `https://www.easybii.com/` | 顶栏「产品信息/信息价」搜索；信息价页名称+规格表单 | 未登录/服务到期独立状态；同行表格抽价，不跨行串价 |
 | `jd` | `https://www.jd.com/` | 京东搜索页 | 检测“访问频繁”并停止当前会话 |
 | `1688` | 淘宝统一登录入口 | 1688 搜索页 | GBK 查询编码；验证码/风控页不当空结果 |
 

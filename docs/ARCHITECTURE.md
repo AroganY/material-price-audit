@@ -7,12 +7,29 @@ Web 向导
   → schema_map.detect_workbook_schema
   → normalize.load_canonical_items
   → inquiry.run_inquiry
+      → normalize.build_platform_queries（分站检索词）
       → platforms.search_on_platform
       → scraper.open_detail（需要详情时）
       → matching.strict_name_spec_match
   → export_quotes.write_quote_result_workbook
   → result.xlsx / rfq.xlsx / evidence.json
 ```
+
+检索词按平台分流：广材/领材/慧讯/易择走「品名库」短词+口径/关键规格；京东/1688 走「商品标题」品牌+型号/参数。禁止全站共用同一套 query。
+
+### LLM 与 Playwright 分工（search_agent）
+
+```text
+规则/LLM 生成检索词
+  → Playwright 真打开平台、输入、点搜索、抽列表
+  → LLM 对候选排序（只改顺序，不改价格）
+  → Playwright 按序开详情、抽价
+  → 规则硬匹配（型号/数值冲突否决）
+  → LLM 仅处理语义灰区
+  → 空结果时 LLM 改词，Playwright 再搜一轮
+```
+
+价格数字永远来自页面；LLM 不编价、不代替登录/验证码。
 
 ## 模块职责
 
@@ -21,7 +38,7 @@ Web 向导
 | `runtime.py` | 项目路径、配置合并、证据持久化 |
 | `settings_store.py` | 页面用户设置 |
 | `schema_map.py` | 表头识别；规则优先，可选 LLM |
-| `normalize.py` | Excel 行标准化、搜索词生成 |
+| `normalize.py` | Excel 行标准化、分平台搜索词生成 |
 | `matching.py` | 名称与全部硬规格匹配 |
 | `platforms.py` | 平台注册、搜索状态与候选抽取 |
 | `scraper.py` | 浏览器生命周期、登录等待、详情证据 |

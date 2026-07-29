@@ -246,22 +246,87 @@ def _sheet_preview(ws, max_rows: int = 18, max_cols: int = 18) -> list[list[str]
     return out
 
 
+def resolve_llm_api_key(settings: UserSettings) -> str:
+    """优先本机向导保存的 Key，其次环境变量。"""
+    key = (getattr(settings, "llm_api_key", None) or "").strip()
+    if key:
+        return key
+    env_name = (settings.llm_api_key_env or "").strip()
+    if env_name:
+        key = (os.environ.get(env_name) or "").strip()
+        if key:
+            return key
+    key = (os.environ.get("MATERIAL_PRICE_AUDIT_LLM_KEY") or "").strip()
+    if key:
+        return key
+    for env in ("OPENAI_API_KEY", "SPACEXAI_API_KEY", "LLM_API_KEY"):
+        key = (os.environ.get(env) or "").strip()
+        if key:
+            return key
+    return ""
+
+
+# 可选：记录每次 LLM usage（prompt/completion/total tokens）
+_LLM_USAGE_HOOK = None  # type: ignore
+
+
+def set_llm_usage_hook(hook) -> None:
+    """hook(usage: dict) — usage 含 prompt_tokens/completion_tokens/total_tokens/model/ok"""
+    global _LLM_USAGE_HOOK
+    _LLM_USAGE_HOOK = hook
+
+
+def _estimate_tokens(*parts: str) -> int:
+    """API 未返回 usage 时粗估（约 4 字符 ≈ 1 token，中英混合够用）。"""
+    n = sum(len(p or "") for p in parts)
+    return max(1, (n + 3) // 4)
+
+
+def _emit_llm_usage(
+    *,
+    ok: bool,
+    model: str = "",
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    role: str = "",
+) -> None:
+    if not _LLM_USAGE_HOOK:
+        return
+    try:
+        _LLM_USAGE_HOOK(
+            {
+                "ok": bool(ok),
+                "model": model or "",
+                "role": role or "",
+                "prompt_tokens": int(prompt_tokens or 0),
+                "completion_tokens": int(completion_tokens or 0),
+                "total_tokens": int(
+                    total_tokens
+                    or (int(prompt_tokens or 0) + int(completion_tokens or 0))
+                ),
+            }
+        )
+    except Exception:
+        pass
+
+
 def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | None:
     if not settings.llm_enabled:
         return None
-    key = os.environ.get(settings.llm_api_key_env) or os.environ.get("MATERIAL_PRICE_AUDIT_LLM_KEY")
-    # also common alternatives
+    key = resolve_llm_api_key(settings)
     if not key:
-        for env in ("OPENAI_API_KEY", "SPACEXAI_API_KEY", "LLM_API_KEY"):
-            key = os.environ.get(env)
-            if key:
-                break
-    if not key:
+        print("[schema] LLM 已开启但未配置 API Key（向导填写或环境变量）")
         return None
-    base = (settings.llm_api_base or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1").rstrip("/")
+    base = (
+        settings.llm_api_base
+        or os.environ.get("OPENAI_API_BASE")
+        or "https://api.openai.com/v1"
+    ).rstrip("/")
     url = f"{base}/chat/completions"
+    model = settings.llm_model or "gpt-4o-mini"
     body = {
-        "model": settings.llm_model or "gpt-4o-mini",
+        "model": model,
         "temperature": 0.1,
         "response_format": {"type": "json_object"},
         "messages": [
@@ -279,7 +344,8 @@ def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | Non
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        # 询价链路里 LLM 只是辅助；超时过长会拖死整条瀑布匹配
+        with urllib.request.urlopen(req, timeout=25) as resp:
             raw = json.loads(resp.read().decode("utf-8"))
         content = raw["choices"][0]["message"]["content"]
         if isinstance(content, list):
@@ -291,13 +357,72 @@ def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | Non
         if content.startswith("```"):
             content = re.sub(r"^```(?:json)?\s*", "", content)
             content = re.sub(r"\s*```$", "", content)
+        usage = raw.get("usage") if isinstance(raw, dict) else None
+        if not isinstance(usage, dict):
+            usage = {}
+        pt = int(usage.get("prompt_tokens") or 0)
+        ct = int(usage.get("completion_tokens") or 0)
+        tt = int(usage.get("total_tokens") or 0)
+        if not tt:
+            # 兼容部分代理不返回 usage
+            pt = pt or _estimate_tokens(system, user)
+            ct = ct or _estimate_tokens(content)
+            tt = pt + ct
+        _emit_llm_usage(
+            ok=True,
+            model=str(raw.get("model") or model),
+            prompt_tokens=pt,
+            completion_tokens=ct,
+            total_tokens=tt,
+        )
         return json.loads(content)
     except (urllib.error.URLError, urllib.error.HTTPError, KeyError, json.JSONDecodeError, TimeoutError) as e:
         print(f"[schema] LLM 调用失败，回退规则: {type(e).__name__}: {e}")
+        _emit_llm_usage(
+            ok=False,
+            model=model,
+            prompt_tokens=_estimate_tokens(system, user),
+            completion_tokens=0,
+            total_tokens=_estimate_tokens(system, user),
+        )
         return None
     except Exception as e:
         print(f"[schema] LLM 异常，回退规则: {e}")
+        _emit_llm_usage(
+            ok=False,
+            model=model,
+            prompt_tokens=_estimate_tokens(system, user),
+            completion_tokens=0,
+            total_tokens=_estimate_tokens(system, user),
+        )
         return None
+
+
+def test_llm_connection(settings: UserSettings) -> dict[str, Any]:
+    """向导「测试连接」：发一条最小 JSON 请求。"""
+    if not settings.llm_enabled:
+        return {"ok": False, "error": "请先开启 AI 辅助"}
+    if not resolve_llm_api_key(settings):
+        return {
+            "ok": False,
+            "error": "未配置 API Key：请在下方填写，或设置环境变量 "
+            f"{settings.llm_api_key_env or 'OPENAI_API_KEY'}",
+        }
+    data = _llm_chat_json(
+        settings,
+        '只输出 JSON：{"ok":true,"pong":"material-price-audit"}',
+        "ping",
+    )
+    if not data:
+        return {
+            "ok": False,
+            "error": "调用失败：请检查 API Base / Key / 模型名是否正确，以及网络是否可达",
+        }
+    return {
+        "ok": True,
+        "message": f"连接成功（model={settings.llm_model or 'gpt-4o-mini'}）",
+        "sample": data,
+    }
 
 
 def map_sheet_by_llm(ws, sheet_name: str, settings: UserSettings) -> SheetSchema | None:

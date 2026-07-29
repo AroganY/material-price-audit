@@ -1,7 +1,7 @@
 """
 Multi-platform registry.
 
-Maintained built-ins: Guangcai, Lingcai, Huixun, JD, and 1688.
+Maintained built-ins: Guangcai, Lingcai, Huixun, Yize (EasyBii), JD, and 1688.
 Additional sites can be registered in ``config.yaml`` with the generic adapter.
 """
 
@@ -124,6 +124,24 @@ BUILTIN: dict[str, PlatformSpec] = {
         requires_config=False,
         notes="登录/用户中心 /userInfo/index.html · 市场价搜索 /marketPrice/so.html",
     ),
+    "yize": PlatformSpec(
+        id="yize",
+        name="易择网",
+        # 首页即登录页（密码/扫码/免密）；登录后顶栏搜索产品信息/信息价
+        login_url="https://www.easybii.com/",
+        # 信息价首页带全局搜索框；查询靠页面交互填入，不拼 {query}
+        search_url_template="https://www.easybii.com/P4-3-info-price-home.html",
+        handler="yize",
+        item_link_contains="easybii.com",
+        item_link_selector='a[href*="easybii.com"]',
+        detail_price_selectors=[
+            ".price",
+            "[class*='price']",
+            "[class*='market']",
+            "td",
+        ],
+        notes="官网 https://www.easybii.com/ · 产品信息/信息价双通道搜索",
+    ),
     # ========== 电商 / 工业品 ==========
     "jd": PlatformSpec(
         id="jd",
@@ -153,7 +171,7 @@ BUILTIN: dict[str, PlatformSpec] = {
 }
 
 # Product UI order and the only built-ins covered by maintained adapters/tests.
-CORE_PLATFORM_IDS = ("guangcai", "lingcai", "huixun", "jd", "1688")
+CORE_PLATFORM_IDS = ("guangcai", "lingcai", "huixun", "yize", "jd", "1688")
 
 
 def normalize_platform_id(pid) -> str:
@@ -183,6 +201,12 @@ def normalize_platform_id(pid) -> str:
         "领财网": "lingcai",
         "lingcaiwang": "lingcai",
         "hylcw": "lingcai",
+        "易择": "yize",
+        "易择网": "yize",
+        "易泽": "yize",
+        "易泽网": "yize",
+        "easybii": "yize",
+        "yizewang": "yize",
     }
     if p in aliases:
         return aliases[p]
@@ -861,13 +885,61 @@ def _search_lingcai(page, query: str, must: list[str], timeout_ms: int, min_scor
     return cands, "ok" if cands else "empty_page"
 
 
+def _huixun_try_resume_if_needed(page, timeout_ms: int) -> bool:
+    """关窗重开后若卡在登录/一键登录页，自动点入；返回是否可用产品库。"""
+    from .login_gate import (
+        looks_like_hard_login_url,
+        page_shows_one_click_login,
+        try_resume_huixun_session,
+    )
+
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    if (
+        looks_like_hard_login_url(url)
+        or page_shows_one_click_login(page)
+        or ("login" in url and "iccchina" in url)
+    ):
+        ok, _ = try_resume_huixun_session(page, timeout_ms=timeout_ms)
+        return ok
+    return True
+
+
 def _search_huixun(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
     # 慧讯是 SPA：进入产品库后用页面搜索框输入 Unicode，不在 URL 二次编码。
+    # 关窗重开后常停在登录页但有账号缓存，只需点「一键登录」。
+    from .login_gate import looks_like_hard_login_url, page_shows_one_click_login
+
     current = (page.url or "").lower()
-    if "iccchina.com/products" not in current:
-        page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
-        page.wait_for_timeout(1800)
+    if "iccchina.com/products" not in current or looks_like_hard_login_url(current):
+        if not _huixun_try_resume_if_needed(page, timeout_ms):
+            try:
+                page.goto(
+                    spec.search_url_template,
+                    wait_until="domcontentloaded",
+                    timeout=timeout_ms,
+                )
+                page.wait_for_timeout(1500)
+            except Exception:
+                pass
+            if not _huixun_try_resume_if_needed(page, timeout_ms):
+                if looks_like_hard_login_url((page.url or "").lower()) or page_shows_one_click_login(
+                    page
+                ):
+                    return None, "need_login"
+        # 仍不在产品库则显式打开
+        if "iccchina.com/products" not in ((page.url or "").lower()):
+            page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
+            page.wait_for_timeout(1800)
+            if not _huixun_try_resume_if_needed(page, timeout_ms):
+                return None, "need_login"
     state, _body = _member_page_state(page, "huixun")
+    if state == "need_login":
+        if not _huixun_try_resume_if_needed(page, timeout_ms):
+            return None, "need_login"
+        state, _body = _member_page_state(page, "huixun")
     if state not in ("ok", "empty_page"):
         return None, state
     if not _try_fill_site_search(page, query):
@@ -879,6 +951,451 @@ def _search_huixun(page, query: str, must: list[str], timeout_ms: int, min_score
     rows = _extract_member_rows(page, "huixun")
     cands = _member_rows_to_candidates(page, rows, query, must, min_score, spec)
     return cands, "ok" if cands else "empty_page"
+
+
+def _yize_page_state(page) -> tuple[str, str]:
+    """易择网登录/会员/空结果状态。"""
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    try:
+        title = page.title() or ""
+    except Exception:
+        title = ""
+    try:
+        body = (page.inner_text("body") or "")[:2500]
+    except Exception:
+        body = ""
+    text = f"{title}\n{body}"
+
+    # 首页/登录页
+    if any(
+        k in text
+        for k in (
+            "密码登录",
+            "免密登录",
+            "立即登录",
+            "申请试用",
+            "微信扫码登录",
+            "账号：",
+            "还没有账号",
+        )
+    ) and not any(k in text for k in ("我的易择", "服务有效期", "系统消息", "收藏夹")):
+        return "need_login", body
+    if "login" in url and "easybii.com" in url and "p4-" not in url:
+        # 根路径登录页
+        if "密码" in body and "登录" in body and "我的易择" not in body:
+            return "need_login", body
+
+    # 会员/服务到期（信息站常见）
+    if any(
+        k in text
+        for k in (
+            "服务已到期",
+            "套餐已过期",
+            "开通会员",
+            "请开通服务",
+            "无访问权限",
+            "权限不足",
+            "续费后使用",
+        )
+    ):
+        return "no_membership", body
+
+    if any(k in body for k in ("暂无数据", "暂无结果", "没有找到", "未找到相关", "无搜索结果", "没有相关数据")):
+        return "empty_page", body
+    if len(body.strip()) < 30:
+        return "empty_page", body
+    return "ok", body
+
+
+def _yize_set_search_type(page, objid: str = "0") -> None:
+    """顶栏搜索类型：0=产品信息 1=企业信息 2=信息价。"""
+    try:
+        # 展开下拉再点类型
+        page.locator("#searchText").click(timeout=1500)
+        page.wait_for_timeout(200)
+    except Exception:
+        pass
+    try:
+        loc = page.locator(f'.searchType[objid="{objid}"]')
+        if loc.count() > 0:
+            loc.first.click(timeout=2000)
+            page.wait_for_timeout(200)
+    except Exception:
+        pass
+
+
+def _yize_header_search(page, query: str, *, search_type_objid: str = "0") -> bool:
+    """
+    使用顶栏全局搜索：input[name=paramLike] + #seachInput。
+    返回是否成功触发搜索。
+    """
+    _yize_set_search_type(page, search_type_objid)
+    selectors = (
+        'input.search-input[name="paramLike"]',
+        'input[name="paramLike"]',
+        "input.search-input",
+    )
+    filled = False
+    for sel in selectors:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() == 0 or not loc.is_visible(timeout=800):
+                continue
+            loc.click(timeout=1500)
+            loc.fill("")
+            loc.fill((query or "")[:80])
+            filled = True
+            break
+        except Exception:
+            continue
+    if not filled:
+        return False
+    try:
+        btn = page.locator("#seachInput, p.do-search").first
+        if btn.count() > 0 and btn.is_visible(timeout=800):
+            btn.click(timeout=2000)
+            return True
+    except Exception:
+        pass
+    try:
+        page.locator('input[name="paramLike"]').first.press("Enter")
+        return True
+    except Exception:
+        return False
+
+
+def _yize_info_price_search(page, query: str) -> bool:
+    """信息价页本地表单：#info-name-like / #info-specifications-like / #info-search。"""
+    try:
+        name_box = page.locator("#info-name-like")
+        if name_box.count() == 0 or not name_box.first.is_visible(timeout=1000):
+            return False
+        # 名称框放完整搜索词；规格框尽量塞型号/规格片段
+        name_box.first.fill("")
+        name_box.first.fill((query or "")[:60])
+        spec_part = ""
+        # 粗提：数字+字母型号、DN、mm 等
+        m = re.search(
+            r"([A-Za-z]{1,6}[\-]?\d[\w\-\./]{1,20}|\d+(?:\.\d+)?\s*(?:mm|cm|m|DN|kW|W|V))",
+            query or "",
+            re.I,
+        )
+        if m:
+            spec_part = m.group(1).strip()
+        try:
+            spec_box = page.locator("#info-specifications-like")
+            if spec_box.count() > 0 and spec_box.first.is_visible(timeout=500):
+                spec_box.first.fill(spec_part[:40] if spec_part else "")
+        except Exception:
+            pass
+        # 类型尽量切到「材料价」
+        try:
+            page.locator("#select-info-type").click(timeout=800)
+            page.wait_for_timeout(150)
+            page.get_by_text("材料价", exact=True).first.click(timeout=800)
+        except Exception:
+            pass
+        page.locator("#info-search").click(timeout=2000)
+        return True
+    except Exception:
+        return False
+
+
+def parse_yize_result_rows(raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    将易择网表格/列表行规范化为候选中间结构（可单测）。
+    支持：产品信息（市场价/工程价）与信息价（含税价/除税价）。
+    """
+    out: list[dict[str, Any]] = []
+    for row in raw_rows or []:
+        text = re.sub(r"\s+", " ", str(row.get("text") or "")).strip()
+        name = re.sub(r"\s+", " ", str(row.get("name") or "")).strip()
+        if not text and not name:
+            continue
+        if len(text) < 4:
+            continue
+        # 跳过表头
+        if re.fullmatch(r"(名称|规格型号|单位|含税价|除税价|市场价|工程价|品牌|企业名称).*", text):
+            continue
+        if not name:
+            name = text[:120]
+
+        price = None
+        price_text = ""
+        tax_mode = "unknown"
+        unit = str(row.get("unit") or "")
+
+        # 优先明确价签
+        for label, mode in (
+            ("除税价", "tax_excl"),
+            ("含税价", "tax_incl"),
+            ("市场价", "tax_incl"),
+            ("工程价", "tax_incl"),
+            ("信息价", "unknown"),
+            ("单价", "unknown"),
+        ):
+            m = re.search(
+                rf"{label}\s*[:：]?\s*[¥￥]?\s*(\d+(?:\.\d+)?)",
+                text,
+            )
+            if m:
+                price = parse_price(m.group(1))
+                price_text = m.group(0)
+                tax_mode = mode
+                break
+        if price is None:
+            # 表格单元格价
+            cell_price = str(row.get("priceText") or "")
+            if cell_price:
+                price = parse_price(cell_price)
+                price_text = cell_price
+                if "除税" in cell_price:
+                    tax_mode = "tax_excl"
+                elif "含税" in cell_price:
+                    tax_mode = "tax_incl"
+
+        if not unit:
+            um = re.search(
+                r"(?:单位|计价单位)\s*[:：]?\s*(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨|项)",
+                text,
+                re.I,
+            )
+            if um:
+                unit = um.group(1)
+
+        supplier = str(row.get("supplier") or "")
+        if not supplier:
+            sm = re.search(
+                r"([^\s]{2,40}(?:公司|厂|商行|经营部|集团))",
+                text,
+            )
+            if sm:
+                supplier = sm.group(1)
+
+        brand = str(row.get("brand") or "")
+        href = str(row.get("href") or "")
+        out.append(
+            {
+                "name": name[:180],
+                "text": text[:2000],
+                "price": price,
+                "price_text": price_text[:300],
+                "tax_mode": tax_mode,
+                "unit": unit,
+                "supplier": supplier[:80],
+                "brand": brand[:60],
+                "href": href,
+                "index": row.get("index", len(out)),
+            }
+        )
+    return out
+
+
+def _yize_extract_dom_rows(page) -> list[dict[str, Any]]:
+    """从易择结果页 DOM 抽同行标题/规格/价格，避免跨行串价。"""
+    try:
+        rows = page.evaluate(
+            """() => {
+              const out = [];
+              const seen = new Set();
+              const pushRow = (el, index) => {
+                const text = (el.innerText || '').replace(/\\s+/g, ' ').trim();
+                if (!text || text.length < 6 || text.length > 1800) return;
+                if (/^(名称|规格型号|单位|含税价|除税价|市场价|工程价)/.test(text) && text.length < 40) return;
+                if (/登录|注册|申请试用|密码登录/.test(text) && text.length < 80) return;
+                const cells = [...el.querySelectorAll('td')].map(
+                  td => (td.innerText || '').replace(/\\s+/g, ' ').trim()
+                ).filter(Boolean);
+                let name = '';
+                let priceText = '';
+                let unit = '';
+                let brand = '';
+                let supplier = '';
+                if (cells.length >= 3) {
+                  name = cells[0] || '';
+                  // 信息价：名称 规格 单位 含税 除税 ...
+                  // 产品收藏/列表：产品信息 品牌 企业 市场价 工程价 ...
+                  const moneyCells = cells.filter(c => /\\d/.test(c) && /(元|¥|￥|\\d\\.\\d)|\\d{2,}/.test(c));
+                  priceText = moneyCells[0] || cells.find(c => /^\\d+(\\.\\d+)?$/.test(c)) || '';
+                  unit = cells.find(c => /^(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨|项)$/i.test(c)) || '';
+                  brand = cells[1] && cells[1].length < 30 ? cells[1] : '';
+                  supplier = cells.find(c => /公司|厂|商行|集团/.test(c)) || '';
+                  // 若首列太短、第二列像规格，拼进 name 文本
+                  if (cells[1] && /[0-9A-Za-z]/.test(cells[1]) && cells[1].length < 80) {
+                    name = `${name} ${cells[1]}`.trim();
+                  }
+                } else {
+                  const titleEl = el.querySelector(
+                    '[class*="name"], [class*="title"], [class*="product"], a'
+                  );
+                  name = (titleEl?.getAttribute('title') || titleEl?.innerText || '').replace(/\\s+/g, ' ').trim();
+                  const priceEl = el.querySelector('[class*="price"], [class*="market"], [class*="amount"]');
+                  priceText = (priceEl?.innerText || '').replace(/\\s+/g, ' ').trim();
+                }
+                if (!name) name = text.slice(0, 120);
+                const a = el.querySelector('a[href]');
+                const href = a?.href || '';
+                const key = `${name}|${priceText}|${text.slice(0, 60)}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                out.push({index, href, name, text, priceText, unit, brand, supplier});
+              };
+
+              const selectors = [
+                'table tr',
+                '.fav-table tr',
+                '.man-table tr',
+                '[class*="list-item"]',
+                '[class*="product-item"]',
+                '[class*="price-item"]',
+                '.item',
+              ];
+              let idx = 0;
+              for (const sel of selectors) {
+                for (const el of document.querySelectorAll(sel)) {
+                  // 跳过嵌套过深重复
+                  if (el.closest('thead')) continue;
+                  pushRow(el, idx++);
+                  if (out.length >= 80) return out;
+                }
+                if (out.length >= 8) break;
+              }
+              return out;
+            }"""
+        )
+        return list(rows or [])
+    except Exception:
+        return []
+
+
+def _yize_rows_to_candidates(
+    page,
+    rows: list[dict[str, Any]],
+    query: str,
+    must: list[str],
+    min_score: int,
+    spec: PlatformSpec,
+) -> list[dict[str, Any]]:
+    parsed = parse_yize_result_rows(rows)
+    current_url = page.url or spec.search_url_template
+    out: list[dict[str, Any]] = []
+    for row in parsed:
+        name = row["name"]
+        text = row["text"]
+        sc = score_title(f"{name} {text}", must)
+        # 服务端已按关键词筛；正式精度交给 strict_name_spec_match
+        price = row.get("price")
+        href = row.get("href") or ""
+        if href and spec.item_link_contains and spec.item_link_contains not in href:
+            href = ""
+        cand = {
+            "title": name[:160],
+            "price_tax": price or 0.01,
+            "url": href or current_url,
+            "sku": f"yize:{row.get('index', '')}:{_norm_row_key(name, text)}",
+            "score": max(sc, 1),
+            "platform": spec.id,
+            "supplier": row.get("supplier") or "",
+            "unit": row.get("unit") or "",
+            "tax_mode": row.get("tax_mode") or "unknown",
+            "price_text": row.get("price_text") or "",
+            "price_context": text[:500],
+            "price_source": "platform_result_row" if price else "missing",
+            "spec_seen": text[:1200],
+            "brand": row.get("brand") or "",
+        }
+        if price:
+            cand.update(
+                inline_detail=True,
+                detail_text=text[:4000],
+                sku_scope="exact_result_row",
+            )
+        else:
+            cand["needs_detail_price"] = True
+        out.append(cand)
+    out.sort(key=lambda x: (-x.get("score", 0), x.get("price_tax", 1e18)))
+    return out[:40]
+
+
+def _search_yize(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
+    """
+    易择网（easybii.com）：
+    1) 进入信息价首页（带全局搜索）
+    2) 优先「产品信息」搜索（市场价/工程价）
+    3) 不足时退回本页「信息价」名称/规格搜索（含税/除税）
+    """
+    landing = spec.search_url_template or "https://www.easybii.com/P4-3-info-price-home.html"
+    current = (page.url or "").lower()
+    if "easybii.com" not in current or "login" in current:
+        page.goto(landing, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(1800)
+    elif "p4-" not in current:
+        # 可能停在首页登录后仍是 /，跳到搜索页
+        page.goto(landing, wait_until="domcontentloaded", timeout=timeout_ms)
+        page.wait_for_timeout(1500)
+
+    state, _body = _yize_page_state(page)
+    if state not in ("ok", "empty_page"):
+        return None, state
+
+    # —— 通道 A：顶栏产品信息 ——
+    if _yize_header_search(page, query, search_type_objid="0"):
+        page.wait_for_timeout(2200)
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+        page.wait_for_timeout(600)
+        state, _body = _yize_page_state(page)
+        if state not in ("ok", "empty_page"):
+            return ([] if state == "empty_page" else None), state
+        rows = _yize_extract_dom_rows(page)
+        cands = _yize_rows_to_candidates(page, rows, query, must, min_score, spec)
+        priced = [c for c in cands if c.get("price_tax") and c.get("price_tax") > 0.01]
+        if priced:
+            return priced, "ok"
+        if cands:
+            return cands, "ok"
+
+    # —— 通道 B：信息价本地表单 ——
+    # 若已跳离信息价页，先回去
+    try:
+        if "info-price" not in (page.url or "").lower():
+            page.goto(landing, wait_until="domcontentloaded", timeout=timeout_ms)
+            page.wait_for_timeout(1200)
+    except Exception:
+        pass
+
+    if _yize_info_price_search(page, query):
+        page.wait_for_timeout(2200)
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+        state, _body = _yize_page_state(page)
+        if state not in ("ok", "empty_page"):
+            return ([] if state == "empty_page" else None), state
+        rows = _yize_extract_dom_rows(page)
+        cands = _yize_rows_to_candidates(page, rows, query, must, min_score, spec)
+        priced = [c for c in cands if c.get("price_tax") and c.get("price_tax") > 0.01]
+        if priced:
+            return priced, "ok"
+        return cands, "ok" if cands else "empty_page"
+
+    # —— 通道 C：顶栏信息价类型 ——
+    if _yize_header_search(page, query, search_type_objid="2"):
+        page.wait_for_timeout(2200)
+        rows = _yize_extract_dom_rows(page)
+        cands = _yize_rows_to_candidates(page, rows, query, must, min_score, spec)
+        priced = [c for c in cands if c.get("price_tax") and c.get("price_tax") > 0.01]
+        if priced:
+            return priced, "ok"
+        return cands, "ok" if cands else "empty_page"
+
+    return [], "search_control_missing"
 
 
 def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
@@ -972,7 +1489,7 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
         )
     cands = _filter_cands(goods, must, min_score, spec.id, contains)
     # 领材/慧讯列表价常藏在表格，过滤过严时放宽：有名有链即可进详情抽价
-    if not cands and goods and spec.id in ("lingcai", "huixun", "guangcai"):
+    if not cands and goods and spec.id in ("lingcai", "huixun", "guangcai", "yize"):
         loose = []
         for g in goods:
             href = g.get("href") or ""
@@ -1039,6 +1556,7 @@ HANDLERS: dict[str, Callable] = {
     "gldjc": _search_gldjc,
     "lingcai": _search_lingcai,
     "huixun": _search_huixun,
+    "yize": _search_yize,
     "generic": _search_generic,
 }
 
@@ -1084,6 +1602,8 @@ def search_on_platform(
         handler_name = "huixun"
     elif pid == "lingcai":
         handler_name = "lingcai"
+    elif pid == "yize":
+        handler_name = "yize"
     try:
         fn = HANDLERS[handler_name]
         result, status = fn(page, query, must, timeout_ms, min_score, spec)

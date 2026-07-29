@@ -7,10 +7,13 @@ pricing:
 
 inquiry:
   quotes_per_item: 3
+  # practical | strict | loose（网页向导可改，默认 practical）
+  match_mode: practical
   # side_sheet | append_cols | both
   write_back_mode: side_sheet
 
-# 默认关闭；开启后只辅助陌生表头和语义灰区，不参与定价或放宽硬规格
+# 默认关闭；也可在网页向导第①步「AI 智能辅助」中配置（写入 data/user/settings.json）
+# 开启后只辅助陌生表头和语义灰区，不参与定价或放宽硬规格
 llm:
   enabled: false
   api_base: ""   # 兼容 OpenAI 协议，如 https://api.openai.com/v1

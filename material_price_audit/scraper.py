@@ -34,6 +34,7 @@ def clean_profile_locks(profile_dir: Path) -> list[str]:
     """
     清理 Chromium 残留锁文件（SingletonLock 等）。
     上一实例未退出 / 登录面板与询价抢同一 profile 时会出现。
+    注意：不要在浏览器尚未优雅退出时调用，否则可能截断 Cookie 落盘。
     """
     removed: list[str] = []
     profile_dir = Path(profile_dir)
@@ -54,6 +55,75 @@ def clean_profile_locks(profile_dir: Path) -> list[str]:
         except Exception:
             pass
     return removed
+
+
+def profile_lock_present(profile_dir: Path) -> bool:
+    profile_dir = Path(profile_dir)
+    for name in ("SingletonLock", "SingletonSocket", "lockfile", ".parentlock"):
+        p = profile_dir / name
+        if p.exists() or p.is_symlink():
+            return True
+    return False
+
+
+def graceful_close_browser(
+    pw,
+    ctx,
+    profile_dir: Path | None = None,
+    *,
+    force_kill: bool = False,
+    flush_wait_s: float = 1.2,
+) -> None:
+    """
+    优雅关闭持久化浏览器，尽量让 Cookie/LocalStorage 写回 user-data-dir。
+
+    旧逻辑在 ctx.close() 后立刻 kill + 删锁，容易把尚未落盘的登录态冲掉，
+    表现为：登录面板登完 → 询价又要再登。
+    """
+    import time as _t
+
+    # 1) 触发存储序列化（有助于 Cookie 落盘）
+    try:
+        if ctx is not None:
+            try:
+                ctx.storage_state()
+            except Exception:
+                pass
+            try:
+                for page in list(getattr(ctx, "pages", []) or []):
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                ctx.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2) 停 Playwright 驱动
+    try:
+        if pw is not None:
+            pw.stop()
+    except Exception:
+        pass
+
+    # 3) 等 Chromium 子进程自己写完磁盘
+    _t.sleep(max(0.3, float(flush_wait_s)))
+
+    if profile_dir is None:
+        return
+    profile_dir = Path(profile_dir)
+
+    # 4) 仅在仍被占用 / 强制时才杀进程；正常关闭不要 SIGKILL
+    if force_kill or profile_lock_present(profile_dir):
+        n = kill_stale_profile_browsers(profile_dir)
+        if n:
+            _t.sleep(0.4)
+    clean_profile_locks(profile_dir)
 
 
 def kill_stale_profile_browsers(profile_dir: Path) -> int:
@@ -117,8 +187,8 @@ def kill_stale_profile_browsers(profile_dir: Path) -> int:
 
 def launch_context(profile_dir: Path, channel: str = "chrome", headless: bool = False):
     """
-    启动持久化浏览器。
-    若 profile 被占用：先关残留进程 → 清 SingletonLock → 重试。
+    启动持久化浏览器（同一 user-data-dir 复用登录 Cookie）。
+    若 profile 被占用：先优雅等待 → 仍占用再杀残留 → 清锁 → 重试。
     """
     from playwright.sync_api import sync_playwright
 
@@ -160,15 +230,19 @@ def launch_context(profile_dir: Path, channel: str = "chrome", headless: bool = 
             )
             print(f"[browser] 启动失败 (attempt {attempt+1}/3): {type(e).__name__}: {e}")
             if busy or attempt < 2:
-                n = kill_stale_profile_browsers(profile_dir)
+                import time as _t
+
+                # 先等一等，给上一实例（登录面板）时间把 Cookie 写完并退出
+                _t.sleep(0.8 if attempt == 0 else 0.5)
+                n = 0
+                if profile_lock_present(profile_dir) or busy:
+                    n = kill_stale_profile_browsers(profile_dir)
                 removed = clean_profile_locks(profile_dir)
                 print(
                     f"[browser] 释放 profile：killed≈{n} 进程，"
                     f"清理锁文件={removed or '无'}"
                 )
-                import time as _t
-
-                _t.sleep(0.6)
+                _t.sleep(0.5)
             else:
                 break
     raise RuntimeError(

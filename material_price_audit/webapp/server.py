@@ -52,7 +52,7 @@ def _platform_catalog(config: dict[str, Any] | None = None) -> list[dict[str, An
             "id": platform_id,
             "name": registry[platform_id].name,
             "login_url": registry[platform_id].login_url,
-            "cost": platform_id in ("guangcai", "huixun", "lingcai"),
+            "cost": platform_id in ("guangcai", "huixun", "lingcai", "yize"),
             "custom": platform_id not in BUILTIN,
         }
         for platform_id in platform_ids
@@ -216,8 +216,10 @@ class Handler(BaseHTTPRequestHandler):
             elif settings.platforms_enabled:
                 snap["platforms"] = list(settings.platforms_enabled)
                 STATE.platforms = list(settings.platforms_enabled)
+            # quotes_per_item：内存 STATE 优先；仅在未初始化时回落 settings
             if not snap.get("quotes_per_item"):
-                snap["quotes_per_item"] = settings.quotes_per_item
+                snap["quotes_per_item"] = settings.quotes_per_item or 3
+                STATE.quotes_per_item = int(snap["quotes_per_item"])
             # platforms catalog
             snap["catalog"] = _platform_catalog(cfg)
             snap["version"] = __version__
@@ -233,6 +235,8 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     files.append({"name": p.name, "path": str(p)})
             snap["input_files"] = files
+            # AI / LLM 配置（Key 不回传明文）
+            snap["llm"] = settings.public_llm_dict()
             # 登录面板独立状态（snapshot 内已带 login_panel，此处保证有 platforms 时初始化）
             if snap.get("platforms") and not (snap.get("login_panel") or {}).get("platforms"):
                 LOGIN_PANEL.reset_for_platforms(snap["platforms"])
@@ -296,7 +300,9 @@ class Handler(BaseHTTPRequestHandler):
                 platforms = [x.strip() for x in platforms.split(",") if x.strip()]
             try:
                 quotes = _bounded_int(
-                    data.get("quotes_per_item") or data.get("quotes"),
+                    data.get("quotes_per_item")
+                    if data.get("quotes_per_item") is not None
+                    else data.get("quotes"),
                     field="每条价格数",
                     default=3,
                     minimum=1,
@@ -312,19 +318,61 @@ class Handler(BaseHTTPRequestHandler):
             except RequestBodyError as exc:
                 return _json_response(self, exc.status, {"ok": False, "error": str(exc)})
             skip_login = bool(data.get("skip_login"))
-            runner.apply_settings(platforms, quotes, limit, skip_login)
+            llm_payload = data.get("llm") if isinstance(data.get("llm"), dict) else None
+            match_mode = str(data.get("match_mode") or "").strip().lower() or None
+            runner.apply_settings(
+                platforms, quotes, limit, skip_login, llm=llm_payload, match_mode=match_mode
+            )
             snap = STATE.snapshot()
-            # 确保前端立刻能拿到 catalog 重绘勾选
+            cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
+            settings = get_user_settings(root, cfg)
+            # 确保前端立刻能拿到 catalog 重绘勾选；显式回写价数/试跑/AI，便于前端锁表
             return _json_response(
                 self,
                 200,
                 {
                     "ok": True,
                     **snap,
+                    "quotes_per_item": STATE.quotes_per_item,
+                    "match_mode": getattr(STATE, "match_mode", None) or settings.match_mode,
+                    "limit": STATE.limit,
+                    "platforms": list(STATE.platforms),
+                    "llm": settings.public_llm_dict(),
                     "catalog": _platform_catalog(),
                     "login_panel": LOGIN_PANEL.snapshot(),
                 },
             )
+
+        if path == "/api/llm":
+            # 仅更新 AI 配置（不要求同时改平台）
+            llm_payload = data if isinstance(data, dict) else {}
+            if "llm" in llm_payload and isinstance(llm_payload.get("llm"), dict):
+                llm_payload = llm_payload["llm"]
+            public = runner.apply_llm_settings(llm_payload)
+            return _json_response(self, 200, {"ok": True, "llm": public})
+
+        if path == "/api/llm/test":
+            # 可用请求体临时覆盖 Key（不落盘）做连通性测试
+            from ..schema_map import test_llm_connection
+            from ..settings_store import UserSettings
+
+            cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
+            settings = get_user_settings(root, cfg)
+            if isinstance(data, dict):
+                if "enabled" in data:
+                    settings.llm_enabled = bool(data.get("enabled"))
+                else:
+                    settings.llm_enabled = True  # 测试时视为开启
+                if data.get("api_base") is not None:
+                    settings.llm_api_base = str(data.get("api_base") or "").strip()
+                if data.get("model") is not None:
+                    settings.llm_model = str(data.get("model") or "gpt-4o-mini").strip()
+                if data.get("api_key_env") is not None:
+                    settings.llm_api_key_env = str(data.get("api_key_env") or "OPENAI_API_KEY")
+                if data.get("api_key"):
+                    settings.llm_api_key = str(data.get("api_key")).strip()
+            result = test_llm_connection(settings)
+            return _json_response(self, 200 if result.get("ok") else 400, result)
 
         if path == "/api/login/init":
             plats = data.get("platforms") or STATE.platforms
@@ -373,7 +421,22 @@ class Handler(BaseHTTPRequestHandler):
             return _json_response(self, 200, {"ok": True, "path": str(p)})
 
         if path == "/api/parse":
-            p = Path(STATE.input_path) if STATE.input_path else None
+            # 优先请求体 name → 已选 STATE.input_path → 单文件自动
+            p: Path | None = None
+            name = ""
+            try:
+                if data.get("name"):
+                    name = _excel_filename(str(data.get("name") or ""))
+                    p = root / "data" / "input" / name
+                    if not p.is_file():
+                        return _json_response(
+                            self, 404, {"ok": False, "error": f"文件不存在：{name}"}
+                        )
+                    STATE.input_path = str(p.resolve())
+            except RequestBodyError as exc:
+                return _json_response(self, exc.status, {"ok": False, "error": str(exc)})
+            if p is None and STATE.input_path:
+                p = Path(STATE.input_path)
             result = runner.run_parse(p)
             return _json_response(self, 200, {**result, **STATE.snapshot()})
 
@@ -384,9 +447,58 @@ class Handler(BaseHTTPRequestHandler):
             STATE.log("已确认登录完成（LOGIN_CONTINUE）")
             return _json_response(self, 200, {"ok": True})
 
+        if path == "/api/items":
+            # 完整材料列表（供勾选范围），可按 sheet 过滤
+            sheet = str((data or {}).get("sheet") or "").strip()
+            items = list(STATE.items_preview or [])
+            if sheet:
+                items = [it for it in items if str(it.get("sheet") or "") == sheet]
+            with STATE.lock:
+                sheet_counts = STATE._sheet_counts_unlocked()
+            return _json_response(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "items": items[:3000],
+                    "items_count": len(STATE.items_preview or []),
+                    "filtered_count": len(items),
+                    "sheet_counts": sheet_counts,
+                    "item_scope": {
+                        "mode": STATE.item_scope_mode,
+                        "n": STATE.item_scope_n,
+                        "sheets": list(STATE.item_scope_sheets),
+                        "ids": list(STATE.item_scope_ids),
+                    },
+                },
+            )
+
+        if path == "/api/job/control":
+            action = str((data or {}).get("action") or "").strip().lower()
+            result = STATE.set_control(action)
+            code = 200 if result.get("ok") else 400
+            return _json_response(self, code, {**result, **STATE.snapshot()})
+
+        if path == "/api/job/llm":
+            # 询价过程中热切换 AI
+            if "enabled" not in (data or {}):
+                return _json_response(
+                    self, 400, {"ok": False, "error": "需要 enabled: true/false"}
+                )
+            result = STATE.set_llm_runtime(bool(data.get("enabled")))
+            return _json_response(self, 200, {**result, **STATE.snapshot()})
+
         if path == "/api/start":
-            if STATE.phase == "running":
-                return _json_response(self, 409, {"ok": False, "error": "已在运行中"})
+            if STATE.phase in ("running", "paused"):
+                return _json_response(
+                    self,
+                    409,
+                    {
+                        "ok": False,
+                        "error": "已在运行/暂停中，请先停止或继续当前任务",
+                        "phase": STATE.phase,
+                    },
+                )
             # 必须用请求体里的勾选覆盖，避免旧 settings 里的慧讯混入
             platforms = data.get("platforms") if data else None
             if isinstance(platforms, str):
@@ -397,8 +509,11 @@ class Handler(BaseHTTPRequestHandler):
             if not platforms:
                 return _json_response(self, 400, {"ok": False, "error": "请先勾选平台"})
             try:
+                # 缺省用当前 STATE（用户第①步已保存的值），不要静默掉回 3
                 quotes = _bounded_int(
-                    data.get("quotes_per_item") or data.get("quotes"),
+                    data.get("quotes_per_item")
+                    if data.get("quotes_per_item") is not None
+                    else data.get("quotes"),
                     field="每条价格数",
                     default=STATE.quotes_per_item or 3,
                     minimum=1,
@@ -407,12 +522,49 @@ class Handler(BaseHTTPRequestHandler):
                 limit = _bounded_int(
                     data.get("limit"),
                     field="试跑条数",
-                    default=STATE.limit or 0,
+                    default=STATE.limit if STATE.limit is not None else 0,
                     minimum=0,
                     maximum=100_000,
                 )
             except RequestBodyError as exc:
                 return _json_response(self, exc.status, {"ok": False, "error": str(exc)})
+            # 询价范围：全部 / 前N / 按 sheet / 勾选 id
+            scope = (data or {}).get("item_scope") if isinstance(data, dict) else None
+            if not isinstance(scope, dict):
+                scope = {}
+            mode = str(
+                scope.get("mode")
+                or (data or {}).get("item_scope_mode")
+                or STATE.item_scope_mode
+                or "all"
+            ).lower()
+            # 兼容旧字段 limit：无 item_scope 时 limit>0 → first_n
+            if not scope.get("mode") and not (data or {}).get("item_scope_mode"):
+                if limit > 0:
+                    mode = "first_n"
+            try:
+                scope_n = _bounded_int(
+                    scope.get("n")
+                    if scope.get("n") is not None
+                    else (data or {}).get("item_scope_n", limit),
+                    field="前N条",
+                    default=limit or 0,
+                    minimum=0,
+                    maximum=100_000,
+                )
+            except RequestBodyError as exc:
+                return _json_response(self, exc.status, {"ok": False, "error": str(exc)})
+            scope_sheets = scope.get("sheets") or (data or {}).get("item_scope_sheets") or []
+            if isinstance(scope_sheets, str):
+                scope_sheets = [x.strip() for x in scope_sheets.split(",") if x.strip()]
+            scope_ids = scope.get("ids") or (data or {}).get("item_scope_ids") or []
+            if isinstance(scope_ids, str):
+                scope_ids = [x.strip() for x in scope_ids.split(",") if x.strip()]
+            runner.apply_item_scope(mode, scope_n, list(scope_sheets), list(scope_ids))
+            if mode == "first_n":
+                limit = scope_n
+            elif mode in ("sheets", "ids"):
+                limit = 0
             # 优先使用登录面板已验证的站；可强制 require_login_panel
             verified = LOGIN_PANEL.verified_ids()
             require_all = bool((data or {}).get("require_all_login", True))
@@ -432,7 +584,18 @@ class Handler(BaseHTTPRequestHandler):
             skip_login = bool((data or {}).get("skip_login", False)) or (
                 bool(verified) and set(platforms).issubset(set(verified))
             )
-            runner.apply_settings(platforms, quotes, limit, skip_login)
+            match_mode = str((data or {}).get("match_mode") or "").strip().lower() or None
+            runner.apply_settings(
+                platforms, quotes, limit, skip_login, match_mode=match_mode
+            )
+            # apply_settings 可能把 first_n 又写一遍；再应用一次 scope 保证 sheets/ids 不丢
+            runner.apply_item_scope(mode, scope_n, list(scope_sheets), list(scope_ids))
+            with STATE.lock:
+                sel_n = STATE._selected_count_unlocked()
+            STATE.log(
+                f"启动参数：K={STATE.quotes_per_item}  匹配={STATE.match_mode}"
+                f"  范围={STATE.item_scope_mode} 预计{sel_n}条"
+            )
             # apply_settings 会 reset 登录面板行，需保留 verified 状态
             if verified:
                 LOGIN_PANEL.reset_for_platforms(platforms)
@@ -448,11 +611,32 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 STATE.log(f"[登录面板] 启动询价前关闭浏览器失败: {e}")
             clear_agent_login_signal(root)
+            # 继续询价：保留 evidence 跳过已完成；全新开始则清空进度计数
+            continue_mode = bool((data or {}).get("continue"))
+            STATE.continue_mode = continue_mode
             STATE.phase = "running"
+            STATE.control = "run"
             STATE.error = ""
-            STATE.full_k = STATE.partial = STATE.need_review = STATE.no_match = 0
-            STATE.item_results = []
+            if not continue_mode:
+                STATE.full_k = STATE.partial = STATE.need_review = STATE.no_match = 0
+                STATE.item_results = []
+                STATE.result_by_sheet = []
             STATE.logs = []
+            try:
+                cfg0 = load_config(
+                    root / "config.yaml" if (root / "config.yaml").exists() else None
+                )
+                st0 = get_user_settings(root, cfg0)
+                STATE.reset_job_control(llm_default=bool(st0.llm_enabled))
+                if (data or {}).get("llm_enabled") is not None:
+                    STATE.llm_runtime_enabled = bool(data.get("llm_enabled"))
+            except Exception:
+                STATE.reset_job_control(llm_default=None)
+            STATE.log(
+                "继续询价（跳过已有合格价）…"
+                if continue_mode
+                else "开始新询价任务…"
+            )
             STATE.log(
                 f"任务启动…平台={', '.join(platforms)}；"
                 f"登录面板已验证={', '.join(verified) or '无'}"

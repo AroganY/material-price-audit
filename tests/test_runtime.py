@@ -49,8 +49,8 @@ pricing:
     assert settings.tax_divisor == 1.09
 
 
-def test_only_five_sites_are_builtin_maintained_platforms():
-    assert CORE_PLATFORM_IDS == ("guangcai", "lingcai", "huixun", "jd", "1688")
+def test_core_builtin_maintained_platforms_include_yize():
+    assert CORE_PLATFORM_IDS == ("guangcai", "lingcai", "huixun", "yize", "jd", "1688")
 
 
 def test_project_home_environment_override_is_respected(tmp_path: Path, monkeypatch):

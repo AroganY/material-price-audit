@@ -2,14 +2,30 @@
 
 ## 敏感数据
 
-以下内容只能保存在本机，禁止提交 Issue、PR 或公开日志：
+以下内容只能保存在本机，**禁止**提交 Issue、PR、公开日志或文档截图：
 
-- `.browser-profile/` 中的 Cookie、Local Storage 和登录令牌；
-- 真实询价表、工程名称、供应商联系人和报价结果；
-- `config.yaml` 中的私有接口地址或密钥；
-- `data/user/`、`data/output/` 和证据截图。
+| 类型 | 位置 |
+|------|------|
+| 登录 Cookie / 会话 | `.browser-profile/` |
+| 真实询价表 | `data/input/*`、任意 `*.xlsx` |
+| 结果与证据 | `data/output/*`（仅保留 `.gitkeep`） |
+| 用户设置 / API Key | `data/user/settings.json` 等 |
+| 本地配置 | `config.yaml`（用 `config.example.yaml` 作模板） |
+| 映射缓存 | `data/mapping-cache/` |
+| 调试截屏 | `**/huixun_debug/`、临时 `*_debug/` |
 
-若这些数据被误提交，应立即撤销相关会话或密钥，并从 Git 历史中清除。
+仓库 `.gitignore` 已默认排除上述路径。发版前请执行：
+
+```bash
+git status   # 确认无 xlsx / settings / browser-profile
+rm -rf data/output/* data/user/* .browser-profile
+touch data/output/.gitkeep
+```
+
+`docs/images/` 若含真实工程材料名，请用演示数据重跑  
+`python scripts/capture_screenshots.py` 后再提交。
+
+若敏感数据被误提交，应立即撤销密钥/会话，并从 Git 历史中清除。
 
 LLM 功能默认关闭。启用后，陌生表头预览以及语义待核所需的材料名称、规格和候选证据会发送到 `api_base` 指向的服务。保密项目应保持关闭，或只使用经过授权的私有接口。
 

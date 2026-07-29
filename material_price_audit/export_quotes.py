@@ -144,7 +144,8 @@ def write_quote_result_workbook(
         elif st == "need_review":
             stats["need_review"] += 1
             fill = partial_fill
-            st_label = "找到候选·规格待核"
+            n_rev = len(qset.review_candidates or [])
+            st_label = f"候选待核({n_rev}条)·请人工采用"
         elif st in ("no_match", "skipped"):
             stats["no_match"] += 1
             fill = bad_fill if st == "no_match" else partial_fill
@@ -156,7 +157,31 @@ def write_quote_result_workbook(
 
         audit = audit_from_quotes(it, qset, tax_divisor, never_exceed)
         n_q = len(qset.quotes)
-        hint = qset.error or ("" if n_q else "用户勾选平台中均无名称+规格完全匹配")
+        # 无合格价时，审定参考可暂用候选最低价（标注待核，不假装已严格匹配）
+        if audit is None and qset.review_candidates and never_exceed:
+            try:
+                cands_ex = []
+                for rq in qset.review_candidates:
+                    ex = rq.price_ex_tax
+                    if ex is None and rq.price:
+                        if rq.tax_mode == "tax_incl":
+                            ex = r2(float(rq.price) / tax_divisor)
+                        else:
+                            ex = r2(float(rq.price))
+                    if ex is not None:
+                        cands_ex.append(ex)
+                if cands_ex:
+                    audit = min(cands_ex)
+                    if it.submit is not None:
+                        audit = min(audit, float(it.submit))
+                    audit = r2(audit)
+            except Exception:
+                pass
+        hint = qset.error or ""
+        if not n_q and qset.review_candidates:
+            hint = hint or "有候选价待人工确认（非严格合格价）"
+        elif not n_q:
+            hint = hint or "无合格价且无候选"
         row_vals: list[Any] = [
             it.sheet,
             it.row,

@@ -67,6 +67,7 @@ def review_semantic_gray_area(
             data = json.loads(cache.read_text(encoding="utf-8"))
         except Exception:
             data = None
+    from_cache = False
     if data is None:
         system = (
             "你是工程材料规格复核器，只判断名称/规格语义是否等价，不提供也不推断价格。"
@@ -82,8 +83,25 @@ def review_semantic_gray_area(
                 cache.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             except Exception:
                 pass
+    else:
+        from_cache = True
     if not data:
-        return rule_result
+        # 已尝试调用但失败
+        failed = MatchResult(
+            rule_result.ok,
+            rule_result.score,
+            rule_result.required_hit,
+            rule_result.required_total,
+            rule_result.detail + "（AI 语义复核未返回结果，保留规则判定）",
+            rule_result.level,
+            rule_result.outcome,
+            missing=rule_result.missing,
+            conflicts=rule_result.conflicts,
+            evidence=rule_result.evidence,
+            llm_invoked=True,
+            llm_decision="fail",
+        )
+        return failed
 
     decision = str(data.get("decision") or "").lower()
     confidence = float(data.get("confidence") or 0)
@@ -92,6 +110,7 @@ def review_semantic_gray_area(
     quotes_valid = bool(quotes) and all(q in evidence_text for q in quotes)
     all_covered = set(rule_result.missing).issubset(covered)
     reason = str(data.get("reason") or "")[:240]
+    cache_note = "缓存" if from_cache else "实时"
 
     if decision == "conflict" and confidence >= 0.9 and quotes_valid:
         conflict = f"语义复核发现冲突：{reason or quotes[0]}"
@@ -99,11 +118,28 @@ def review_semantic_gray_area(
             False, rule_result.score, rule_result.required_hit, rule_result.required_total,
             conflict, "reject", "reject", missing=rule_result.missing,
             conflicts=(conflict,), evidence=rule_result.evidence + tuple(quotes),
+            llm_invoked=True, llm_decision="conflict",
         )
     if decision == "equivalent" and confidence >= 0.95 and quotes_valid and all_covered:
         return MatchResult(
             True, 1.0, rule_result.required_total, rule_result.required_total,
-            f"名称+规格语义等价（LLM 灰区复核；证据：{'；'.join(quotes[:3])}）",
+            f"名称+规格语义等价（AI {cache_note}复核；证据：{'；'.join(quotes[:3])}）",
             "strict", "accept", evidence=rule_result.evidence + tuple(quotes),
+            llm_invoked=True, llm_decision="equivalent",
         )
-    return rule_result
+    # 调用了但不足以改判
+    kept = MatchResult(
+        rule_result.ok,
+        rule_result.score,
+        rule_result.required_hit,
+        rule_result.required_total,
+        f"{rule_result.detail}（AI {cache_note}：{decision or 'insufficient'}，保留规则判定）",
+        rule_result.level,
+        rule_result.outcome,
+        missing=rule_result.missing,
+        conflicts=rule_result.conflicts,
+        evidence=rule_result.evidence,
+        llm_invoked=True,
+        llm_decision=decision or "insufficient",
+    )
+    return kept

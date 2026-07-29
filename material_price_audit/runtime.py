@@ -133,8 +133,8 @@ def save_evidence(
 def get_user_settings(root: Path, config: dict | None = None) -> UserSettings:
     settings = load_settings(root)
     if settings_path(root).exists():
-        # The browser wizard owns user choices such as platforms and K.
-        # Advanced config may still supply pricing/LLM options, but must not
+        # The browser wizard owns user choices such as platforms, K and LLM.
+        # Advanced config may still supply pricing options, but must not
         # silently overwrite a choice persisted by the UI.
         config = deepcopy(config or {})
         platforms = config.get("platforms")
@@ -143,6 +143,8 @@ def get_user_settings(root: Path, config: dict | None = None) -> UserSettings:
         inquiry = config.get("inquiry")
         if isinstance(inquiry, dict):
             inquiry.pop("quotes_per_item", None)
+        # LLM 以向导/settings.json 为准，避免 config.yaml 把前端关掉的 AI 又打开
+        config.pop("llm", None)
     return merge_settings_from_config(settings, config)
 
 

@@ -75,6 +75,78 @@ def test_explicit_price_unit_conflict_is_rejected():
     assert "单位冲突" in detail
 
 
+def test_piece_like_units_are_compatible():
+    """消声器：询价表「节」 vs 广材「台/个」应视为同类，不能硬拒。"""
+    assert unit_compatibility("节", "台")[0] is True
+    assert unit_compatibility("节", "个")[0] is True
+    assert unit_compatibility("台", "套")[0] is True
+
+
+def test_xzp100_silencer_matches_guangcai_title():
+    """
+    真实踩坑：名称粘了尺寸+有效长度，匹配词变成「型片式消声器/有效长度」，
+    页面标题「XZP100片式消声器」被整表 reject；图集号 15K116-1 页面常不写。
+    """
+    target = item(
+        "XZP100型片式消声器 1250X400 有效长度：1500",
+        "15K116-1",
+    )
+    # 广材常见：标题无「型」、详情有截面/长度，可不写图集号
+    title = "XZP100片式消声器"
+    detail = "XZP100 片式消声器 截面1250×400 有效长度1500"
+    mr = strict_name_spec_match(target, title, detail)
+    assert mr.ok, mr.detail
+    # 仅标题无尺寸：名称应能过，规格可 review（绝不能名称 reject）
+    mr2 = strict_name_spec_match(target, title, "XZP100片式消声器 通风消声")
+    assert "名称未命中" not in mr2.detail
+    assert mr2.outcome != "reject"
+
+
+def test_name_core_drops_effective_length_noise():
+    from material_price_audit.matching import name_core_words, name_search_core
+
+    core = name_search_core("XZP100型片式消声器 1250X400 有效长度：1500")
+    assert "有效长度" not in core
+    assert "片式消声器" in core or "消声器" in core
+    words = name_core_words("XZP100型片式消声器 1250X400 有效长度：1500")
+    assert "有效长度" not in words
+    assert any("片式消声器" in w or w == "片式消声器" for w in words)
+
+
+def test_xzp100_type_char_is_same_model():
+    """XZP100型 ≡ XZP100，标题无「型」也能名称命中。"""
+    target = item("XZP100型片式消声器", "15K116-1")
+    mr = strict_name_spec_match(target, "XZP100片式消声器", "XZP100片式消声器")
+    assert mr.ok or "名称未命中" not in mr.detail, mr.detail
+    assert mr.outcome != "reject" or mr.ok
+
+
+def test_section_matches_three_number_size():
+    """询价 1250x400 应命中页面 1250×400×1500（第三维有效长）。"""
+    target = item(
+        "XZP100型片式消声器 1250X400 有效长度：1500",
+        "15K116-1",
+    )
+    mr = strict_name_spec_match(
+        target,
+        "XZP100片式消声器",
+        "型号XZP100 规格1250×400×1500",
+    )
+    assert mr.ok, mr.detail
+
+
+def test_cost_queries_include_section_size():
+    from material_price_audit.normalize import build_cost_site_queries, peel_dims_into_spec
+
+    name = "XZP100型片式消声器 1250X400 有效长度：1500"
+    spec = "15K116-1"
+    n, s = peel_dims_into_spec(name, spec)
+    qs = build_cost_site_queries(n, s, "", None)
+    joined = " ".join(qs).lower()
+    assert "1250" in joined and "400" in joined, qs
+    assert any("xzp100" in q.lower() and "1250" in q.lower() for q in qs), qs
+
+
 def test_line_light_name_drops_decorative_led_and_o1():
     target = item(
         "LED成品线型灯O1",

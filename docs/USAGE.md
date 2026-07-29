@@ -1,12 +1,14 @@
 # 使用指南
 
+> **推荐完整图文教程：** [WEB_GUIDE.md](./WEB_GUIDE.md)（含真实页面截图）
+
 主流程只有一个入口：
 
 ```bash
-python -m material_price_audit serve
+python -m material_price_audit serve --host 127.0.0.1 --port 8765
 ```
 
-命令只负责打开向导；平台选择、上传、登录、试跑条数和下载都在浏览器完成。
+命令只负责打开向导；平台选择、上传、登录、范围、暂停/停止、下载都在浏览器完成。
 
 ## 1. 选择平台
 

@@ -11,10 +11,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..login_gate import check_url_for, verify_logged_in
+from ..login_gate import (
+    check_url_for,
+    ensure_logged_in_or_resume,
+    try_resume_huixun_session,
+    verify_logged_in,
+)
 from ..platforms import BUILTIN, load_platform_registry, normalize_platform_id
 from ..runtime import load_config, project_root
-from ..scraper import clean_profile_locks, kill_stale_profile_browsers, launch_context
+from ..scraper import (
+    clean_profile_locks,
+    graceful_close_browser,
+    kill_stale_profile_browsers,
+    launch_context,
+    profile_lock_present,
+)
 from .job_state import STATE
 
 
@@ -156,62 +167,141 @@ class LoginPanel:
                 names.append(r["name"] or r["id"])
         return f"已通过 {len(verified)}/{len(rows)}，待登录：{'、'.join(names)}"
 
+    @staticmethod
+    def _is_target_closed_error(exc: BaseException) -> bool:
+        msg = f"{type(exc).__name__}: {exc}".lower()
+        return any(
+            x in msg
+            for x in (
+                "targetclosed",
+                "target page, context or browser has been closed",
+                "browser has been closed",
+                "context has been closed",
+                "connection closed",
+                "protocol error",
+            )
+        )
+
     def _alive_unlocked(self) -> bool:
+        """页面/上下文仍可用才算活着；用户点 X 关窗后必须判死。"""
         try:
-            if not self.page:
+            if not self.page or not self.ctx:
                 return False
+            # Playwright: Page.is_closed()
+            try:
+                if bool(getattr(self.page, "is_closed", lambda: False)()):
+                    return False
+            except Exception:
+                return False
+            try:
+                browser = getattr(self.ctx, "browser", None)
+                if browser is not None and not browser.is_connected():
+                    return False
+            except Exception:
+                pass
+            # 读 url；已关闭会抛
             _ = self.page.url
             return True
         except Exception:
             return False
 
-    def _ensure_browser(self) -> Any:
+    def _invalidate_browser_refs(self) -> None:
+        """不关进程，只丢掉已死句柄（用户手动关窗时用）。"""
+        self.pw = None
+        self.ctx = None
+        self.page = None
+
+    def _ensure_browser(self, *, force_new: bool = False) -> Any:
         root = project_root()
         profile = root / ".browser-profile"
         cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
         channel = (cfg.get("browser") or {}).get("channel") or "chrome"
-        if self._alive_unlocked():
-            return self.page
-        self._close_quiet()
-        # 避免「profile already in use」
-        kill_stale_profile_browsers(profile)
-        clean_profile_locks(profile)
-        self.pw, self.ctx, self.page = launch_context(
-            profile, channel=channel, headless=False
-        )
-        return self.page
 
-    def _close_quiet(self) -> None:
-        try:
-            if self.ctx:
-                self.ctx.close()
-        except Exception:
-            pass
-        try:
-            if self.pw:
-                self.pw.stop()
-        except Exception:
-            pass
-        self.pw = self.ctx = self.page = None
-        # 关闭后清锁，方便询价进程立刻接管同一 profile
-        try:
-            profile = project_root() / ".browser-profile"
+        if not force_new and self._alive_unlocked():
+            return self.page
+
+        # 旧实例已死或强制重建
+        if self.pw or self.ctx or self.page:
+            try:
+                self._close_quiet(force_kill=False)
+            except Exception:
+                self._invalidate_browser_refs()
+        else:
+            self._invalidate_browser_refs()
+
+        # 仅当锁还在才杀残留，避免无意义地打掉刚写入的登录态
+        if profile_lock_present(profile):
+            kill_stale_profile_browsers(profile)
             clean_profile_locks(profile)
-        except Exception:
-            pass
+            time.sleep(0.4)
+        else:
+            clean_profile_locks(profile)
+
+        last_err: Exception | None = None
+        for attempt in range(2):
+            try:
+                self.pw, self.ctx, self.page = launch_context(
+                    profile, channel=channel, headless=False
+                )
+                if self._alive_unlocked():
+                    STATE.log("[登录面板] 已启动/重建浏览器")
+                    return self.page
+            except Exception as e:
+                last_err = e
+                STATE.log(f"[登录面板] 启动浏览器失败({attempt+1}/2): {e}")
+                self._invalidate_browser_refs()
+                kill_stale_profile_browsers(profile)
+                clean_profile_locks(profile)
+                time.sleep(0.6)
+        raise RuntimeError(f"无法启动登录浏览器: {last_err}")
+
+    def _goto(self, url: str, *, timeout: int = 30000, wait_ms: int = 600) -> Any:
+        """
+        带自动恢复的 goto：关窗 / TargetClosed 后重建浏览器再试一次。
+        解决「校验完关浏览器 → 下一站打开报 Target page has been closed」。
+        """
+        page = self._ensure_browser()
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+            if wait_ms:
+                page.wait_for_timeout(wait_ms)
+            return page
+        except Exception as e:
+            if not self._is_target_closed_error(e):
+                raise
+            STATE.log(f"[登录面板] 页面已关闭，自动重建浏览器后重试… ({e})")
+            # 句柄作废，强制新开（Cookie 仍在 profile）
+            try:
+                self._close_quiet(force_kill=False)
+            except Exception:
+                self._invalidate_browser_refs()
+            page = self._ensure_browser(force_new=True)
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+            if wait_ms:
+                page.wait_for_timeout(wait_ms)
+            return page
+
+    def _close_quiet(self, *, force_kill: bool = False) -> None:
+        profile = project_root() / ".browser-profile"
+        try:
+            graceful_close_browser(
+                self.pw,
+                self.ctx,
+                profile,
+                force_kill=force_kill,
+                flush_wait_s=1.0,
+            )
+        finally:
+            self.pw = self.ctx = self.page = None
 
     def close_browser(self) -> dict[str, Any]:
         with self.lock:
-            self._close_quiet()
-            try:
-                profile = project_root() / ".browser-profile"
-                kill_stale_profile_browsers(profile)
-                clean_profile_locks(profile)
-            except Exception:
-                pass
+            # 正常交接给询价：优雅关窗，尽量保留 Cookie；勿强杀
+            self._close_quiet(force_kill=False)
             self.active_platform = ""
             self.busy = False
-            STATE.log("[登录面板] 已关闭浏览器（已通过状态仍保留）")
+            self.last_error = ""
+            STATE.log("[登录面板] 已关闭浏览器（登录 Cookie 保留在 .browser-profile；下一站会自动重开）")
             return self.snapshot()
 
     def open_platform(self, platform_id: str) -> dict[str, Any]:
@@ -242,18 +332,73 @@ class LoginPanel:
             login_url = row.login_url
             name = row.name
         try:
-            page = self._ensure_browser()
-            page.goto(login_url, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(600)
+            # 先去校验页探测会话：已登录则不要再把用户扔回登录页
+            check = check_url_for(pid, login_url)
+            already = False
+            reason = ""
+            try:
+                page = self._goto(check, timeout=30000, wait_ms=800)
+                # 慧讯：可能被踢回登录页但有「一键登录」
+                already, reason = ensure_logged_in_or_resume(
+                    page, pid, login_url, user_confirmed=False
+                )
+            except Exception as e:
+                STATE.log(f"[登录面板] 预检会话失败 {pid}: {e}，打开登录页")
+                already = False
+
+            if already:
+                with self.lock:
+                    row = self.rows.get(pid)
+                    if row:
+                        row.status = "verified"
+                        row.message = f"✓ 会话仍有效：{reason}"
+                        row.checked_at = time.strftime("%H:%M:%S")
+                    self.busy = False
+                STATE.log(f"[登录面板] ✓ {name} 无需重登 — {reason}")
+                self._save_persist()
+                return {**self.snapshot(), "ok": True, "verified": True, "reused": True}
+
+            # 会话无效：打开登录页（同样自动恢复关窗）
+            page = self._goto(login_url, timeout=45000, wait_ms=800)
+            # 慧讯：关窗重开常只需点「一键登录」
+            if pid == "huixun":
+                try:
+                    ok_h, reason_h = try_resume_huixun_session(page)
+                    if ok_h:
+                        with self.lock:
+                            row = self.rows.get(pid)
+                            if row:
+                                row.status = "verified"
+                                row.message = f"✓ {reason_h}"
+                                row.checked_at = time.strftime("%H:%M:%S")
+                            self.busy = False
+                        STATE.log(f"[登录面板] ✓ {name} — {reason_h}")
+                        self._save_persist()
+                        return {
+                            **self.snapshot(),
+                            "ok": True,
+                            "verified": True,
+                            "reused": True,
+                        }
+                    STATE.log(f"[登录面板] 慧讯一键登录未自动完成：{reason_h}")
+                except Exception as e:
+                    STATE.log(f"[登录面板] 慧讯一键登录异常: {e}")
+
             with self.lock:
                 row = self.rows.get(pid)
                 if row:
                     # 重新打开登录页后必须重新校验，不能沿用旧通过状态。
                     row.status = "opened"
-                    row.message = "已打开登录页，请在浏览器登录，然后点「本站已登录，校验」"
+                    if pid == "huixun":
+                        row.message = (
+                            "已打开慧讯登录页。若已有账号信息，可点页面「一键登录」；"
+                            "或点下方「本站已登录，校验」（程序也会尝试自动点）"
+                        )
+                    else:
+                        row.message = "已打开登录页，请在浏览器登录，然后点「本站已登录，校验」"
                     row.checked_at = time.strftime("%H:%M:%S")
                 self.busy = False
-            STATE.log(f"[登录面板] 已打开 {name}({pid})")
+            STATE.log(f"[登录面板] 已打开 {name}({pid}) 登录页")
             return {**self.snapshot(), "ok": True}
         except Exception as e:
             with self.lock:
@@ -263,6 +408,12 @@ class LoginPanel:
                 if row:
                     row.status = "failed"
                     row.message = f"打开失败: {e}"
+            # 失败后清掉死句柄，避免下一站继续踩雷
+            if self._is_target_closed_error(e):
+                try:
+                    self._close_quiet(force_kill=False)
+                except Exception:
+                    self._invalidate_browser_refs()
             STATE.log(f"[登录面板] 打开 {pid} 失败: {e}")
             return {**self.snapshot(), "ok": False, "error": str(e)}
 
@@ -284,18 +435,28 @@ class LoginPanel:
             login_url = row.login_url
             name = row.name
         try:
-            page = self._ensure_browser()
-            # 关键：去首页/搜索页校验，不要再 goto /login（会误判卡住）
+            # 关键：去首页/搜索页校验；关窗后自动重开再 goto
             check = check_url_for(pid, login_url)
+            page = self._goto(check, timeout=30000, wait_ms=1200)
             try:
-                page.goto(check, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(800)
-            except Exception as e:
-                STATE.log(f"[登录面板] 打开校验页失败 {pid}: {e}，用当前页判断")
+                page.wait_for_load_state("networkidle", timeout=4000)
+            except Exception:
+                pass
+            try:
+                page.wait_for_timeout(400)
+            except Exception:
+                pass
 
-            ok, reason = verify_logged_in(
+            # 慧讯等：产品页若跳回登录，自动点「一键登录」
+            ok, reason = ensure_logged_in_or_resume(
                 page, pid, login_url, user_confirmed=True
             )
+            if not ok and pid == "huixun":
+                try:
+                    page = self._goto(login_url, timeout=30000, wait_ms=800)
+                    ok, reason = try_resume_huixun_session(page)
+                except Exception as e:
+                    reason = f"{reason}；重试一键登录失败: {e}"
             with self.lock:
                 row = self.rows.get(pid)
                 if not row:
@@ -329,6 +490,11 @@ class LoginPanel:
                     row.status = "failed"
                     row.message = f"校验异常: {e}"
                     row.checked_at = time.strftime("%H:%M:%S")
+            if self._is_target_closed_error(e):
+                try:
+                    self._close_quiet(force_kill=False)
+                except Exception:
+                    self._invalidate_browser_refs()
             STATE.log(f"[登录面板] 校验异常 {pid}: {e}")
             return {**self.snapshot(), "ok": False, "verified": False, "error": str(e)}
 

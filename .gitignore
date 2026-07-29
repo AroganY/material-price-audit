@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .eggs/
 dist/
@@ -9,15 +10,17 @@ build/
 venv/
 .env
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 coverage.xml
 htmlcov/
 
-# Browser profile (contains login cookies — never commit)
+# Browser profile — login cookies / session tokens (NEVER commit)
 .browser-profile/
 *.browser-profile/
 
-# Runtime data
+# Runtime data — real inquiry sheets, quotes, AI keys
 data/output/*
 !data/output/.gitkeep
 data/input/*
@@ -29,13 +32,31 @@ data/mapping-cache/
 # Local machine config (commit config.example.yaml only)
 config.yaml
 .env_ok_cache.json
+*.local.yaml
 
-# OS / IDE
-.DS_Store
-.idea/
-.vscode/
+# Debug dumps / temporary captures
+data/output/huixun_debug/
+**/huixun_debug/
+**/*_debug/
+**/retest_*.png
+**/retest_*.json
+
+# Spreadsheets anywhere (real project data)
 *.xlsx
 *.xlsm
 *.xls
+!docs/samples/**
+
+# Evidence & agent runtime
 evidence*.json
 *.log
+AGENT_NEXT.md
+agent_state.json
+
+# OS / IDE / tooling
+.DS_Store
+.idea/
+.vscode/
+.codegraph/
+*.swp
+*~

@@ -56,11 +56,163 @@
     label.plat strong { display: block; font-size: 14px; }
     label.plat small { color: var(--muted); font-size: 12px; }
     .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 10px 0; }
-    label.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
-    input[type=number], select {
-      background: #0b1220; border: 1px solid var(--line); color: var(--text);
-      border-radius: 8px; padding: 8px 10px; min-width: 100px; font-size: 14px;
+    label.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #cbd5e1; }
+    label.field.grow { flex: 1; min-width: 180px; }
+    /* 深色主题下强制可读：避免系统自动填充把字变成白底白字 / 近黑字 */
+    input[type=number],
+    input[type=text],
+    input[type=password],
+    input[type=search],
+    input[type=url],
+    select,
+    textarea {
+      background: #f8fafc !important;
+      border: 1px solid #94a3b8;
+      color: #0f172a !important;
+      -webkit-text-fill-color: #0f172a !important;
+      caret-color: #0f172a;
+      border-radius: 8px;
+      padding: 9px 11px;
+      min-width: 100px;
+      font-size: 14px;
+      line-height: 1.4;
+      width: 100%;
+      box-sizing: border-box;
+      color-scheme: light;
     }
+    input::placeholder,
+    textarea::placeholder {
+      color: #64748b !important;
+      -webkit-text-fill-color: #64748b !important;
+      opacity: 1;
+    }
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: 2px solid #3b82f6;
+      outline-offset: 1px;
+      border-color: #3b82f6;
+      background: #ffffff !important;
+    }
+    /* Chrome/Safari 自动填充也不改字色 */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color: #0f172a !important;
+      caret-color: #0f172a;
+      box-shadow: 0 0 0 1000px #f8fafc inset !important;
+      transition: background-color 99999s ease-out;
+    }
+    select {
+      cursor: pointer;
+    }
+    select option {
+      color: #0f172a;
+      background: #ffffff;
+    }
+    .ai-box {
+      margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+      border: 1px solid #334155; background: #1e293b;
+    }
+    .ai-box .field { color: #e2e8f0; }
+    .ai-box input[type=text],
+    .ai-box input[type=password] {
+      background: #ffffff !important;
+      border-color: #cbd5e1;
+      color: #0f172a !important;
+      -webkit-text-fill-color: #0f172a !important;
+      font-weight: 500;
+    }
+    .ai-box h3 {
+      margin: 0 0 8px; font-size: 0.98rem; color: #bfdbfe;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .ai-pill {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px;
+      background: #1d4ed8; color: #dbeafe;
+    }
+    .ai-benefits {
+      margin: 0 0 12px; padding: 0 0 0 18px; color: #93c5fd; font-size: 12.5px; line-height: 1.55;
+    }
+    .ai-benefits li { margin: 3px 0; }
+    .ai-warn { color: #fcd34d; font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
+    .ai-toggle {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #f8fafc;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      line-height: 1.45;
+    }
+    .ai-toggle span {
+      color: #f8fafc !important;
+      -webkit-text-fill-color: #f8fafc;
+    }
+    .ai-toggle small {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      font-weight: 400;
+      color: #94a3b8 !important;
+      -webkit-text-fill-color: #94a3b8;
+    }
+    .ai-toggle input {
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      accent-color: #3b82f6;
+      flex-shrink: 0;
+    }
+    .ai-fields { display: none; }
+    .ai-fields.on { display: block; }
+    .check-row {
+      display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px;
+      font-size: 13px; color: #e2e8f0; font-weight: 500;
+    }
+    .check-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #e2e8f0; }
+    .check-row input { width: auto; min-width: 0; accent-color: #3b82f6; }
+    .ai-status {
+      margin: 10px 0 12px; padding: 10px 12px; border-radius: 10px;
+      border: 1px solid #334155; background: #0f172a; font-size: 13px; line-height: 1.5;
+      color: #e2e8f0;
+    }
+    .ai-status.on { border-color: #2563eb; background: #172554; color: #dbeafe; }
+    .ai-status.off { border-color: #475569; color: #cbd5e1; }
+    .ai-status b { color: #f8fafc; }
+    .sheet-tabs {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 10px;
+    }
+    .sheet-tab {
+      border: 1px solid #475569; background: #1e293b; color: #e2e8f0;
+      border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+      font-weight: 600;
+    }
+    .sheet-tab:hover { border-color: #60a5fa; }
+    .sheet-tab.on { background: #1d4ed8; border-color: #3b82f6; color: #fff; }
+    .sheet-tab .n { opacity: .85; font-weight: 500; margin-left: 4px; }
+    /* 深色兜底；浅色主题会在下方第二套 style 覆盖 */
+    .scope-box {
+      margin: 12px 0 4px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #1e293b;
+    }
+    .scope-box .check-row label { margin-right: 6px; color: #e2e8f0; }
+    .scope-box input[type="radio"] { accent-color: #3b82f6; }
+    .scope-item-check { width: 15px; height: 15px; accent-color: #3b82f6; cursor: pointer; }
+    .result-detail {
+      font-size: 12px; color: #94a3b8; line-height: 1.45; margin-top: 4px;
+    }
+    .result-detail a { color: #93c5fd; word-break: break-all; }
+    .price-cell { color: #86efac; font-weight: 700; white-space: nowrap; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+    .table-wrap table { min-width: 720px; }
     .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
     button {
       border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer;
@@ -265,6 +417,7 @@
     button {
       min-height: 40px; border: 1px solid transparent; border-radius: 7px; padding: 0 15px;
       cursor: pointer; font-size: 13px; font-weight: 680; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
       transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
     }
     button:hover:not(:disabled) { box-shadow: 0 3px 10px rgba(15,23,42,.09); }
@@ -278,6 +431,32 @@
     button.ghost:hover:not(:disabled) { background: var(--surface-subtle); border-color: #aebbc9; }
     button.ok { background: var(--green); color: #fff; }
     button.danger { background: #fff; color: var(--red); border-color: #fecaca; }
+    /* ⑤ 运行控制：始终水平垂直居中，避免 inline-flex 文字偏上 */
+    #runControls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 16px;
+    }
+    #runControls button {
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      min-height: 40px;
+      height: 40px;
+      padding: 0 16px !important;
+      line-height: 1 !important;
+      box-sizing: border-box;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    #runControls button[style*="display: none"],
+    #runControls button[style*="display:none"] {
+      display: none !important;
+    }
+    .run-tools .stats { margin-top: 0; }
+    .run-tools .stat b { font-size: 16px; }
     .drop {
       min-height: 152px; border: 1px dashed #93a4b8; border-radius: 9px; padding: 24px;
       display: grid; place-items: center; text-align: center; color: #475569; background: var(--surface-subtle); cursor: pointer;
@@ -315,6 +494,124 @@
     .badge.opened { background: var(--blue-soft); color: var(--blue-dark); }
     .badge.pending, .badge.remembered { background: #f1f5f9; color: #475569; }
     .login-summary { margin-bottom: 12px; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 7px; background: var(--blue-soft); color: #1e40af; font-size: 12px; }
+    /* ⑤ 询价范围：浅色高对比（禁止半透明深灰 + 浅色字） */
+    .scope-box {
+      margin: 16px 0 6px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--line-strong);
+      background: #f1f5f9;
+      box-shadow: none;
+    }
+    .scope-box .scope-title,
+    .scope-box h3 {
+      margin: 0 0 8px !important;
+      padding: 0;
+      font-size: 15px !important;
+      font-weight: 750;
+      letter-spacing: -.01em;
+      color: #0f172a !important;
+      -webkit-text-fill-color: #0f172a;
+    }
+    .scope-box > .hint,
+    .scope-box .scope-desc {
+      margin: 0 0 14px !important;
+      color: #334155 !important;
+      -webkit-text-fill-color: #334155;
+      font-size: 13px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+    .scope-box .check-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 4px;
+    }
+    .scope-box .check-row label {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 8px;
+      margin: 0 !important;
+      padding: 9px 14px;
+      border: 1px solid #94a3b8;
+      border-radius: 8px;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      -webkit-text-fill-color: #0f172a;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+    .scope-box .check-row label:hover {
+      border-color: #2563eb;
+      background: #eff6ff !important;
+    }
+    .scope-box .check-row label:has(input:checked) {
+      border-color: #2563eb;
+      background: #dbeafe !important;
+      color: #1e3a8a !important;
+      -webkit-text-fill-color: #1e3a8a;
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .15);
+    }
+    .scope-box .check-row input[type="radio"],
+    .scope-box .check-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      flex-shrink: 0;
+      accent-color: #2563eb;
+    }
+    .scope-box #scopeSummary,
+    .scope-box .scope-summary {
+      margin: 14px 0 0 !important;
+      padding: 11px 14px !important;
+      border: 1px solid #86efac !important;
+      border-radius: 8px !important;
+      background: #ecfdf5 !important;
+      color: #14532d !important;
+      -webkit-text-fill-color: #14532d;
+      font-size: 13px !important;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+    .scope-box #scopeSummary.is-empty,
+    .scope-box .scope-summary.is-empty {
+      border-color: #fca5a5 !important;
+      background: #fef2f2 !important;
+      color: #991b1b !important;
+      -webkit-text-fill-color: #991b1b;
+    }
+    .scope-box .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .scope-box .table-wrap th,
+    .scope-box .table-wrap td {
+      color: #0f172a;
+      background: #fff;
+    }
+    .scope-box .table-wrap th {
+      color: #334155;
+      background: #f8fafc;
+    }
+    .scope-box .sheet-tab {
+      border: 1px solid #94a3b8;
+      background: #fff;
+      color: #0f172a;
+    }
+    .scope-box .sheet-tab.on {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #fff;
+    }
+    .scope-box .sheet-tab .n { color: inherit; opacity: .85; }
+    #scopeFirstNRow label.field {
+      color: #334155 !important;
+      font-weight: 650;
+    }
     .login-card {
       display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;
       margin-bottom: 8px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
@@ -393,14 +690,78 @@
       <div class="grid" id="platList"></div>
       <div class="row" style="margin-top:16px">
         <label class="field">每条材料询几个价？
-          <input type="number" id="quotes" min="1" max="10" value="3" />
+          <input type="number" id="quotes" min="1" max="10" value="3" step="1" />
         </label>
-        <label class="field">试跑条数（0=全部）
-          <input type="number" id="limit" min="0" max="9999" value="8" />
+        <label class="field">试跑条数（0=全部，也可在⑤步细选）
+          <input type="number" id="limit" min="0" max="9999" value="0" step="1" title="兼容旧选项：>0 表示只询前 N 条" />
+        </label>
+        <label class="field">匹配模式
+          <select id="matchMode" title="推荐：实用（候选工作台）">
+            <option value="practical" selected>实用·候选工作台（推荐）</option>
+            <option value="strict">严格·仅全规格匹配</option>
+            <option value="loose">宽松·名称像就进候选</option>
+          </select>
         </label>
       </div>
+      <p class="hint" style="margin-top:8px">
+        <strong>实用模式</strong>：名称/型号对上就保留「候选价+链接」，规格差一点进待核，不再整表「没查到」。
+        严格模式才要求截面等硬参数全过才收价。
+      </p>
+
+      <div class="ai-box" id="aiBox">
+        <h3>
+          AI 智能辅助
+          <span class="ai-pill">推荐接入</span>
+        </h3>
+        <ul class="ai-benefits">
+          <li><strong>指挥搜索</strong>：按平台改写检索词，空结果时自动换词重搜</li>
+          <li><strong>挑对商品</strong>：Playwright 抓到列表后，AI 排序优先打开最像的</li>
+          <li><strong>识表+语义</strong>：表头识别、规格同义复核</li>
+          <li><strong>不编价格</strong>：价只来自页面数字；型号/DN 冲突仍硬拒绝</li>
+        </ul>
+        <p class="ai-warn">接入兼容 OpenAI 协议的接口（官方 / 内网 / 代理均可）。材料名称与规格摘要会发往该接口；保密项目请用私有部署。</p>
+        <label class="ai-toggle">
+          <input type="checkbox" id="llmEnabled" />
+          <span>
+            开启 AI 辅助
+            <small>开启后：识表与规格复核更精准（不编造价格）</small>
+          </span>
+        </label>
+        <div class="ai-fields" id="aiFields">
+          <div class="row">
+            <label class="field grow">API Base（可留空=官方 OpenAI）
+              <input type="text" id="llmApiBase" placeholder="https://api.openai.com/v1 或内网地址" autocomplete="off" />
+            </label>
+          </div>
+          <div class="row">
+            <label class="field grow">API Key（仅保存在本机 data/user/settings.json）
+              <input type="password" id="llmApiKey" placeholder="sk-... 已配置则留空表示不修改" autocomplete="off" />
+            </label>
+          </div>
+          <div class="row">
+            <label class="field grow">模型名
+              <input type="text" id="llmModel" placeholder="gpt-4o-mini" autocomplete="off" />
+            </label>
+            <label class="field grow">环境变量名（未填 Key 时读取）
+              <input type="text" id="llmKeyEnv" placeholder="OPENAI_API_KEY" autocomplete="off" />
+            </label>
+          </div>
+          <div class="check-row">
+            <span>用途：</span>
+            <label><input type="checkbox" id="llmUseSchema" checked /> 表头识别</label>
+            <label><input type="checkbox" id="llmUseMatch" checked /> 规格语义复核</label>
+            <label><input type="checkbox" id="llmUseSearch" checked /> 搜索指挥（改词+排序）</label>
+          </div>
+          <div class="btns" style="margin-top:10px">
+            <button type="button" class="ghost" id="btnLlmTest">测试 AI 连接</button>
+            <button type="button" class="ghost" id="btnLlmClearKey">清除已存 Key</button>
+          </div>
+          <div class="msg" id="msgLlm"></div>
+        </div>
+      </div>
+
       <div class="btns">
-        <button type="button" class="ghost" id="btnCost">选择核心五站</button>
+        <button type="button" class="ghost" id="btnCost">选择核心站点</button>
         <button type="button" class="ghost" id="btnClear">清空</button>
         <button type="button" class="primary" id="btnSave1">保存并下一步</button>
       </div>
@@ -420,10 +781,11 @@
       </div>
       <input type="file" id="file" accept=".xlsx,.xlsm" hidden />
       <div class="row">
-        <label class="field" style="flex:1">或选择已有文件
-          <select id="existFiles"><option value="">-- 选择 --</option></select>
+        <label class="field" style="flex:1">或选择 data/input 内已有文件
+          <select id="existFiles"><option value="">-- 请选择询价表 --</option></select>
         </label>
       </div>
+      <div class="login-summary" id="selectedFileBox">当前未选择文件</div>
       <div class="btns">
         <button type="button" class="ghost" id="btnBack1">上一步</button>
         <button type="button" class="primary" id="btnParse">识别表结构</button>
@@ -434,7 +796,9 @@
     <!-- Step 3 -->
     <section class="card" id="card3" style="display:none">
       <h2>③ 识表结果（抽查名称/规格）</h2>
+      <div class="ai-status off" id="aiStatusParse">AI：—</div>
       <p class="hint" id="parseSummary">—</p>
+      <div class="sheet-tabs" id="previewSheetTabs"></div>
       <div class="table-wrap" style="max-height:280px">
         <table>
           <thead><tr><th>表</th><th>行</th><th>名称</th><th>规格</th><th>报送</th></tr></thead>
@@ -471,10 +835,78 @@
       <p class="hint">
         将仅使用<strong>登录面板已通过</strong>的平台搜索。只收录名称+规格完全匹配的价，并尽量抓详情链接、厂家、电话。
       </p>
+      <div class="ai-status off" id="aiStatusRun">AI：—</div>
       <div class="login-summary" id="runLoginSummary">—</div>
-      <div class="btns">
+
+      <div class="scope-box" id="scopeBox">
+        <h3 class="scope-title">询价范围</h3>
+        <p class="hint scope-desc">可询全部、只询前 N 条、按专业表(Sheet)筛选，或勾选具体材料。</p>
+        <div class="check-row" id="scopeModeRow">
+          <label><input type="radio" name="scopeMode" value="all" checked /> 全部材料</label>
+          <label><input type="radio" name="scopeMode" value="first_n" /> 前 N 条</label>
+          <label><input type="radio" name="scopeMode" value="sheets" /> 按 Sheet 选择</label>
+          <label><input type="radio" name="scopeMode" value="ids" /> 勾选材料</label>
+        </div>
+        <div class="row" id="scopeFirstNRow" style="display:none;margin-top:8px">
+          <label class="field">前多少条（按识表顺序）
+            <input type="number" id="scopeN" min="1" max="9999" value="10" step="1" />
+          </label>
+        </div>
+        <div id="scopeSheetsRow" style="display:none;margin-top:10px">
+          <div class="check-row" id="scopeSheetChecks"></div>
+        </div>
+        <div id="scopeIdsRow" style="display:none;margin-top:10px">
+          <div class="sheet-tabs" id="scopeItemSheetTabs"></div>
+          <div class="row" style="margin:8px 0;gap:8px">
+            <button type="button" class="ghost" id="btnScopeSelectAll" style="padding:6px 10px">本表全选</button>
+            <button type="button" class="ghost" id="btnScopeClear" style="padding:6px 10px">清空勾选</button>
+            <button type="button" class="ghost" id="btnScopeInvert" style="padding:6px 10px">本表反选</button>
+          </div>
+          <div class="table-wrap" style="max-height:260px">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36px"></th>
+                  <th style="width:48px">行</th>
+                  <th>名称</th>
+                  <th>规格</th>
+                  <th style="width:72px">报送</th>
+                </tr>
+              </thead>
+              <tbody id="scopeItemBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="scope-summary" id="scopeSummary">将询价：—</div>
+      </div>
+
+      <div class="btns" id="runControls">
         <button type="button" class="ghost" id="btnBack4">返回登录面板</button>
         <button type="button" class="primary" id="btnStart">开始询价</button>
+        <button type="button" class="ghost" id="btnPause" style="display:none">暂停</button>
+        <button type="button" class="primary" id="btnResume" style="display:none">继续</button>
+        <button type="button" class="danger" id="btnStop" style="display:none">停止询价</button>
+        <button type="button" class="ghost" id="btnContinue" style="display:none">继续询价（断点）</button>
+      </div>
+      <div class="run-tools" id="runTools" style="display:none;margin:12px 0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#f8fafc">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+          <label class="ai-toggle" style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="llmRuntimeToggle" />
+            <span style="color:#0f172a;font-size:13px;font-weight:650">询价中使用大模型（可随时开关）</span>
+          </label>
+          <span id="runPhaseLabel" style="font-size:12px;font-weight:700;color:#1d4ed8">—</span>
+        </div>
+        <div class="usage-panel" id="usagePanel" style="margin-top:12px">
+          <div style="font-size:13px;font-weight:750;color:#0f172a;margin-bottom:8px">用量与进度（Token）</div>
+          <div class="stats" style="grid-template-columns:repeat(5,1fr);gap:8px">
+            <div class="stat"><b id="uItems">0</b><span>已处理材料</span></div>
+            <div class="stat"><b id="uTokens">0</b><span>总 Token</span></div>
+            <div class="stat"><b id="uTokIn">0</b><span>输入 Token</span></div>
+            <div class="stat"><b id="uTokOut">0</b><span>输出 Token</span></div>
+            <div class="stat"><b id="uElapsed">0s</b><span>已用时</span></div>
+          </div>
+          <p class="hint" id="uLlmDetail" style="margin:10px 0 0;color:#334155;font-size:12px;line-height:1.55">AI：—</p>
+        </div>
       </div>
       <div class="msg" id="msg4"></div>
       <div class="bar"><i id="prog"></i></div>
@@ -493,14 +925,27 @@
     <section class="card" id="card6" style="display:none">
       <h2>⑥ 询价结果</h2>
       <p class="hint" id="doneMsg">—</p>
+      <div class="ai-status off" id="aiStatusDone">AI：—</div>
       <div class="btns result-actions">
         <a href="/api/download/result"><button type="button" class="primary">下载结果 Excel</button></a>
         <a href="/api/download/rfq"><button type="button" class="ghost">下载未查到 RFQ</button></a>
+        <button type="button" class="primary" id="btnContinueDone" style="display:none">继续询价（断点）</button>
+        <button type="button" class="ghost" id="btnBackToRun" style="display:none">返回执行页</button>
         <button type="button" class="ghost" id="btnRestart">再询一批</button>
       </div>
-      <div class="table-wrap" style="margin-top:14px">
+      <div class="sheet-tabs" id="sheetTabs"></div>
+      <p class="hint" id="sheetSummary" style="margin:0 0 8px">—</p>
+      <div class="table-wrap" style="margin-top:8px; max-height:520px">
         <table>
-          <thead><tr><th>材料</th><th>状态</th><th>价数</th><th>说明</th></tr></thead>
+          <thead>
+            <tr>
+              <th style="width:48px">行</th>
+              <th>材料 / 规格</th>
+              <th style="width:72px">状态</th>
+              <th style="width:88px">审定/报价</th>
+              <th>来源与链接</th>
+            </tr>
+          </thead>
           <tbody id="resultBody"></tbody>
         </table>
       </div>
@@ -513,12 +958,170 @@
     let step = 1;
     let state = {};
     let platformsRendered = false; // 避免轮询刷新把用户勾选冲掉
+    let selectedFileName = "";
+    let activeSheet = ""; // 结果页当前 sheet
+    // 识表材料全量（供范围勾选）
+    let allItems = [];
+    let previewSheetFilter = ""; // 识表预览当前 sheet，空=全部
+    let scopeItemSheet = ""; // 勾选材料时当前浏览的 sheet
+    let scopeSelectedIds = new Set();
+    let scopeSelectedSheets = new Set();
+    // 用户动过价数/试跑后，轮询永远不准再写回这两个框（这是「改了又变回 2」的根因）
+    let quotesLocked = false;
+    let limitLocked = false;
+    const LS_QUOTES = "mpa_quotes_per_item";
+    const LS_LIMIT = "mpa_limit";
 
     const $ = (id) => document.getElementById(id);
     const on = (id, ev, fn) => {
       const el = $(id);
       if (el) el[ev] = fn;
     };
+
+    function clampQuotes(n) {
+      n = parseInt(n, 10);
+      if (!Number.isFinite(n) || n < 1) return null;
+      return Math.min(10, n);
+    }
+    function clampLimit(n) {
+      n = parseInt(n, 10);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return n;
+    }
+    function readQuotes() {
+      const el = $("quotes");
+      const fromDom = el ? clampQuotes(el.value) : null;
+      if (fromDom != null) return fromDom;
+      const fromLs = clampQuotes(localStorage.getItem(LS_QUOTES));
+      if (fromLs != null) return fromLs;
+      const fromState = clampQuotes(state.quotes_per_item);
+      if (fromState != null) return fromState;
+      return 3;
+    }
+    function readLimit() {
+      const el = $("limit");
+      const fromDom = el ? clampLimit(el.value) : null;
+      if (fromDom != null) return fromDom;
+      const fromLs = clampLimit(localStorage.getItem(LS_LIMIT));
+      if (fromLs != null) return fromLs;
+      const fromState = clampLimit(state.limit);
+      if (fromState != null) return fromState;
+      return 0;
+    }
+    function writeQuotesLocal(n) {
+      const k = clampQuotes(n);
+      if (k == null) return;
+      quotesLocked = true;
+      try { localStorage.setItem(LS_QUOTES, String(k)); } catch (_) {}
+      if ($("quotes") && document.activeElement !== $("quotes")) {
+        $("quotes").value = String(k);
+      } else if ($("quotes") && String($("quotes").value) !== String(k)) {
+        // 用户正在输入时不抢焦点，只在值合法时同步 storage
+      }
+      state.quotes_per_item = k;
+    }
+    function writeLimitLocal(n) {
+      const k = clampLimit(n);
+      if (k == null) return;
+      limitLocked = true;
+      try { localStorage.setItem(LS_LIMIT, String(k)); } catch (_) {}
+      if ($("limit") && document.activeElement !== $("limit")) {
+        $("limit").value = String(k);
+      }
+      state.limit = k;
+    }
+    function lockQuotesFromUser() {
+      quotesLocked = true;
+      const k = clampQuotes($("quotes") && $("quotes").value);
+      if (k != null) {
+        try { localStorage.setItem(LS_QUOTES, String(k)); } catch (_) {}
+        state.quotes_per_item = k;
+      }
+    }
+    function lockLimitFromUser() {
+      limitLocked = true;
+      const k = clampLimit($("limit") && $("limit").value);
+      if (k != null) {
+        try { localStorage.setItem(LS_LIMIT, String(k)); } catch (_) {}
+        state.limit = k;
+      }
+    }
+
+    function toggleAiFields() {
+      const on = !!( $("llmEnabled") && $("llmEnabled").checked );
+      const box = $("aiFields");
+      if (box) box.classList.toggle("on", on);
+    }
+
+    function collectLlmPayload(opts) {
+      opts = opts || {};
+      const use = [];
+      if ($("llmUseSchema") && $("llmUseSchema").checked) use.push("schema");
+      if ($("llmUseMatch") && $("llmUseMatch").checked) use.push("match_review");
+      if ($("llmUseSearch") && $("llmUseSearch").checked) use.push("search_agent");
+      if (!use.length) use.push("schema", "match_review", "search_agent");
+      const payload = {
+        enabled: !!( $("llmEnabled") && $("llmEnabled").checked ),
+        api_base: ($("llmApiBase") && $("llmApiBase").value || "").trim(),
+        api_key_env: ($("llmKeyEnv") && $("llmKeyEnv").value || "OPENAI_API_KEY").trim() || "OPENAI_API_KEY",
+        model: ($("llmModel") && $("llmModel").value || "gpt-4o-mini").trim() || "gpt-4o-mini",
+        use_for: use,
+      };
+      const keyVal = ($("llmApiKey") && $("llmApiKey").value || "").trim();
+      if (opts.clearKey) payload.clear_api_key = true;
+      else if (keyVal) payload.api_key = keyVal;
+      // 测试连接时允许把输入框 Key 带上（即使未点保存）
+      if (opts.forTest && keyVal) payload.api_key = keyVal;
+      return payload;
+    }
+
+    function applyLlmToForm(llm) {
+      if (!llm) return;
+      if ($("llmEnabled")) $("llmEnabled").checked = !!llm.enabled;
+      if ($("llmApiBase")) $("llmApiBase").value = llm.api_base || "";
+      if ($("llmModel")) $("llmModel").value = llm.model || "gpt-4o-mini";
+      if ($("llmKeyEnv")) $("llmKeyEnv").value = llm.api_key_env || "OPENAI_API_KEY";
+      const use = llm.use_for || [];
+      if ($("llmUseSchema")) $("llmUseSchema").checked = !use.length || use.includes("schema");
+      if ($("llmUseMatch")) $("llmUseMatch").checked = !use.length || use.includes("match_review");
+      if ($("llmUseSearch")) $("llmUseSearch").checked = !use.length || use.includes("search_agent");
+      if ($("llmApiKey")) {
+        $("llmApiKey").value = "";
+        $("llmApiKey").placeholder = llm.api_key_set
+          ? "已保存 Key（留空=不修改）"
+          : "sk-... 或兼容接口的 Bearer Token";
+      }
+      toggleAiFields();
+      if ($("msgLlm") && llm.enabled) {
+        $("msgLlm").textContent = llm.api_key_set
+          ? "AI 已开启，本机已配置 Key"
+          : "AI 已开启，请填写 Key 或配置环境变量";
+        $("msgLlm").className = "msg " + (llm.api_key_set ? "ok" : "");
+      }
+    }
+    function basename(path) {
+      if (!path) return "";
+      const s = String(path).replace(/\\/g, "/");
+      const i = s.lastIndexOf("/");
+      return i >= 0 ? s.slice(i + 1) : s;
+    }
+    function setSelectedFile(name, path) {
+      selectedFileName = name || basename(path) || "";
+      if (path) state.input_path = path;
+      else if (selectedFileName) state.input_path = selectedFileName;
+      const box = $("selectedFileBox");
+      if (box) {
+        box.textContent = selectedFileName
+          ? `当前询价表：${selectedFileName}`
+          : "当前未选择文件";
+      }
+      const sel = $("existFiles");
+      if (sel && selectedFileName) {
+        if ([...sel.options].some((o) => o.value === selectedFileName)) {
+          sel.value = selectedFileName;
+        }
+      }
+    }
 
     function setBusy(id, busy, busyLabel) {
       const el = $(id);
@@ -554,6 +1157,7 @@
         const lp = state.login_panel || {};
         $("runLoginSummary").textContent = lp.message
           || `已验证：${(lp.verified || []).join("、") || "无"}`;
+        initScopeUI();
       }
     }
 
@@ -710,46 +1314,435 @@
     function renderFiles(files) {
       const sel = $("existFiles");
       if (!sel) return;
-      const cur = sel.value;
-      sel.innerHTML = '<option value="">-- 选择 data/input 内文件 --</option>';
+      const preferred =
+        selectedFileName ||
+        sel.value ||
+        basename(state.input_path) ||
+        "";
+      const names = new Set();
+      sel.innerHTML = '<option value="">-- 请选择询价表 --</option>';
       (files || []).forEach((f) => {
+        if (!f || !f.name || names.has(f.name)) return;
+        names.add(f.name);
         const o = document.createElement("option");
         o.value = f.name;
         o.textContent = f.name;
         sel.appendChild(o);
       });
-      if (cur) sel.value = cur;
+      if (preferred && names.has(preferred)) {
+        sel.value = preferred;
+        selectedFileName = preferred;
+      } else if (preferred && !names.has(preferred)) {
+        // 刚上传的文件可能尚未进列表时，临时插入一项
+        const o = document.createElement("option");
+        o.value = preferred;
+        o.textContent = preferred + "（当前）";
+        sel.appendChild(o);
+        sel.value = preferred;
+      }
+      const box = $("selectedFileBox");
+      if (box) {
+        box.textContent = selectedFileName
+          ? `当前询价表：${selectedFileName}`
+          : "当前未选择文件";
+      }
+    }
+
+    function sheetCountsFrom(items) {
+      const m = {};
+      (items || []).forEach((it) => {
+        const sh = it.sheet || "(未命名)";
+        m[sh] = (m[sh] || 0) + 1;
+      });
+      return Object.keys(m).map((sheet) => ({ sheet, count: m[sheet] }));
+    }
+
+    function renderPreviewSheetTabs(items) {
+      const box = $("previewSheetTabs");
+      if (!box) return;
+      const counts = sheetCountsFrom(items);
+      box.innerHTML = "";
+      const mk = (label, key, n) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "sheet-tab" + ((key === previewSheetFilter) ? " on" : "");
+        b.innerHTML = `${esc(label)}<span class="n">${n}</span>`;
+        b.onclick = () => {
+          previewSheetFilter = key;
+          renderPreview(allItems.length ? allItems : items);
+        };
+        box.appendChild(b);
+      };
+      mk("全部", "", (items || []).length);
+      counts.forEach((c) => mk(c.sheet, c.sheet, c.count));
     }
 
     function renderPreview(items) {
+      if (items && items.length) {
+        // 识表返回完整列表时缓存
+        if (items.length >= (allItems.length || 0)) allItems = items.slice();
+      }
+      const src = allItems.length ? allItems : (items || []);
+      renderPreviewSheetTabs(src);
       const tb = $("previewBody");
       if (!tb) return;
       tb.innerHTML = "";
-      (items || []).slice(0, 40).forEach((it) => {
+      let list = src;
+      if (previewSheetFilter) {
+        list = src.filter((it) => (it.sheet || "") === previewSheetFilter);
+      }
+      list.slice(0, 80).forEach((it) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `<td>${esc(it.sheet)}</td><td>${it.row}</td><td>${esc(it.name)}</td>
           <td>${esc(it.spec || "")}</td><td>${it.submit ?? ""}</td>`;
         tb.appendChild(tr);
       });
+      if (list.length > 80) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="5" style="color:#94a3b8">… 本表仅显示前 80 条，共 ${list.length} 条（询价时可按范围全选）</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    function getScopeMode() {
+      const el = document.querySelector('input[name="scopeMode"]:checked');
+      return (el && el.value) || "all";
+    }
+
+    function setScopeMode(mode) {
+      document.querySelectorAll('input[name="scopeMode"]').forEach((r) => {
+        r.checked = r.value === mode;
+      });
+      updateScopePanels();
+    }
+
+    function updateScopePanels() {
+      const mode = getScopeMode();
+      if ($("scopeFirstNRow")) $("scopeFirstNRow").style.display = mode === "first_n" ? "flex" : "none";
+      if ($("scopeSheetsRow")) $("scopeSheetsRow").style.display = mode === "sheets" ? "block" : "none";
+      if ($("scopeIdsRow")) $("scopeIdsRow").style.display = mode === "ids" ? "block" : "none";
+      if (mode === "sheets") renderScopeSheetChecks();
+      if (mode === "ids") renderScopeItemPicker();
+      updateScopeSummary();
+    }
+
+    function initScopeUI() {
+      // 若有第①步的 limit，默认切到前 N 条
+      const lim = readLimit();
+      if (lim > 0 && getScopeMode() === "all") {
+        setScopeMode("first_n");
+        if ($("scopeN")) $("scopeN").value = String(lim);
+      }
+      if (!allItems.length && state.items_preview) {
+        allItems = (state.items_preview || []).slice();
+      }
+      // 默认 sheet 勾选：全部表
+      if (!scopeSelectedSheets.size) {
+        sheetCountsFrom(allItems).forEach((c) => scopeSelectedSheets.add(c.sheet));
+      }
+      if (!scopeItemSheet) {
+        const sc = sheetCountsFrom(allItems);
+        scopeItemSheet = sc[0] ? sc[0].sheet : "";
+      }
+      updateScopePanels();
+    }
+
+    function renderScopeSheetChecks() {
+      const box = $("scopeSheetChecks");
+      if (!box) return;
+      const counts = sheetCountsFrom(allItems);
+      box.innerHTML = "";
+      if (!counts.length) {
+        box.innerHTML = '<span class="hint">暂无材料，请先识表</span>';
+        return;
+      }
+      counts.forEach((c) => {
+        const lab = document.createElement("label");
+        const on = scopeSelectedSheets.has(c.sheet);
+        lab.innerHTML = `<input type="checkbox" data-sheet="${esc(c.sheet)}" ${on ? "checked" : ""}/> ${esc(c.sheet)} <span class="n" style="opacity:.75">(${c.count})</span>`;
+        const inp = lab.querySelector("input");
+        inp.onchange = () => {
+          if (inp.checked) scopeSelectedSheets.add(c.sheet);
+          else scopeSelectedSheets.delete(c.sheet);
+          updateScopeSummary();
+        };
+        box.appendChild(lab);
+      });
+    }
+
+    function renderScopeItemPicker() {
+      const tabs = $("scopeItemSheetTabs");
+      const tb = $("scopeItemBody");
+      if (!tabs || !tb) return;
+      const counts = sheetCountsFrom(allItems);
+      tabs.innerHTML = "";
+      counts.forEach((c) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "sheet-tab" + (c.sheet === scopeItemSheet ? " on" : "");
+        const selInSheet = allItems.filter(
+          (it) => (it.sheet || "") === c.sheet && scopeSelectedIds.has(it.id)
+        ).length;
+        b.innerHTML = `${esc(c.sheet)}<span class="n">${selInSheet}/${c.count}</span>`;
+        b.onclick = () => {
+          scopeItemSheet = c.sheet;
+          renderScopeItemPicker();
+        };
+        tabs.appendChild(b);
+      });
+      if (!scopeItemSheet && counts[0]) scopeItemSheet = counts[0].sheet;
+      tb.innerHTML = "";
+      const rows = allItems.filter((it) => (it.sheet || "") === scopeItemSheet);
+      rows.forEach((it) => {
+        const tr = document.createElement("tr");
+        const checked = scopeSelectedIds.has(it.id) ? "checked" : "";
+        tr.innerHTML = `<td><input type="checkbox" class="scope-item-check" data-id="${esc(it.id)}" ${checked}/></td>
+          <td>${it.row}</td><td>${esc(it.name || "")}</td>
+          <td>${esc(it.spec || "")}</td><td>${it.submit ?? ""}</td>`;
+        const cb = tr.querySelector("input");
+        cb.onchange = () => {
+          if (cb.checked) scopeSelectedIds.add(it.id);
+          else scopeSelectedIds.delete(it.id);
+          updateScopeSummary();
+          // 更新 tab 上的已选计数
+          renderScopeItemPicker();
+        };
+        tb.appendChild(tr);
+      });
+      if (!rows.length) {
+        tb.innerHTML = `<tr><td colspan="5" style="color:#94a3b8">本表无材料</td></tr>`;
+      }
+    }
+
+    function countScopeSelected() {
+      const mode = getScopeMode();
+      const total = allItems.length || state.items_count || 0;
+      if (mode === "all") return total;
+      if (mode === "first_n") {
+        const n = Math.max(0, parseInt(($("scopeN") && $("scopeN").value) || "0", 10) || 0);
+        if (n <= 0) return total;
+        return Math.min(n, total);
+      }
+      if (mode === "sheets") {
+        return allItems.filter((it) => scopeSelectedSheets.has(it.sheet || "")).length;
+      }
+      if (mode === "ids") return scopeSelectedIds.size;
+      return total;
+    }
+
+    function updateScopeSummary() {
+      const el = $("scopeSummary");
+      if (!el) return;
+      const mode = getScopeMode();
+      const n = countScopeSelected();
+      const total = allItems.length || state.items_count || 0;
+      let detail = "";
+      if (mode === "all") detail = "全部材料";
+      else if (mode === "first_n") detail = `前 ${($("scopeN") && $("scopeN").value) || "?"} 条（识表顺序）`;
+      else if (mode === "sheets") {
+        const names = [...scopeSelectedSheets];
+        detail = names.length ? `Sheet：${names.join("、")}` : "未选任何 Sheet";
+      } else if (mode === "ids") detail = `已勾选 ${scopeSelectedIds.size} 条材料`;
+      el.textContent = `将询价：${n} / ${total} 条 · ${detail}`;
+      // 用 class 控制配色，禁止浅色字压在浅底/深灰底上
+      el.style.color = "";
+      el.classList.toggle("is-empty", n <= 0);
+      el.classList.toggle("is-ready", n > 0);
+    }
+
+    function buildItemScopePayload() {
+      const mode = getScopeMode();
+      const n = Math.max(0, parseInt(($("scopeN") && $("scopeN").value) || "0", 10) || 0);
+      return {
+        mode,
+        n: mode === "first_n" ? n : 0,
+        sheets: mode === "sheets" ? [...scopeSelectedSheets] : [],
+        ids: mode === "ids" ? [...scopeSelectedIds] : [],
+      };
+    }
+
+    function statusLabel(st) {
+      if (st === "full_k") return ["badge full", "绿·已凑满"];
+      if (st === "partial") return ["badge full", "绿·部分合格"];
+      if (st === "need_review") return ["badge partial", "黄·候选待核"];
+      if (st === "no_match") return ["badge none", "灰·没查到"];
+      if (st === "error") return ["badge none", "错误"];
+      return ["badge", st || "—"];
+    }
+
+    function formatPrice(r) {
+      const audit = r.audit;
+      const price = r.price != null ? r.price : (r.price_ex_tax != null ? r.price_ex_tax : null);
+      if (audit != null && audit !== "") return Number(audit).toFixed(2);
+      if (price != null && price !== "") return Number(price).toFixed(2);
+      const ql = r.quote_list || [];
+      if (ql[0] && ql[0].price != null) return Number(ql[0].price).toFixed(2);
+      const rv = r.review_list || [];
+      if (rv[0] && rv[0].price != null) return Number(rv[0].price).toFixed(2) + "·待核";
+      return "—";
+    }
+
+    function readMatchMode() {
+      const el = $("matchMode");
+      const v = (el && el.value) || "practical";
+      return ["strict", "practical", "loose"].includes(v) ? v : "practical";
+    }
+
+    function renderAiStatus(elId, st, llmCfg) {
+      const el = $(elId);
+      if (!el) return;
+      const ls = st || state.llm_status || {};
+      const cfg = llmCfg || state.llm || {};
+      const enabled = !!(ls.enabled || cfg.enabled);
+      const model = ls.model || cfg.model || "—";
+      const keyOk = ls.key_ready != null ? ls.key_ready : cfg.api_key_set;
+      const counts = ls.counts || {};
+      const total = counts.total || 0;
+      const schemaOk = counts.schema_ok || 0;
+      const matchOk = counts.match_review_ok || 0;
+      const fail = (counts.schema_fail || 0) + (counts.match_review_fail || 0)
+        + (counts.match_review_fail || 0);
+      // also count fail keys generically
+      let failN = 0;
+      Object.keys(counts).forEach((k) => { if (k.endsWith("_fail")) failN += counts[k]; });
+      el.className = "ai-status " + (enabled ? "on" : "off");
+      if (!enabled) {
+        el.innerHTML = "<b>AI 未开启</b> — 当前纯规则识表/匹配。开启后可在第①步配置，日志会出现 <code>[AI]</code> 记录。";
+        return;
+      }
+      if (!keyOk && total === 0) {
+        el.innerHTML = `<b>AI 已开启但未就绪</b> — model=${esc(model)}，Key 未配置，实际不会调用大模型。`;
+        return;
+      }
+      const last = ls.last;
+      const lastTxt = last
+        ? `最近：${last.ok ? "✓" : "×"} ${esc(last.role)} ${esc(last.detail || "")}`
+        : "尚未在本任务中调用";
+      el.innerHTML =
+        `<b>AI 已开启</b> · 模型 <b>${esc(model)}</b> · ` +
+        `实际调用 ${total} 次（识表成功 ${schemaOk} / 语义通过 ${matchOk}${failN ? " / 失败 " + failN : ""}）<br/>` +
+        `<span style="opacity:.9">${lastTxt}</span><br/>` +
+        `<span style="opacity:.8">说明：只有日志出现 [AI] 或本处计数增加，才表示大模型真正参与了。</span>`;
+    }
+
+    function sheetsFromState() {
+      if (state.result_by_sheet && state.result_by_sheet.length) {
+        return state.result_by_sheet;
+      }
+      // fallback：从 item_results 现场分组
+      const map = {};
+      (state.item_results || []).forEach((r) => {
+        const s = r.sheet || "（未命名表）";
+        if (!map[s]) map[s] = [];
+        map[s].push(r);
+      });
+      return Object.keys(map).map((sheet) => ({
+        sheet,
+        count: map[sheet].length,
+        items: map[sheet].slice().sort((a, b) => (a.row || 0) - (b.row || 0)),
+        full_k: map[sheet].filter((x) => x.status === "full_k").length,
+        partial: map[sheet].filter((x) => x.status === "partial").length,
+        need_review: map[sheet].filter((x) => x.status === "need_review").length,
+        no_match: map[sheet].filter((x) => x.status === "no_match" || x.status === "error").length,
+      }));
+    }
+
+    function renderSheetTabs() {
+      const tabs = $("sheetTabs");
+      if (!tabs) return;
+      const groups = sheetsFromState();
+      tabs.innerHTML = "";
+      if (!groups.length) {
+        activeSheet = "";
+        return;
+      }
+      if (!activeSheet || !groups.some((g) => g.sheet === activeSheet)) {
+        activeSheet = groups[0].sheet;
+      }
+      groups.forEach((g) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "sheet-tab" + (g.sheet === activeSheet ? " on" : "");
+        btn.innerHTML = `${esc(g.sheet)}<span class="n">(${g.count})</span>`;
+        btn.onclick = () => {
+          activeSheet = g.sheet;
+          renderSheetTabs();
+          renderResultsForActiveSheet();
+        };
+        tabs.appendChild(btn);
+      });
+    }
+
+    function renderResultsForActiveSheet() {
+      const tb = $("resultBody");
+      const sum = $("sheetSummary");
+      if (!tb) return;
+      tb.innerHTML = "";
+      const groups = sheetsFromState();
+      const g = groups.find((x) => x.sheet === activeSheet) || groups[0];
+      if (!g) {
+        if (sum) sum.textContent = "暂无结果";
+        return;
+      }
+      if (sum) {
+        sum.textContent =
+          `表「${g.sheet}」共 ${g.count} 条 · 满价 ${g.full_k || 0} · 部分 ${g.partial || 0} · 待核 ${g.need_review || 0} · 没查到 ${g.no_match || 0}`;
+      }
+      (g.items || []).forEach((r) => {
+        const [cls, label] = statusLabel(r.status || "");
+        const price = formatPrice(r);
+        const quotes = r.quote_list || [];
+        const reviews = r.review_list || [];
+        let src = "";
+        if (quotes.length) {
+          src = quotes.map((q, i) => {
+            const link = q.url
+              ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">链接${i + 1}</a>`
+              : "";
+            return `${esc(q.platform || "")} ¥${q.price != null ? Number(q.price).toFixed(2) : "—"} ${esc((q.title || "").slice(0, 40))} ${link}`;
+          }).join("<br/>");
+        } else if (reviews.length) {
+          src = "<strong style=\"color:#92400e\">候选价（请点链接核对后采用）</strong><br/>" + reviews.map((q, i) =>
+            `${i + 1}. ${esc(q.platform || "")} <b>¥${q.price != null ? Number(q.price).toFixed(2) : "—"}</b> ` +
+            `${esc((q.title || "").slice(0, 48))}` +
+            (q.url ? ` <a href="${esc(q.url)}" target="_blank" rel="noopener">打开核对</a>` : "") +
+            (q.match_detail ? `<div class="result-detail">${esc(String(q.match_detail).slice(0, 100))}</div>` : "")
+          ).join("");
+        } else if (r.url) {
+          src = `${esc(r.platform || "")} ${esc((r.title || "").slice(0, 50))} <a href="${esc(r.url)}" target="_blank" rel="noopener">打开</a>`;
+        } else {
+          src = esc(r.message || "无报价");
+        }
+        const aiTag = r.match_via_llm ? ' <span class="badge" style="background:#1d4ed8;color:#dbeafe">AI</span>' : "";
+        const nRev = (reviews && reviews.length) || 0;
+        const nQ = r.quotes != null ? r.quotes : (quotes.length || 0);
+        const cntTxt = nQ
+          ? `${nQ} 个合格价`
+          : (nRev ? `${nRev} 个候选·待核` : "无价");
+        const tr = document.createElement("tr");
+        if (r.status === "need_review") tr.style.background = "#fffbeb";
+        else if (r.status === "no_match" || r.status === "error") tr.style.background = "#f8fafc";
+        else if (r.status === "full_k" || r.status === "partial") tr.style.background = "#f0fdf4";
+        tr.innerHTML = `
+          <td>${r.row ?? ""}</td>
+          <td>
+            <strong>${esc(r.name || "")}</strong>${aiTag}
+            <div class="result-detail">${esc((r.spec || "").slice(0, 120))}${r.brand ? " · " + esc(r.brand) : ""}${r.submit != null ? " · 报送 " + r.submit : ""}</div>
+          </td>
+          <td><span class="${cls}">${label}</span><div class="result-detail">${cntTxt}</div></td>
+          <td class="price-cell">${price}</td>
+          <td><div class="result-detail">${src}</div></td>`;
+        tb.appendChild(tr);
+      });
     }
 
     function renderResults(rows) {
-      const tb = $("resultBody");
-      if (!tb) return;
-      tb.innerHTML = "";
-      (rows || []).forEach((r) => {
-        const st = r.status || "";
-        let cls = "badge";
-        let label = st;
-        if (st === "full_k") { cls += " full"; label = "已凑满"; }
-        else if (st === "partial") { cls += " partial"; label = "部分"; }
-        else if (st === "need_review") { cls += " partial"; label = "候选待核"; }
-        else if (st === "no_match") { cls += " none"; label = "没查到"; }
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${esc(r.name || "")}</td><td><span class="${cls}">${label}</span></td>
-          <td>${r.quotes ?? 0}</td><td>${esc(r.message || "")}</td>`;
-        tb.appendChild(tr);
-      });
+      // 兼容旧调用：刷新 tabs + 当前 sheet 表
+      if (rows && rows.length && (!state.item_results || !state.item_results.length)) {
+        state.item_results = rows;
+      }
+      renderSheetTabs();
+      renderResultsForActiveSheet();
     }
 
     function esc(s) {
@@ -758,17 +1751,185 @@
       })[c]);
     }
 
+    function hydrateQuotesLimitFromState(st) {
+      // 优先级：用户锁定(localStorage/DOM) > 服务端 > 默认
+      const qEl = $("quotes");
+      const lEl = $("limit");
+      if (qEl) {
+        const focused = document.activeElement === qEl;
+        if (!quotesLocked && !focused) {
+          let k = clampQuotes(localStorage.getItem(LS_QUOTES));
+          if (k == null) k = clampQuotes(st && st.quotes_per_item);
+          if (k == null) k = 3;
+          qEl.value = String(k);
+        }
+      }
+      if (lEl) {
+        const focused = document.activeElement === lEl;
+        if (!limitLocked && !focused) {
+          let n = clampLimit(localStorage.getItem(LS_LIMIT));
+          if (n == null) n = clampLimit(st && st.limit);
+          if (n == null) n = 0;
+          lEl.value = String(n);
+        }
+      }
+      const mm = $("matchMode");
+      if (mm && st && st.match_mode && document.activeElement !== mm) {
+        const v = st.match_mode;
+        if (["strict", "practical", "loose"].includes(v)) mm.value = v;
+      }
+    }
+
+    function updateRunControls(st) {
+      const phase = (st && st.phase) || "";
+      const control = (st && st.control) || "run";
+      const running = phase === "running" || phase === "login";
+      const paused = phase === "paused" || control === "pause" || control === "paused";
+      const stopped = phase === "stopped";
+      const done = phase === "done";
+      const showTools = running || paused || stopped;
+      if ($("runTools")) $("runTools").style.display = showTools || running || paused ? "block" : (stopped ? "block" : "none");
+      const showBtn = (id, on) => {
+        const el = $(id);
+        if (!el) return;
+        el.style.display = on ? "inline-flex" : "none";
+        el.style.alignItems = "center";
+        el.style.justifyContent = "center";
+      };
+      if ($("btnStart")) {
+        showBtn("btnStart", !(running || paused));
+        $("btnStart").disabled = running || paused;
+      }
+      showBtn("btnPause", running && !paused);
+      showBtn("btnResume", paused);
+      showBtn("btnStop", running || paused);
+      showBtn("btnContinue", stopped || done);
+      showBtn("btnContinueDone", stopped || done);
+      showBtn("btnBackToRun", stopped || done);
+      if ($("btnBack4")) $("btnBack4").disabled = running || paused;
+      if ($("runPhaseLabel")) {
+        const map = {
+          running: "运行中",
+          paused: "已暂停",
+          stopped: "已停止",
+          done: "已完成",
+          login: "登录中",
+          error: "出错",
+        };
+        $("runPhaseLabel").textContent = map[phase] || phase || "—";
+        $("runPhaseLabel").style.color =
+          phase === "paused" ? "#b45309" : phase === "stopped" ? "#b91c1c" : phase === "done" ? "#15803d" : "#1d4ed8";
+      }
+      // LLM runtime toggle
+      const tog = $("llmRuntimeToggle");
+      if (tog && document.activeElement !== tog) {
+        const rt = st.llm_runtime_enabled;
+        const cfgOn = !!(st.llm && st.llm.enabled) || !!(st.llm_status && st.llm_status.enabled);
+        tog.checked = rt != null ? !!rt : cfgOn;
+      }
+      // usage panel — 以 token 为主
+      const js = st.job_stats || {};
+      const ls = st.llm_status || {};
+      const counts = ls.counts || {};
+      const tokens = ls.tokens || {};
+      const fmtTok = (n) => {
+        n = Number(n) || 0;
+        if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+        return String(n);
+      };
+      const promptT = js.prompt_tokens != null ? js.prompt_tokens : (tokens.prompt || 0);
+      const compT = js.completion_tokens != null ? js.completion_tokens : (tokens.completion || 0);
+      const totalT = js.total_tokens != null ? js.total_tokens : (tokens.total || 0);
+      if ($("uItems")) $("uItems").textContent = String(js.items_done || st.current || 0);
+      if ($("uTokens")) $("uTokens").textContent = fmtTok(totalT);
+      if ($("uTokIn")) $("uTokIn").textContent = fmtTok(promptT);
+      if ($("uTokOut")) $("uTokOut").textContent = fmtTok(compT);
+      if ($("uElapsed")) {
+        // 停止/完成/出错后冻结计时；暂停时也不再增加
+        const t0 = js.started_ts || st.started_at || 0;
+        let t1 = Date.now();
+        const frozen =
+          phase === "stopped" || phase === "done" || phase === "error" || phase === "paused";
+        if (frozen) {
+          if (js.ended_ts) t1 = js.ended_ts > 1e12 ? js.ended_ts : js.ended_ts * 1000;
+          else if (js.paused_ts) t1 = js.paused_ts > 1e12 ? js.paused_ts : js.paused_ts * 1000;
+          else if (st.finished_at) t1 = st.finished_at > 1e12 ? st.finished_at : st.finished_at * 1000;
+        }
+        let sec = 0;
+        if (t0 > 1e12) sec = Math.max(0, Math.floor((t1 - t0) / 1000));
+        else if (t0 > 0) sec = Math.max(0, Math.floor(t1 / 1000 - t0));
+        if (sec < 60) $("uElapsed").textContent = sec + "s";
+        else $("uElapsed").textContent = Math.floor(sec / 60) + "m" + (sec % 60) + "s";
+      }
+      if ($("uLlmDetail")) {
+        const on = tog ? tog.checked : false;
+        const model = ls.model || (st.llm && st.llm.model) || "—";
+        const calls = js.llm_calls_session || counts.total || 0;
+        const schemaOk = counts.schema_ok || 0;
+        const matchOk = counts.match_review_ok || 0;
+        const searchOk = counts.search_agent_ok || 0;
+        let failN = 0;
+        Object.keys(counts).forEach((k) => { if (k.endsWith("_fail")) failN += counts[k]; });
+        $("uLlmDetail").textContent =
+          (on ? "AI 开启中" : "AI 已关闭") +
+          ` · 模型 ${model}` +
+          ` · 本轮 ${fmtTok(totalT)} tokens（输入 ${fmtTok(promptT)} + 输出 ${fmtTok(compT)}）` +
+          ` · 请求 ${calls} 次` +
+          `（识表${schemaOk}/语义${matchOk}/搜索${searchOk}` +
+          (failN ? `/失败${failN}` : "") +
+          "）· 关闭后本轮不再请求大模型，规则匹配仍继续";
+      }
+    }
+
+    async function jobControl(action) {
+      try {
+        const r = await fetch("/api/job/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        const j = await r.json();
+        if (!j.ok) {
+          if ($("msg4")) {
+            $("msg4").textContent = j.error || "操作失败";
+            $("msg4").className = "msg err";
+          }
+          return;
+        }
+        Object.assign(state, j);
+        updateRunControls(state);
+        if ($("msg4")) {
+          $("msg4").textContent = j.message || state.message || "已发送";
+          $("msg4").className = "msg ok";
+        }
+      } catch (e) {
+        if ($("msg4")) {
+          $("msg4").textContent = "控制失败：" + e;
+          $("msg4").className = "msg err";
+        }
+      }
+    }
+
     async function refresh() {
       try {
         const r = await fetch("/api/state");
         state = await r.json();
+        updateRunControls(state);
         // 平台列表：有 catalog 就渲染（列表为空也强制重绘一次）
         if (state.catalog && state.catalog.length) {
           if (!platformsRendered || !$("platList") || !$("platList").children.length) {
             renderPlatforms(state.catalog, state.platforms || []);
             platformsRendered = true;
           }
-          if (state.quotes_per_item && $("quotes")) $("quotes").value = state.quotes_per_item;
+        }
+        // 价数/试跑：用户动过或正在编辑时，轮询绝对不许改框里的数字
+        hydrateQuotesLimitFromState(state);
+        // AI 配置：仅首次或未聚焦时同步，避免输入中被刷
+        if (state.llm && !window.__llmFormTouched) {
+          applyLlmToForm(state.llm);
+        }
+        if (!selectedFileName && state.input_path) {
+          selectedFileName = basename(state.input_path);
         }
         renderFiles(state.input_files || []);
         if ($("stFull")) $("stFull").textContent = state.full_k ?? 0;
@@ -783,6 +1944,9 @@
             : (state.message || "");
         }
         if ($("log")) $("log").textContent = (state.logs || []).join("\n");
+        renderAiStatus("aiStatusParse", state.llm_status, state.llm);
+        renderAiStatus("aiStatusRun", state.llm_status, state.llm);
+        renderAiStatus("aiStatusDone", state.llm_status, state.llm);
         if (state.login_panel && step === 4) {
           renderLoginPanel();
         }
@@ -791,11 +1955,39 @@
           renderResults(state.item_results || []);
           if (step === 5 || step === 4) setStep(6);
         }
+        if (state.phase === "stopped") {
+          const nRes = (state.item_results || []).length;
+          const msg =
+            state.message ||
+            (nRes
+              ? `已停止，已完成 ${nRes} 条结果可查看；可点「继续询价（断点）」`
+              : "已停止（尚无完成条目）");
+          if ($("msg4")) {
+            $("msg4").textContent = msg;
+            $("msg4").className = "msg ok";
+          }
+          if ($("doneMsg")) {
+            $("doneMsg").textContent = msg + " · 下方为已完成结果";
+          }
+          // 停止后跳到结果页展示已完成内容（与「完成」一致）
+          renderResults(state.item_results || []);
+          if ((step === 5 || step === 4) && nRes > 0) setStep(6);
+          else if (step === 5 && nRes === 0) {
+            // 仍停在第 5 步，提示可继续
+          }
+        }
+        if (state.phase === "running" || state.phase === "paused") {
+          // 运行/暂停中也刷新结果表（按 sheet），方便边跑边看
+          if (state.item_results && state.item_results.length) {
+            renderSheetTabs();
+            if (step === 6) renderResultsForActiveSheet();
+          }
+        }
         if (state.phase === "error" && $("msg4")) {
           $("msg4").textContent = state.error || state.message || "出错";
           $("msg4").className = "msg err";
         }
-        if (state.phase === "running" && step < 5) {
+        if ((state.phase === "running" || state.phase === "paused") && step < 5) {
           setStep(5);
         }
       } catch (e) {
@@ -805,7 +1997,7 @@
 
     on("btnCost", "onclick", () => {
       document.querySelectorAll("#platList input").forEach((el) => {
-        el.checked = ["guangcai", "lingcai", "huixun", "jd", "1688"].includes(el.value);
+        el.checked = ["guangcai", "lingcai", "huixun", "yize", "jd", "1688"].includes(el.value);
       });
     });
     on("btnClear", "onclick", () => {
@@ -819,10 +2011,15 @@
         $("msg1").className = "msg err";
         return;
       }
+      // 保存前先从输入框锁定，防止并发 refresh 读到旧值
+      lockQuotesFromUser();
+      lockLimitFromUser();
       const body = {
         platforms,
-        quotes_per_item: +($("quotes") && $("quotes").value) || 3,
-        limit: +($("limit") && $("limit").value) || 0,
+        quotes_per_item: readQuotes(),
+        limit: readLimit(),
+        match_mode: readMatchMode(),
+        llm: collectLlmPayload(),
       };
       setBusy("btnSave1", true, "正在保存…");
       let j;
@@ -845,7 +2042,21 @@
         $("msg1").className = "msg err";
         return;
       }
-      $("msg1").textContent = `已保存（仅这些站会登录）：${platforms.join("、")}，每条询 ${body.quotes_per_item} 个价`;
+      // 以本次提交的值为准（不要被服务端旧缓存盖掉）；并永久锁定
+      const savedK = body.quotes_per_item;
+      const savedLimit = body.limit;
+      writeQuotesLocal(savedK);
+      writeLimitLocal(savedLimit);
+      if ($("quotes")) $("quotes").value = String(savedK);
+      if ($("limit")) $("limit").value = String(savedLimit);
+      if (j.llm) {
+        state.llm = j.llm;
+        applyLlmToForm(j.llm);
+      }
+      if ($("llmApiKey")) $("llmApiKey").value = "";
+      const aiHint = body.llm && body.llm.enabled ? "；AI 已开启" : "；AI 未开启";
+      $("msg1").textContent = `已保存（仅这些站会登录）：${platforms.join("、")}，每条询 ${savedK} 个价` +
+        (savedLimit ? `，试跑 ${savedLimit} 条` : "，全量") + aiHint;
       $("msg1").className = "msg ok";
       state.platforms = platforms;
       if (state.catalog && state.catalog.length) {
@@ -857,7 +2068,69 @@
         platformsRendered = true;
       }
       setStep(2);
-      refresh();
+    });
+
+    on("llmEnabled", "onchange", () => {
+      window.__llmFormTouched = true;
+      toggleAiFields();
+    });
+    ["llmApiBase", "llmApiKey", "llmModel", "llmKeyEnv", "llmUseSchema", "llmUseMatch", "llmUseSearch"].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener("input", () => { window.__llmFormTouched = true; });
+      el.addEventListener("change", () => { window.__llmFormTouched = true; });
+    });
+    on("btnLlmTest", "onclick", async () => {
+      const msg = $("msgLlm");
+      if (msg) {
+        msg.textContent = "正在测试连接…";
+        msg.className = "msg";
+      }
+      setBusy("btnLlmTest", true, "测试中…");
+      let j;
+      try {
+        const r = await fetch("/api/llm/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(collectLlmPayload({ forTest: true })),
+        });
+        j = await r.json();
+      } catch (e) {
+        if (msg) {
+          msg.textContent = "测试失败：" + e;
+          msg.className = "msg err";
+        }
+        setBusy("btnLlmTest", false);
+        return;
+      }
+      setBusy("btnLlmTest", false);
+      if (msg) {
+        msg.textContent = j.ok ? (j.message || "连接成功") : (j.error || "连接失败");
+        msg.className = "msg " + (j.ok ? "ok" : "err");
+      }
+    });
+    on("btnLlmClearKey", "onclick", async () => {
+      if (!confirm("确定清除本机已保存的 API Key？")) return;
+      window.__llmFormTouched = true;
+      try {
+        const r = await fetch("/api/llm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clear_api_key: true }),
+        });
+        const j = await r.json();
+        if (j.llm) applyLlmToForm(j.llm);
+        if ($("llmApiKey")) $("llmApiKey").value = "";
+        if ($("msgLlm")) {
+          $("msgLlm").textContent = "已清除本机 Key";
+          $("msgLlm").className = "msg ok";
+        }
+      } catch (e) {
+        if ($("msgLlm")) {
+          $("msgLlm").textContent = "清除失败：" + e;
+          $("msgLlm").className = "msg err";
+        }
+      }
     });
 
     on("btnBack1", "onclick", () => setStep(1));
@@ -870,7 +2143,42 @@
       await refresh();
       renderLoginPanel();
     });
-    on("btnLoginNext", "onclick", () => setStep(5));
+    on("btnLoginNext", "onclick", () => {
+      setStep(5);
+      initScopeUI();
+    });
+
+    // 询价范围 UI
+    document.querySelectorAll('input[name="scopeMode"]').forEach((r) => {
+      r.addEventListener("change", updateScopePanels);
+    });
+    if ($("scopeN")) {
+      ["input", "change"].forEach((ev) => {
+        $("scopeN").addEventListener(ev, updateScopeSummary);
+      });
+    }
+    on("btnScopeSelectAll", "onclick", () => {
+      allItems
+        .filter((it) => (it.sheet || "") === scopeItemSheet)
+        .forEach((it) => scopeSelectedIds.add(it.id));
+      renderScopeItemPicker();
+      updateScopeSummary();
+    });
+    on("btnScopeClear", "onclick", () => {
+      scopeSelectedIds.clear();
+      renderScopeItemPicker();
+      updateScopeSummary();
+    });
+    on("btnScopeInvert", "onclick", () => {
+      allItems
+        .filter((it) => (it.sheet || "") === scopeItemSheet)
+        .forEach((it) => {
+          if (scopeSelectedIds.has(it.id)) scopeSelectedIds.delete(it.id);
+          else scopeSelectedIds.add(it.id);
+        });
+      renderScopeItemPicker();
+      updateScopeSummary();
+    });
     on("btnLoginRefresh", "onclick", async () => {
       const r = await fetch("/api/login/status");
       const j = await r.json();
@@ -907,40 +2215,107 @@
     async function uploadFile(f) {
       $("msg2").textContent = "上传中…";
       $("msg2").className = "msg";
-      const r = await fetch("/api/upload-file", {
-        method: "POST",
-        headers: { "X-Filename": encodeURIComponent(f.name), "Content-Type": "application/octet-stream" },
-        body: f,
-      });
-      const j = await r.json();
+      let j;
+      try {
+        const r = await fetch("/api/upload-file", {
+          method: "POST",
+          headers: {
+            "X-Filename": encodeURIComponent(f.name),
+            "Content-Type": "application/octet-stream",
+          },
+          body: f,
+        });
+        j = await r.json();
+      } catch (e) {
+        $("msg2").textContent = "上传失败：" + e;
+        $("msg2").className = "msg err";
+        return;
+      }
       if (!j.ok) {
         $("msg2").textContent = j.error || "上传失败";
         $("msg2").className = "msg err";
         return;
       }
-      $("msg2").textContent = "已上传：" + j.name;
+      setSelectedFile(j.name, j.path);
+      $("msg2").textContent = "已上传并选中：" + j.name;
       $("msg2").className = "msg ok";
-      refresh();
+      // 清掉 file input，允许重复选同一文件
+      const fileEl = $("file");
+      if (fileEl) fileEl.value = "";
+      await refresh();
+      setSelectedFile(j.name, j.path);
+      renderFiles(state.input_files || []);
     }
 
     on("existFiles", "onchange", async () => {
       const name = $("existFiles").value;
-      if (!name) return;
-      await fetch("/api/select-input", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
+      if (!name) {
+        selectedFileName = "";
+        setSelectedFile("", "");
+        return;
+      }
+      $("msg2").textContent = "正在选定…";
+      $("msg2").className = "msg";
+      let j;
+      try {
+        const r = await fetch("/api/select-input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        j = await r.json();
+      } catch (e) {
+        $("msg2").textContent = "选择失败：" + e;
+        $("msg2").className = "msg err";
+        return;
+      }
+      if (!j.ok) {
+        $("msg2").textContent = j.error || "选择失败";
+        $("msg2").className = "msg err";
+        return;
+      }
+      setSelectedFile(name, j.path);
       $("msg2").textContent = "已选择：" + name;
       $("msg2").className = "msg ok";
     });
 
     on("btnParse", "onclick", async () => {
-      $("msg2").textContent = "正在识别表头…";
+      // 确保下拉选中的文件已提交到后端
+      const name = ($("existFiles") && $("existFiles").value) || selectedFileName || basename(state.input_path);
+      if (!name) {
+        $("msg2").textContent = "请先上传或选择一份询价 Excel";
+        $("msg2").className = "msg err";
+        return;
+      }
+      if (name && name !== selectedFileName) {
+        try {
+          const r = await fetch("/api/select-input", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          const j0 = await r.json();
+          if (!j0.ok) {
+            $("msg2").textContent = j0.error || "选定文件失败";
+            $("msg2").className = "msg err";
+            return;
+          }
+          setSelectedFile(name, j0.path);
+        } catch (e) {
+          $("msg2").textContent = "选定文件失败：" + e;
+          $("msg2").className = "msg err";
+          return;
+        }
+      }
+      $("msg2").textContent = "正在识别表头…（" + name + "）";
       setBusy("btnParse", true, "正在识别…");
       let j;
       try {
-        const r = await fetch("/api/parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const r = await fetch("/api/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
         j = await r.json();
       } catch (e) {
         $("msg2").textContent = "识表请求失败：" + e;
@@ -954,16 +2329,35 @@
         $("msg2").className = "msg err";
         return;
       }
-      $("parseSummary").textContent = `共 ${j.items || state.items_count || 0} 条材料；请抽查名称/规格是否正确`;
-      renderPreview(j.items_preview || state.items_preview);
+      if (j.input_path) setSelectedFile(basename(j.input_path), j.input_path);
+      const aiSheets = j.schema_ai_sheets || [];
+      const schemaLines = (j.schema_preview || state.schema_preview || [])
+        .map((s) => `${s.sheet}(${s.source || "rule"})`)
+        .join("、");
+      $("parseSummary").textContent =
+        `文件 ${selectedFileName || name} · 共 ${j.items || state.items_count || 0} 条材料` +
+        (schemaLines ? ` · 表头来源：${schemaLines}` : "") +
+        (aiSheets.length ? ` · AI 参与识表：${aiSheets.join("、")}` : " · 识表未使用 AI") +
+        "；可点上方 Sheet 切换查看，请抽查名称/规格";
+      const fullItems = j.items_all || j.items_preview || [];
+      allItems = fullItems.slice();
+      previewSheetFilter = "";
+      scopeSelectedIds = new Set();
+      scopeSelectedSheets = new Set(sheetCountsFrom(allItems).map((c) => c.sheet));
+      renderPreview(allItems);
+      if (j.llm_status) state.llm_status = j.llm_status;
+      renderAiStatus("aiStatusParse", state.llm_status, state.llm);
       await refresh();
-      renderPreview(state.items_preview);
-      $("parseSummary").textContent = `共 ${state.items_preview?.length || j.items || 0} 条材料（预览前 40 条）`;
+      // refresh 可能只带回 40 条预览，保留 allItems
+      if (allItems.length) renderPreview(allItems);
+      renderAiStatus("aiStatusParse", state.llm_status, state.llm);
       setStep(3);
     });
 
-    on("btnStart", "onclick", async () => {
-      $("msg4").textContent = "正在启动…";
+    async function startInquiry(opts) {
+      opts = opts || {};
+      const isContinue = !!opts.continue;
+      $("msg4").textContent = isContinue ? "继续询价…" : "正在启动…";
       $("msg4").className = "msg";
       let plats = state.platforms || selectedPlatforms();
       if (!plats.length) {
@@ -972,13 +2366,31 @@
         setStep(1);
         return;
       }
+      const itemScope = buildItemScopePayload();
+      const scopeN = countScopeSelected();
+      if (!isContinue && scopeN <= 0) {
+        $("msg4").textContent = "请先选择询价范围（全部 / 前N条 / Sheet / 勾选材料）";
+        $("msg4").className = "msg err";
+        return;
+      }
+      lockQuotesFromUser();
+      lockLimitFromUser();
+      const limitVal = itemScope.mode === "first_n" ? (itemScope.n || 0) : 0;
+      if ($("limit")) $("limit").value = String(limitVal);
       const body = {
         platforms: plats,
-        quotes_per_item: +($("quotes") && $("quotes").value) || state.quotes_per_item || 3,
-        limit: +($("limit") && $("limit").value) || 0,
+        quotes_per_item: readQuotes(),
+        limit: limitVal,
+        match_mode: readMatchMode(),
+        item_scope: itemScope,
         require_all_login: true,
+        continue: isContinue,
+        llm_enabled: $("llmRuntimeToggle") ? $("llmRuntimeToggle").checked : undefined,
       };
-      setBusy("btnStart", true, "正在启动…");
+      writeQuotesLocal(body.quotes_per_item);
+      writeLimitLocal(body.limit);
+      setBusy("btnStart", true, isContinue ? "继续中…" : "正在启动…");
+      if ($("btnContinue")) setBusy("btnContinue", true, "继续中…");
       let j;
       try {
         const r = await fetch("/api/start", {
@@ -991,24 +2403,117 @@
         $("msg4").textContent = "启动失败：" + e;
         $("msg4").className = "msg err";
         setBusy("btnStart", false);
+        if ($("btnContinue")) setBusy("btnContinue", false);
         return;
       }
       setBusy("btnStart", false);
+      if ($("btnContinue")) setBusy("btnContinue", false);
       if (!j.ok) {
         $("msg4").textContent = j.error || "启动失败";
         $("msg4").className = "msg err";
         if (j.pending && j.pending.length) setStep(4);
         return;
       }
-      $("msg4").textContent = `已开始询价。平台：${(j.platforms || plats).join("、")}；已验证登录：${(j.verified || []).join("、") || "—"}`;
+      state.quotes_per_item = body.quotes_per_item;
+      state.limit = body.limit;
+      state.match_mode = body.match_mode;
+      state.phase = "running";
+      updateRunControls(state);
+      const scopeLabel =
+        itemScope.mode === "all" ? `全部 ${scopeN} 条`
+        : itemScope.mode === "first_n" ? `前 ${itemScope.n} 条`
+        : itemScope.mode === "sheets" ? `Sheet ${itemScope.sheets.join("、")}（${scopeN} 条）`
+        : `勾选 ${scopeN} 条`;
+      const modeLabel = { practical: "实用·候选", strict: "严格", loose: "宽松" }[body.match_mode] || body.match_mode;
+      $("msg4").textContent = isContinue
+        ? `继续询价中（跳过已有合格价）· 匹配=${modeLabel}`
+        : (
+          `已开始询价。平台：${(j.platforms || plats).join("、")}；` +
+          `每条 ${body.quotes_per_item} 个价；匹配=${modeLabel}；范围：${scopeLabel}` +
+          `；已验证登录：${(j.verified || []).join("、") || "—"}`
+        );
       $("msg4").className = "msg ok";
+    }
+
+    on("btnStart", "onclick", () => startInquiry({ continue: false }));
+    on("btnContinue", "onclick", () => {
+      setStep(5);
+      startInquiry({ continue: true });
     });
+    on("btnContinueDone", "onclick", () => {
+      setStep(5);
+      startInquiry({ continue: true });
+    });
+    on("btnBackToRun", "onclick", () => setStep(5));
+    on("btnPause", "onclick", () => jobControl("pause"));
+    on("btnResume", "onclick", () => jobControl("resume"));
+    on("btnStop", "onclick", () => {
+      if (confirm("确定停止询价？已完成的结果会保存，之后可「继续询价」。")) {
+        jobControl("stop");
+      }
+    });
+    if ($("llmRuntimeToggle")) {
+      $("llmRuntimeToggle").addEventListener("change", async () => {
+        const enabled = $("llmRuntimeToggle").checked;
+        try {
+          const r = await fetch("/api/job/llm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled }),
+          });
+          const j = await r.json();
+          if (j.ok) {
+            Object.assign(state, j);
+            updateRunControls(state);
+            if ($("msg4")) {
+              $("msg4").textContent = enabled ? "已开启询价中 AI" : "已关闭询价中 AI（规则匹配继续）";
+              $("msg4").className = "msg ok";
+            }
+          }
+        } catch (e) {
+          if ($("msg4")) {
+            $("msg4").textContent = "切换 AI 失败：" + e;
+            $("msg4").className = "msg err";
+          }
+        }
+      });
+    }
 
     on("btnRestart", "onclick", () => {
       setStep(1);
       platformsRendered = false;
+      // 保留用户价数锁定，不要被服务端旧值盖回去
       refresh();
     });
+
+    // 价数一改就锁定 + 写 localStorage，轮询再也改不回去
+    (function bindQuoteInputs() {
+      const q = $("quotes");
+      const l = $("limit");
+      if (q) {
+        ["input", "change", "keyup", "blur"].forEach((ev) => {
+          q.addEventListener(ev, () => lockQuotesFromUser());
+        });
+        // 启动时若本地有用户上次选的 K，优先用本地
+        const ls = clampQuotes(localStorage.getItem(LS_QUOTES));
+        if (ls != null) {
+          q.value = String(ls);
+          quotesLocked = true;
+          state.quotes_per_item = ls;
+        }
+      }
+      if (l) {
+        ["input", "change", "keyup", "blur"].forEach((ev) => {
+          l.addEventListener(ev, () => lockLimitFromUser());
+        });
+        const ls = clampLimit(localStorage.getItem(LS_LIMIT));
+        if (ls != null) {
+          l.value = String(ls);
+          limitLocked = true;
+          state.limit = ls;
+        }
+      }
+    })();
 
     // 首次强制拉平台列表
     refresh().then(() => {
@@ -1016,6 +2521,10 @@
         renderPlatforms(state.catalog, state.platforms || []);
         platformsRendered = true;
       }
+      // 若用户没动过，用服务端；动过则以本地为准
+      hydrateQuotesLimitFromState(state);
+      if (state.llm) applyLlmToForm(state.llm);
+      toggleAiFields();
     });
     setInterval(refresh, 1500);
   </script>
