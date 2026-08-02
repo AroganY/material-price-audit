@@ -4,17 +4,18 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22C55E.svg)](./LICENSE)
 [![Local Web](https://img.shields.io/badge/UI-本地浏览器向导-2563EB)](#快速开始)
 
-**造价员用的本地材料询价助手**：上传任意表头的询价 Excel → 勾选广材/慧讯/领材/易择/造价通/京东/1688 → 浏览器登录 → 瀑布搜价 → 导出比价表与 RFQ。
+**造价员用的本地材料询价助手**：上传任意表头的询价 Excel → 勾选广材/慧讯/领材/易择/造价通/京东/1688 → 浏览器登录 → 瀑布 / 多站并行搜价 → 导出比价表与 RFQ。
 
 - 主入口是 **Web 向导**（不是命令行堆参数）
 - 默认监听 **`127.0.0.1:8765`**，数据与登录 Cookie 只留在本机
 - **不编造价格**：价只来自页面；硬规格冲突不会被 AI 强行放行
+- **登录可恢复**：Cookie 落在 `.browser-profile`；询价中若需重登，点 **「我已登录，继续」**
 
 <p align="center">
   <img src="docs/images/01-step1-platforms.png" alt="选择平台" width="860" />
 </p>
 
-> 上图及下文截图均由 Playwright 对本地运行的向导 **真实截屏**（`scripts/capture_screenshots.py`），非 AI 生成界面图。
+> 上图及下文截图均由 Playwright 对本地运行的向导 **真实截屏**（`scripts/capture_screenshots.py`），样例材料名为演示数据，非 AI 生成界面图。
 
 ---
 
@@ -45,7 +46,7 @@
 询价 Excel（表头随意）
     → 识表 / 标准化材料行
     → 勾选平台 + 分站登录（Cookie 在 .browser-profile）
-    → 按优先级瀑布搜索
+    → 按优先级瀑布搜索（多站时可 Worker 并行）
     → 名称 + 硬规格校验（型号/截面/电压…）
     → 正式合格价 / 候选待核 / 没查到
     → result.xlsx + rfq.xlsx + evidence.json
@@ -58,7 +59,8 @@
 | 浏览器向导优先 | 日常只用 `serve`，在页面完成全流程 |
 | 严格不编价 | 列表/详情抓到的数字才是价；LLM 不参与定价 |
 | 候选工作台 | 默认「实用」模式：名字对上但规格差一点 → 黄条待核，可人工采用 |
-| 可中断 | 询价中可暂停 / 停止 / 断点继续；AI 可热开关；Token 用量可看 |
+| 可中断可续登 | 暂停 / 停止 / 断点继续；登录失效可重登后点「我已登录，继续」 |
+| 会话真校验 | 会员站禁止空「强制确认」；启动前复检 Cookie，避免假登录白跑 |
 
 ---
 
@@ -69,16 +71,20 @@
 1. **选平台 + 匹配模式 + 可选 AI**  
 2. **上传 / 选择 Excel**（无需固定模板）  
 3. **识表预览**（按 Sheet 抽查名称规格）  
-4. **分站登录校验**（只登勾选的站）  
-5. **询价范围**（全部 / 前 N / Sheet / 勾选）+ **暂停/停止/继续** + **Token 用量**  
-6. **结果**（绿合格 / 黄候选 / 灰没查到）+ 下载 Excel / RFQ  
+4. **分站登录校验**（只登勾选的站；校验页探测 Cookie / 正向文案）  
+5. **询价范围**（全部 / 前 N / Sheet / 勾选）+ **暂停/停止/继续** + **「我已登录，继续」** + **Token 用量**  
+6. **结果**（绿合格 / 黄候选 / 灰没查到）+ 下载 Excel / RFQ + 任务历史  
 
-### 匹配与控制
+### 匹配、调度与登录
 
 - 匹配档位：`practical`（默认）· `strict` · `loose`  
 - 硬规则：型号、截面尺寸、电压/功率/IP、单位同类（节/台/个）等  
-- 慧讯：关窗重开自动「一键登录 → 继续登录」  
-- 运行中：暂停 / 停止 / 断点续跑 / 开关大模型 / Token 统计  
+- **名称/规格流水线**、材料族候选池（同族复用检索）、可选地区门控  
+- **平台调度**：一平台一 Worker，Cookie 注入并行；限流/验证码/登录熔断  
+- **慧讯**：关窗重开自动「一键登录 → 继续登录」  
+- **造价通**：列表以 HTTP SSR 为主，避免 SPA 踢登录死循环  
+- **领材**：双重 URL 编码；`userInfo` 不当成已离开登录；需真实会话 Cookie  
+- 运行中：暂停 / 停止 / 断点续跑 / 开关大模型 / Token 统计 / 登录等待放行  
 
 ---
 
@@ -133,12 +139,17 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 每个站：**打开登录页 → 在弹出浏览器登录 → 本站已登录，校验**。  
 只有「已通过」的站才会参与询价。Cookie 只在本机 `.browser-profile/`。
 
+- 请在 **工具弹出的浏览器** 登录（不要只用系统自带 Chrome）  
+- 会员站（广材/领材/慧讯/易择/造价通）**不能**靠空「强制确认」凑数——必须探测到会话 Cookie 或已登录文案  
+- 校验失败时：重新在弹出窗口登录后再点校验  
+
 ![步骤4 登录](docs/images/04-step4-login.png)
 
 ### ⑤ 执行询价
 
 - **询价范围**：全部 / 前 N 条 / 按 Sheet / 勾选材料  
 - **暂停 / 停止 / 继续（断点）**  
+- **「我已登录，继续」**：询价中某站会话失效时，在弹出浏览器登完后点此按钮（或 `touch data/output/LOGIN_CONTINUE`）  
 - **询价中开关 AI** + **Token 用量**（输入 / 输出 / 合计）
 
 ![步骤5 执行](docs/images/05-step5-run.png)
@@ -153,7 +164,7 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 - **黄·候选待核**：有价有链接，规格可能差一截 → 点链接人工确认  
 - **灰**：无可用候选  
 
-下载 `result.xlsx` / `rfq.xlsx`。停止任务后也会进入结果页展示**已完成部分**。
+下载 `result.xlsx` / `rfq.xlsx`。停止任务后也会进入结果页展示**已完成部分**。历史任务可在向导内查看。
 
 ![步骤6 结果](docs/images/06-step6-results.png)
 
@@ -195,7 +206,7 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 
 ## 隐私与安全（请勿上传）
 
-以下内容**仅本机使用**，仓库已用 `.gitignore` 排除，请勿贴到 Issue/PR/截图发版前务必检查：
+以下内容**仅本机使用**，仓库已用 `.gitignore` 排除，请勿贴到 Issue/PR；发版截图务必用演示数据：
 
 | 内容 | 路径 / 说明 |
 |------|-------------|
@@ -209,11 +220,8 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 发版或截图前建议：
 
 ```bash
-# 清理运行产物（保留目录占位）
-rm -rf data/output/* data/user/* .browser-profile
-touch data/output/.gitkeep
-
-# 用演示表重跑后再截图
+# 用演示数据重截（脚本内置样例行，不读你的真实结果）
+python -m material_price_audit serve --host 127.0.0.1 --port 8765
 python scripts/capture_screenshots.py
 ```
 
@@ -226,12 +234,12 @@ python scripts/capture_screenshots.py
 | ID | 名称 | 说明 |
 |----|------|------|
 | `guangcai` | 广材网 | 会员市场价 / 厂家报价行 |
-| `lingcai` | 领材网 | 市场价；双重 URL 编码已处理 |
+| `lingcai` | 领材网 | 市场价；双重 URL 编码；登录需真实 Cookie |
 | `huixun` | 慧讯网 | SPA；一键登录 + 账号冲突「继续登录」 |
 | `yize` | 易择网 | 信息价 / 产品信息 |
-| `zaojiatong` | 造价通 | 会员市场价（默认广东分站）；登录 member.zjtcn.com |
-| `jd` | 京东 | 公开列表 + 限流识别 |
-| `1688` | 1688 | GBK 搜索 + 风控页识别 |
+| `zaojiatong` | 造价通 | **SSR 列表适配器**（默认广东分站）；登录 member.zjtcn.com |
+| `jd` | 京东 | 公开列表 + 限流识别；仅电商参考 |
+| `1688` | 1688 | GBK 搜索 + 风控页识别；仅电商参考 |
 
 站点会改版、要验证码或限流。适配器遇到登录失效 / 验证码 / 频繁访问会停当前站，不会把异常页当成「0 条结果」死刷。细节：[docs/PLATFORMS.md](./docs/PLATFORMS.md)。
 
@@ -248,6 +256,7 @@ export OPENAI_API_KEY=sk-...         # 仅当你开启 AI 时
 
 - LLM **默认关闭**  
 - 开启后：陌生表头、语义灰区、可选搜索辅助；**不改价格数字**  
+- 硬熔断：本轮调用次数 / Token 上限命中后自动关 AI，规则询价继续  
 - 保密项目请关闭 AI，或仅用内网兼容 OpenAI 的接口  
 
 ---
@@ -270,11 +279,13 @@ python scripts/capture_screenshots.py
 
 | 路径 | 职责 |
 |------|------|
-| `material_price_audit/webapp/` | 本地 HTTP 向导、登录面板、任务暂停/停止 |
-| `inquiry.py` | 瀑布询价编排 |
-| `matching.py` | 名称/规格判定与匹配档位 |
-| `platforms.py` | 各站搜索适配 |
-| `export_quotes.py` | 结果 / RFQ |
+| `material_price_audit/webapp/` | 本地 HTTP 向导、登录面板、任务控制、历史 |
+| `inquiry.py` | 瀑布 / 并行询价编排、登录预检 |
+| `scheduler.py` | 平台 Worker 池、熔断、有界并发 |
+| `matching.py` / `name_match.py` / `spec_match.py` | 名称/规格判定 |
+| `platforms.py` / `adapters/` | 各站搜索（造价通 SSR、百度兜底等） |
+| `login_gate.py` / `scraper.py` | 登录会话探测、等待「我已登录继续」 |
+| `export_quotes.py` / `run_analytics.py` | 结果 / RFQ / 漏斗统计 |
 | `llm_agent.py` / `schema_map.py` | 可选 AI（检索辅助 / 识表） |
 
 贡献：[CONTRIBUTING.md](./CONTRIBUTING.md)
@@ -289,7 +300,7 @@ python scripts/capture_screenshots.py
 - 改词手工对照表：[docs/samples/ecommerce-query-rewrite-template.csv](./docs/samples/ecommerce-query-rewrite-template.csv)
 - 配置见 `config.example.yaml` → `ecommerce:`（限速、验证码等待、仅没查到再跑电商等）
 
-验证码出现时：在弹出浏览器完成验证 → 向导继续，或 `touch data/output/LOGIN_CONTINUE`。
+验证码 / 登录等待出现时：在弹出浏览器完成验证 → 向导点 **「我已登录，继续」**，或 `touch data/output/LOGIN_CONTINUE`。
 
 ---
 
