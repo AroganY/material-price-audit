@@ -343,42 +343,47 @@ def main() -> None:
         else:
             _clip_shot("#runTools", "05c-usage-panel.png")
 
-        # ⑥ 结果：演示行
-        show_step(page, 6)
-        page.evaluate(
-            """(items) => {
-              const tb = document.getElementById('resultBody');
-              const dm = document.getElementById('doneMsg');
-              if (dm) dm.textContent = '演示结果：绿合格 / 黄候选待核 / 灰没查到（样例数据）';
-              // 隐藏本机 AI 状态（模型名等）
-              document.querySelectorAll('.ai-status, #aiStatusDone, #aiStatusRun').forEach((el) => {
-                el.textContent = 'AI：演示模式（未调用）';
-                el.className = (el.className || '').replace(/\\bon\\b/, 'off') + ' off';
-              });
-              const label = (s) => ({
-                full_k: '绿·已凑满',
-                partial: '绿·部分',
-                need_review: '黄·候选待核',
-                no_match: '灰·没查到',
-              }[s] || s || '—');
-              if (tb) {
-                tb.innerHTML = items.map((r) => {
-                  const price = r.price != null ? r.price : '—';
-                  return `<tr>
-                    <td>${r.row ?? ''}</td>
-                    <td><strong>${(r.name || '').slice(0, 48)}</strong>
-                      <div class="result-detail">${(r.spec || '').slice(0, 80)}</div></td>
-                    <td>${label(r.status)}</td>
-                    <td class="price-cell">${price}</td>
-                    <td><div class="result-detail">${(r.message || '').slice(0, 120)}</div></td>
-                  </tr>`;
-                }).join('');
-              }
-            }""",
-            _DEMO_RESULTS,
-        )
-        page.wait_for_timeout(400)
-        shot(page, "06-step6-results")
+        # ⑥ 结果：默认保留仓库内手工/真实界面截图，避免演示页覆盖
+        # 需要演示页时：MPA_SHOT_STEP6=1 python scripts/capture_screenshots.py
+        import os
+
+        if os.environ.get("MPA_SHOT_STEP6", "").strip() in ("1", "true", "yes"):
+            show_step(page, 6)
+            page.evaluate(
+                """(items) => {
+                  const tb = document.getElementById('resultBody');
+                  const dm = document.getElementById('doneMsg');
+                  if (dm) dm.textContent = '演示结果：绿合格 / 黄候选待核 / 灰没查到（样例数据）';
+                  document.querySelectorAll('.ai-status, #aiStatusDone, #aiStatusRun').forEach((el) => {
+                    el.textContent = 'AI：演示模式（未调用）';
+                    el.className = (el.className || '').replace(/\\bon\\b/, 'off') + ' off';
+                  });
+                  const label = (s) => ({
+                    full_k: '绿·已凑满',
+                    partial: '绿·部分',
+                    need_review: '黄·候选待核',
+                    no_match: '灰·没查到',
+                  }[s] || s || '—');
+                  if (tb) {
+                    tb.innerHTML = items.map((r) => {
+                      const price = r.price != null ? r.price : '—';
+                      return `<tr>
+                        <td>${r.row ?? ''}</td>
+                        <td><strong>${(r.name || '').slice(0, 48)}</strong>
+                          <div class="result-detail">${(r.spec || '').slice(0, 80)}</div></td>
+                        <td>${label(r.status)}</td>
+                        <td class="price-cell">${price}</td>
+                        <td><div class="result-detail">${(r.message || '').slice(0, 120)}</div></td>
+                      </tr>`;
+                    }).join('');
+                  }
+                }""",
+                _DEMO_RESULTS,
+            )
+            page.wait_for_timeout(400)
+            shot(page, "06-step6-results")
+        else:
+            print("skip 06-step6-results.png（保留现有截图；覆盖请设 MPA_SHOT_STEP6=1）")
 
         browser.close()
     print("OK →", OUT)

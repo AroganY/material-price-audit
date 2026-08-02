@@ -3,7 +3,8 @@
 本目录截图由 Playwright 对本地 `python -m material_price_audit serve`  
 （`http://127.0.0.1:8765/`）**真实页面**抓取，非 AI 生成图。
 
-脚本：`scripts/capture_screenshots.py`（内置演示材料名/价，不读本机真实询价结果）。
+- ①～⑤ 与特写：`scripts/capture_screenshots.py`（内置演示数据，不读本机询价结果）
+- ⑥ 结果工作台：可用真实询价后的界面截图（左侧材料 + 右侧规格/链接核对），便于展示「自行核对」
 
 | 文件 | 内容 |
 |------|------|
@@ -14,13 +15,14 @@
 | `05-step5-run.png` | ⑤ 询价范围、暂停/停止、**我已登录继续**、用量 |
 | `05b-scope-box.png` | 询价范围面板特写 |
 | `05c-usage-panel.png` | Token 用量面板特写 |
-| `06-step6-results.png` | ⑥ 结果（绿/黄/灰，演示数据） |
+| `06-step6-results.png` | ⑥ 结果工作台（材料列表 + 规格/链接核对区） |
 
-重新截取（需服务已启动）：
+重新截取 ①～⑤（需服务已启动；默认**不会覆盖** `06`）：
 
 ```bash
 python -m material_price_audit serve --host 127.0.0.1 --port 8765
 python scripts/capture_screenshots.py
+# 强制重截 ⑥ 演示页：MPA_SHOT_STEP6=1 python scripts/capture_screenshots.py
 ```
 
-**注意：** 勿把含真实工程材料名/价/登录态的截图提交发版。本仓库截图脚本固定使用样例数据。
+**注意：** 发版截图勿含 API Key、登录 Cookie 或敏感客户合同信息。
