@@ -14,7 +14,12 @@ from typing import Any
 from ..login_gate import (
     check_url_for,
     ensure_logged_in_or_resume,
+    install_zaojiatong_dialog_auto_accept,
+    page_shows_session_conflict,
+    probe_zaojiatong_market_session,
+    try_handle_zaojiatong_session_conflict,
     try_resume_huixun_session,
+    try_resume_zaojiatong_session,
     verify_logged_in,
 )
 from ..platforms import BUILTIN, load_platform_registry, normalize_platform_id
@@ -294,6 +299,37 @@ class LoginPanel:
         finally:
             self.pw = self.ctx = self.page = None
 
+    def _start_zaojiatong_conflict_watcher(self) -> None:
+        """登录页打开后轮询「账号使用中」弹窗并自动点继续登录。"""
+        if getattr(self, "_zjt_watch_started", False):
+            return
+        self._zjt_watch_started = True
+
+        def _loop() -> None:
+            try:
+                for _ in range(90):  # ~3 分钟，每 2 秒
+                    time.sleep(2)
+                    with self.lock:
+                        page = self.page
+                        alive = bool(page) and self._alive_unlocked()
+                        active = self.active_platform == "zaojiatong"
+                    if not alive or not active:
+                        break
+                    try:
+                        if page_shows_session_conflict(page):
+                            ok, lab = try_handle_zaojiatong_session_conflict(page)
+                            if ok:
+                                STATE.log(
+                                    f"[登录面板] 造价通互踢弹窗已自动「{lab}」"
+                                    "（会接管本机会话，其它端同账号会被挤下线）"
+                                )
+                    except Exception:
+                        pass
+            finally:
+                self._zjt_watch_started = False
+
+        threading.Thread(target=_loop, name="zjt-conflict-watch", daemon=True).start()
+
     def close_browser(self) -> dict[str, Any]:
         with self.lock:
             # 正常交接给询价：优雅关窗，尽量保留 Cookie；勿强杀
@@ -301,8 +337,90 @@ class LoginPanel:
             self.active_platform = ""
             self.busy = False
             self.last_error = ""
+            self._zjt_watch_started = False
             STATE.log("[登录面板] 已关闭浏览器（登录 Cookie 保留在 .browser-profile；下一站会自动重开）")
             return self.snapshot()
+
+    def open_url(self, url: str) -> dict[str, Any]:
+        """
+        在脚本浏览器（.browser-profile，已登录 Cookie）中打开链接。
+        用于证据链跳转：不走系统默认浏览器，避免重新登录。
+        """
+        url = (url or "").strip()
+        if not url:
+            return {"ok": False, "error": "链接为空", **self.snapshot()}
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return {"ok": False, "error": "仅支持 http(s) 链接", **self.snapshot()}
+        with self.lock:
+            if self.busy:
+                return {
+                    "ok": False,
+                    "error": "浏览器正忙（登录/校验中），请稍后再试",
+                    **self.snapshot(),
+                }
+            self.busy = True
+            self.last_error = ""
+            try:
+                page = self._ensure_browser()
+                # 新标签打开，保留当前登录页
+                try:
+                    if self.ctx is not None:
+                        new_page = self.ctx.new_page()
+                        new_page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        try:
+                            new_page.bring_to_front()
+                        except Exception:
+                            pass
+                        STATE.log(f"[证据链] 已在脚本浏览器新标签打开：{url[:120]}")
+                        return {
+                            "ok": True,
+                            "url": url,
+                            "message": "已在脚本浏览器中打开（复用登录态）",
+                            **self.snapshot(),
+                        }
+                except Exception as e:
+                    if not self._is_target_closed_error(e):
+                        # 回退：当前页跳转
+                        try:
+                            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                            STATE.log(f"[证据链] 当前页打开：{url[:120]}")
+                            return {
+                                "ok": True,
+                                "url": url,
+                                "message": "已在脚本浏览器中打开",
+                                **self.snapshot(),
+                            }
+                        except Exception as e2:
+                            self.last_error = str(e2)
+                            return {
+                                "ok": False,
+                                "error": f"打开失败：{e2}",
+                                **self.snapshot(),
+                            }
+                    # TargetClosed：重建后再开
+                    page = self._ensure_browser(force_new=True)
+                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    STATE.log(f"[证据链] 重建浏览器后打开：{url[:120]}")
+                    return {
+                        "ok": True,
+                        "url": url,
+                        "message": "已在脚本浏览器中打开（复用登录态）",
+                        **self.snapshot(),
+                    }
+                # 无 ctx 时当前页打开
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                return {
+                    "ok": True,
+                    "url": url,
+                    "message": "已在脚本浏览器中打开",
+                    **self.snapshot(),
+                }
+            except Exception as e:
+                self.last_error = str(e)
+                STATE.log(f"[证据链] 打开失败：{e}")
+                return {"ok": False, "error": f"打开失败：{e}", **self.snapshot()}
+            finally:
+                self.busy = False
 
     def open_platform(self, platform_id: str) -> dict[str, Any]:
         pid = normalize_platform_id(platform_id)
@@ -383,6 +501,23 @@ class LoginPanel:
                     STATE.log(f"[登录面板] 慧讯一键登录未自动完成：{reason_h}")
                 except Exception as e:
                     STATE.log(f"[登录面板] 慧讯一键登录异常: {e}")
+            # 造价通：允许跳登录页 + 互踢弹窗自动「继续登录」
+            if pid == "zaojiatong":
+                try:
+                    from ..adapters import zaojiatong as zjt
+
+                    zjt.allow_login_navigation(page, True)
+                    install_zaojiatong_dialog_auto_accept(page)
+                    if page_shows_session_conflict(page):
+                        ok_c, lab = try_handle_zaojiatong_session_conflict(page)
+                        if ok_c:
+                            STATE.log(f"[登录面板] 造价通已自动点「{lab}」")
+                    STATE.log(
+                        "[登录面板] 造价通：请在本窗口登录；若提示「账号正在使用中」点「继续登录」。"
+                        "登完应跳到市场价列表，再点校验。"
+                    )
+                except Exception as e:
+                    STATE.log(f"[登录面板] 造价通登录准备失败: {e}")
 
             with self.lock:
                 row = self.rows.get(pid)
@@ -394,10 +529,19 @@ class LoginPanel:
                             "已打开慧讯登录页。若已有账号信息，可点页面「一键登录」；"
                             "或点下方「本站已登录，校验」（程序也会尝试自动点）"
                         )
+                    elif pid == "zaojiatong":
+                        row.message = (
+                            "已打开造价通登录页。若提示「账号正在使用中」，"
+                            "点「继续登录」即可（表示踢掉其它端的同账号，不是没登过）。"
+                            "程序也会自动点「继续登录」。登完后点「本站已登录，校验」。"
+                        )
                     else:
                         row.message = "已打开登录页，请在浏览器登录，然后点「本站已登录，校验」"
                     row.checked_at = time.strftime("%H:%M:%S")
                 self.busy = False
+            # 造价通：后台盯 3 分钟，用户密码登录后若弹出互踢框则自动点「继续登录」
+            if pid == "zaojiatong":
+                self._start_zaojiatong_conflict_watcher()
             STATE.log(f"[登录面板] 已打开 {name}({pid}) 登录页")
             return {**self.snapshot(), "ok": True}
         except Exception as e:
@@ -447,16 +591,39 @@ class LoginPanel:
             except Exception:
                 pass
 
-            # 慧讯等：产品页若跳回登录，自动点「一键登录」
-            ok, reason = ensure_logged_in_or_resume(
-                page, pid, login_url, user_confirmed=True
-            )
+            # 造价通：SPA 会把未登录会话踢回登录页，必须等鉴权完成
+            if pid == "zaojiatong":
+                try:
+                    install_zaojiatong_dialog_auto_accept(page)
+                    if page_shows_session_conflict(page):
+                        ok_c, lab = try_handle_zaojiatong_session_conflict(page)
+                        if ok_c:
+                            STATE.log(f"[登录面板] 校验前已自动「{lab}」")
+                            page.wait_for_timeout(1500)
+                    page.wait_for_timeout(800)
+                except Exception:
+                    pass
+                ok, reason = try_resume_zaojiatong_session(page, timeout_ms=30000)
+            else:
+                # 慧讯等：产品页若跳回登录，自动点「一键登录」
+                ok, reason = ensure_logged_in_or_resume(
+                    page, pid, login_url, user_confirmed=True
+                )
             if not ok and pid == "huixun":
                 try:
                     page = self._goto(login_url, timeout=30000, wait_ms=800)
                     ok, reason = try_resume_huixun_session(page)
                 except Exception as e:
                     reason = f"{reason}；重试一键登录失败: {e}"
+            if not ok and pid == "zaojiatong":
+                try:
+                    # 仍失败时回到带 url 回跳的登录页，方便用户重登
+                    page = self._goto(login_url, timeout=30000, wait_ms=800)
+                    reason = (
+                        f"{reason}。请在此页登录；成功后应自动跳回市场价，再点一次校验"
+                    )
+                except Exception as e:
+                    reason = f"{reason}；打开登录页失败: {e}"
             with self.lock:
                 row = self.rows.get(pid)
                 if not row:
@@ -499,17 +666,131 @@ class LoginPanel:
             return {**self.snapshot(), "ok": False, "verified": False, "error": str(e)}
 
     def force_verify(self, platform_id: str) -> dict[str, Any]:
-        """用户强制标记已登录（最后手段）。"""
+        """
+        用户强制标记已登录（最后手段）。
+
+        会员站（广材/领材/慧讯/易择/造价通）**禁止**空标 verified：
+        必须打开校验页/市场价探针，确认 Cookie 或正向文案，否则拒绝。
+        否则 Worker 会当成已登录直接搜 → need_login → 再弹登录，且任务难继续。
+
+        电商（京东/1688）允许在正确域名、无硬登录页时用户确认放行。
+        """
+        from ..login_gate import MEMBERSHIP_PLATFORMS
+
         pid = normalize_platform_id(platform_id)
         with self.lock:
             if pid not in self.rows:
                 return {**self.snapshot(), "ok": False, "error": f"未知平台 {pid}"}
             row = self.rows[pid]
+            name = row.name
+            login_url = row.login_url
+
+        # 造价通：市场价 SPA 专用探针
+        if pid == "zaojiatong":
+            try:
+                with self.lock:
+                    self.busy = True
+                page = self._goto(
+                    check_url_for(pid, login_url), timeout=30000, wait_ms=800
+                )
+                ok, reason = probe_zaojiatong_market_session(page, timeout_ms=30000)
+                with self.lock:
+                    row = self.rows.get(pid)
+                    if row:
+                        row.checked_at = time.strftime("%H:%M:%S")
+                        if ok:
+                            row.status = "verified"
+                            row.message = f"✓ 市场价探针通过：{reason}"
+                        else:
+                            row.status = "failed"
+                            row.message = f"强制确认无效：{reason}"
+                    self.busy = False
+                if ok:
+                    STATE.log(f"[登录面板] ✓ {name} 强制确认经市场价探针通过 — {reason}")
+                    self._save_persist()
+                    return {**self.snapshot(), "ok": True, "verified": True, "reason": reason}
+                STATE.log(f"[登录面板] ✗ {name} 强制确认被拒绝 — {reason}")
+                return {
+                    **self.snapshot(),
+                    "ok": False,
+                    "verified": False,
+                    "error": reason,
+                    "reason": reason,
+                }
+            except Exception as e:
+                with self.lock:
+                    self.busy = False
+                    row = self.rows.get(pid)
+                    if row:
+                        row.status = "failed"
+                        row.message = f"强制确认探针失败: {e}"
+                return {**self.snapshot(), "ok": False, "verified": False, "error": str(e)}
+
+        # 其它会员站：打开校验页 + 真检会话（Cookie/正向文案）
+        if pid in MEMBERSHIP_PLATFORMS:
+            try:
+                with self.lock:
+                    self.busy = True
+                page = self._goto(
+                    check_url_for(pid, login_url), timeout=30000, wait_ms=1000
+                )
+                ok, reason = ensure_logged_in_or_resume(
+                    page, pid, login_url, user_confirmed=True
+                )
+                with self.lock:
+                    row = self.rows.get(pid)
+                    if row:
+                        row.checked_at = time.strftime("%H:%M:%S")
+                        if ok:
+                            row.status = "verified"
+                            row.message = f"✓ 强制确认经会话探针通过：{reason}"
+                        else:
+                            row.status = "failed"
+                            row.message = (
+                                f"强制确认无效：{reason}。"
+                                "请在本工具弹出的浏览器完成登录后再点校验"
+                                "（不要只点强制确认）"
+                            )
+                    self.busy = False
+                if ok:
+                    STATE.log(f"[登录面板] ✓ {name} 强制确认经探针通过 — {reason}")
+                    self._save_persist()
+                    return {
+                        **self.snapshot(),
+                        "ok": True,
+                        "verified": True,
+                        "reason": reason,
+                    }
+                STATE.log(f"[登录面板] ✗ {name} 强制确认被拒绝 — {reason}")
+                return {
+                    **self.snapshot(),
+                    "ok": False,
+                    "verified": False,
+                    "error": reason,
+                    "reason": reason,
+                }
+            except Exception as e:
+                with self.lock:
+                    self.busy = False
+                    row = self.rows.get(pid)
+                    if row:
+                        row.status = "failed"
+                        row.message = f"强制确认探针失败: {e}"
+                return {
+                    **self.snapshot(),
+                    "ok": False,
+                    "verified": False,
+                    "error": str(e),
+                }
+
+        # 电商：用户确认 + 非硬登录页可放行
+        with self.lock:
+            row = self.rows[pid]
             row.status = "verified"
             row.message = "✓ 用户强制确认已登录"
             row.checked_at = time.strftime("%H:%M:%S")
             name = row.name
-        STATE.log(f"[登录面板] ✓ {name} 用户强制确认已登录")
+        STATE.log(f"[登录面板] ✓ {name} 用户强制确认已登录（电商）")
         self._save_persist()
         return {**self.snapshot(), "ok": True, "verified": True}
 

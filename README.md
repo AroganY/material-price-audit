@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22C55E.svg)](./LICENSE)
 [![Local Web](https://img.shields.io/badge/UI-本地浏览器向导-2563EB)](#快速开始)
 
-**造价员用的本地材料询价助手**：上传任意表头的询价 Excel → 勾选广材/慧讯/领材/易择/京东/1688 → 浏览器登录 → 瀑布搜价 → 导出比价表与 RFQ。
+**造价员用的本地材料询价助手**：上传任意表头的询价 Excel → 勾选广材/慧讯/领材/易择/造价通/京东/1688 → 浏览器登录 → 瀑布搜价 → 导出比价表与 RFQ。
 
 - 主入口是 **Web 向导**（不是命令行堆参数）
 - 默认监听 **`127.0.0.1:8765`**，数据与登录 Cookie 只留在本机
@@ -31,6 +31,7 @@
 - [可选配置 / LLM](#可选配置--llm)
 - [开发与截图](#开发与截图)
 - [合规边界](#合规边界)
+- [京东 / 1688 策略](#京东--1688-策略)
 
 ---
 
@@ -166,7 +167,17 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 | **严格 strict** | 硬规格必须全过才收正式价 | 审计留痕、宁可空也不错 |
 | **宽松 loose** | 名称弱匹配也可进候选 | 只求市场区间参考 |
 
-程序**不会**用报送价去“编”一个市场价；`never_exceed_submit` 只影响参考审定的封顶计算。
+### 市场价与报送价解耦
+
+| 规则 | 行为 |
+|------|------|
+| **名称 + 规格匹配** | 唯一决定是否收录**正式市场报价**；与报送价无关 |
+| **市场价高于报送** | 仍收录，标记 `above_submit`，Excel 显示偏差%与异常提示 |
+| **市场价远低于报送** | 仍收录，标记 `suspicious_low`（请核对规格/单位），**不删除** |
+| **`never_exceed_submit`** | **只**影响「参考审定不含税」封顶 `min(最低市场不含税, 报送)`，**不**过滤市场报价 |
+| **京东 / 1688** | 仍只进 **电商参考**（`market_ref`），不作造价站合格价 |
+
+程序**不会**用报送价去编造市场价，也**不会**因超报送而把精确匹配报成「没查到」。
 
 ---
 
@@ -174,7 +185,7 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 
 | 路径 | 说明 |
 |------|------|
-| `data/output/result.xlsx` | 询价比价结果（合格价 1～K、候选、链接） |
+| `data/output/result.xlsx` | 询价比价结果（市场价 1～K、与报送关系、偏差%、异常、审定参考、候选、链接） |
 | `data/output/rfq.xlsx` | 未凑满/需继续问厂家的材料 |
 | `data/output/evidence.json` | 机器可读过程证据（拒绝原因、尝试记录） |
 | `data/user/settings.json` | 本机偏好（平台、K、匹配模式、AI Key） |
@@ -218,6 +229,7 @@ python scripts/capture_screenshots.py
 | `lingcai` | 领材网 | 市场价；双重 URL 编码已处理 |
 | `huixun` | 慧讯网 | SPA；一键登录 + 账号冲突「继续登录」 |
 | `yize` | 易择网 | 信息价 / 产品信息 |
+| `zaojiatong` | 造价通 | 会员市场价（默认广东分站）；登录 member.zjtcn.com |
 | `jd` | 京东 | 公开列表 + 限流识别 |
 | `1688` | 1688 | GBK 搜索 + 风控页识别 |
 
@@ -266,6 +278,18 @@ python scripts/capture_screenshots.py
 | `llm_agent.py` / `schema_map.py` | 可选 AI（检索辅助 / 识表） |
 
 贡献：[CONTRIBUTING.md](./CONTRIBUTING.md)
+
+---
+
+## 京东 / 1688 策略
+
+京东、1688 **不写入「合格价」主栏**，只进结果表 **电商参考** 列（`price_role=market_ref`），避免零售/批发挂牌冒充信息价。
+
+- 产品决策全文：[docs/ECOMMERCE_POLICY.md](./docs/ECOMMERCE_POLICY.md)
+- 改词手工对照表：[docs/samples/ecommerce-query-rewrite-template.csv](./docs/samples/ecommerce-query-rewrite-template.csv)
+- 配置见 `config.example.yaml` → `ecommerce:`（限速、验证码等待、仅没查到再跑电商等）
+
+验证码出现时：在弹出浏览器完成验证 → 向导继续，或 `touch data/output/LOGIN_CONTINUE`。
 
 ---
 

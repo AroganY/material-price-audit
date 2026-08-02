@@ -16,6 +16,7 @@ STANDARD_ROLES = (
     "audit_price",
     "sum_price",
     "remark",
+    "region",  # Phase6：行级地区
     "ignore",
     "unknown",
 )
@@ -133,6 +134,9 @@ class CanonicalItem:
     parse_status: str = "ok"  # ok | weak | fail
     parse_issues: list[str] = field(default_factory=list)
     category: str = ""
+    # Phase1：行级目标地区（dict 形态兼容 RegionTarget.to_dict；空=未指定）
+    region: dict[str, Any] = field(default_factory=dict)
+    region_raw: str = ""  # Excel 原文，如「成都市」
 
     @property
     def key(self) -> str:
@@ -156,6 +160,9 @@ class CanonicalItem:
             qty = float(d.get("qty") or 0)
         except Exception:
             qty = 0.0
+        region = d.get("region")
+        if not isinstance(region, dict):
+            region = {}
         return cls(
             id=str(d.get("id") or d.get("key") or ""),
             sheet=str(d.get("sheet") or ""),
@@ -175,6 +182,8 @@ class CanonicalItem:
             parse_status=str(d.get("parse_status") or "ok"),
             parse_issues=list(d.get("parse_issues") or []),
             category=str(d.get("category") or ""),
+            region=dict(region),
+            region_raw=str(d.get("region_raw") or ""),
         )
 
 
@@ -203,6 +212,32 @@ class Quote:
     price_text: str = ""
     price_context: str = ""
     evidence_scope: str = ""
+    # 来源页精确定位：索引均为抓取时页面上的 1-based 序号。
+    source_group_index: int | None = None
+    source_quote_index: int | None = None
+    source_row_index: int | None = None
+    source_row_label: str = ""
+    # formal=造价站合格价
+    # review_candidate=待人工核验候选（绝不是正式报价）
+    # market_ref=京东/1688 市场参考
+    # web_reference=百度全网参考（不进正式价）
+    # supplier_lead=供应商线索（可无价）
+    price_role: str = "formal"
+    # 百度/全网来源质量：high|medium|low|unknown
+    source_quality: str = ""
+    # 相对报送价关系（不影响 match_ok / 是否收录）：
+    # below_submit | near_submit | above_submit | suspicious_low | unknown
+    vs_submit: str = "unknown"
+    # 异常提示文案（如「远低于报送·请核对规格/单位」）；空=无异常
+    price_anomaly: str = ""
+    # Phase1 地区 / 名称结论（可选；旧 evidence 无此字段）
+    requested_region: str = ""
+    platform_selected_region: str = ""
+    source_price_region: str = ""
+    supplier_region: str = ""
+    region_match: str = ""  # exact|province|national|conflict|unknown|""
+    name_decision: str = ""  # same|possible|different|pending|""
+    source_record_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -210,6 +245,30 @@ class Quote:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Quote":
         url = str(d.get("url") or d.get("detail_url") or "")
+        role = str(d.get("price_role") or "formal").strip().lower()
+        if role not in (
+            "formal",
+            "review_candidate",
+            "market_ref",
+            "web_reference",
+            "supplier_lead",
+        ):
+            role = "formal"
+        vs = str(d.get("vs_submit") or "unknown").strip().lower()
+        if vs not in (
+            "below_submit",
+            "near_submit",
+            "above_submit",
+            "suspicious_low",
+            "unknown",
+        ):
+            # 兼容旧 under/near/over/low
+            vs = {
+                "under": "below_submit",
+                "near": "near_submit",
+                "over": "above_submit",
+                "low": "suspicious_low",
+            }.get(vs, "unknown")
         return cls(
             rank=int(d.get("rank") or 0),
             price=float(d.get("price") or d.get("price_tax") or 0),
@@ -237,6 +296,33 @@ class Quote:
             price_text=str(d.get("price_text") or ""),
             price_context=str(d.get("price_context") or ""),
             evidence_scope=str(d.get("evidence_scope") or ""),
+            source_group_index=(
+                int(d["source_group_index"])
+                if d.get("source_group_index") not in (None, "")
+                else None
+            ),
+            source_quote_index=(
+                int(d["source_quote_index"])
+                if d.get("source_quote_index") not in (None, "")
+                else None
+            ),
+            source_row_index=(
+                int(d["source_row_index"])
+                if d.get("source_row_index") not in (None, "")
+                else None
+            ),
+            source_row_label=str(d.get("source_row_label") or ""),
+            price_role=role,
+            vs_submit=vs,
+            price_anomaly=str(d.get("price_anomaly") or ""),
+            source_quality=str(d.get("source_quality") or ""),
+            requested_region=str(d.get("requested_region") or ""),
+            platform_selected_region=str(d.get("platform_selected_region") or ""),
+            source_price_region=str(d.get("source_price_region") or ""),
+            supplier_region=str(d.get("supplier_region") or ""),
+            region_match=str(d.get("region_match") or ""),
+            name_decision=str(d.get("name_decision") or ""),
+            source_record_id=str(d.get("source_record_id") or ""),
         )
 
 
@@ -245,6 +331,12 @@ class QuoteSet:
     item_id: str
     quotes: list[Quote] = field(default_factory=list)
     review_candidates: list[Quote] = field(default_factory=list)
+    # 京东/1688 等市场参考（与正式 quotes 分离）
+    market_refs: list[Quote] = field(default_factory=list)
+    # 百度全网参考价（不进正式合格价）
+    web_refs: list[Quote] = field(default_factory=list)
+    # 供应商线索（可无价，进 RFQ）
+    supplier_leads: list[Quote] = field(default_factory=list)
     status: str = "no_match"  # full_k | partial | need_review | no_match | skipped | error
     attempts: list[dict] = field(default_factory=list)
     error: str = ""
@@ -255,6 +347,9 @@ class QuoteSet:
             "key": self.item_id,  # evidence compat
             "quotes": [q.to_dict() for q in self.quotes],
             "review_candidates": [q.to_dict() for q in self.review_candidates],
+            "market_refs": [q.to_dict() for q in self.market_refs],
+            "web_refs": [q.to_dict() for q in self.web_refs],
+            "supplier_leads": [q.to_dict() for q in self.supplier_leads],
             "status": self.status,
             "attempts": self.attempts,
             "error": self.error,
@@ -272,6 +367,23 @@ class QuoteSet:
         review_candidates = [
             Quote.from_dict(x) for x in (d.get("review_candidates") or [])
         ]
+        # 容错迁移：旧 evidence 曾把 review_candidates 内部误标为 formal。
+        # 容器语义优先，防止历史待核价在页面恢复时再次冒充正式报价。
+        for q in review_candidates:
+            q.price_role = "review_candidate"
+        market_refs = [Quote.from_dict(x) for x in (d.get("market_refs") or [])]
+        web_refs = [Quote.from_dict(x) for x in (d.get("web_refs") or [])]
+        supplier_leads = [Quote.from_dict(x) for x in (d.get("supplier_leads") or [])]
+        # 兼容：旧 market_refs 里 price_role=web_reference 的条目
+        if not web_refs:
+            for m in list(market_refs):
+                if str(getattr(m, "price_role", "") or "") == "web_reference":
+                    web_refs.append(m)
+            market_refs = [
+                m
+                for m in market_refs
+                if str(getattr(m, "price_role", "") or "") != "web_reference"
+            ]
         # migrate legacy single evidence
         if not quotes and d.get("price_tax") and d.get("status") in ("verified", "full_k", "partial"):
             quotes = [
@@ -293,6 +405,9 @@ class QuoteSet:
             item_id=str(d.get("item_id") or d.get("key") or ""),
             quotes=quotes,
             review_candidates=review_candidates,
+            market_refs=market_refs,
+            web_refs=web_refs,
+            supplier_leads=supplier_leads,
             status=str(d.get("status") or "no_match"),
             attempts=list(d.get("attempts") or []),
             error=str(d.get("error") or ""),

@@ -7,6 +7,7 @@ from material_price_audit.normalize import (
     build_must,
     build_platform_queries,
     build_queries,
+    normalize_search_query,
 )
 
 
@@ -56,7 +57,7 @@ def test_controller_keeps_8_port_identity_on_both():
 def test_platform_dispatch():
     name, spec, brand = "闸阀", "DN100 PN16", "正丰"
     tokens = _tok(name, spec, brand)
-    for pid in ("guangcai", "lingcai", "huixun", "yize"):
+    for pid in ("guangcai", "lingcai", "huixun", "yize", "zaojiatong"):
         q = build_platform_queries(pid, name, spec, brand, tokens)
         assert q
         assert any("闸阀" in x for x in q)
@@ -83,3 +84,18 @@ def test_default_build_queries_still_works():
     q = build_queries(name, spec, "", _tok(name, spec))
     assert q
     assert q[0] == "8端口分控器" or "8端口" in q[0]
+
+
+def test_dn_is_not_misclassified_as_model_or_duplicated():
+    name, spec = "薄壁不锈钢管", "DN150"
+    queries = build_cost_site_queries(name, spec, "", _tok(name, spec))
+    assert "DN150 DN150" not in queries
+    assert all(not x.upper().startswith("DN150 DN150") for x in queries)
+    assert any(x == "薄壁不锈钢管 DN150" for x in queries)
+
+
+def test_query_normalizer_removes_contained_model_duplication():
+    assert normalize_search_query("DN100 DN100") == "DN100"
+    assert normalize_search_query("安全信号阀 DN150 DN150") == "安全信号阀 DN150"
+    assert normalize_search_query("UQK-12液位计 UQK-12") == "UQK-12液位计"
+    assert normalize_search_query("UQK-12 UQK-12液位计") == "UQK-12液位计"

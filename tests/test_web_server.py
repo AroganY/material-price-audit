@@ -15,6 +15,7 @@ from material_price_audit.webapp.server import (
     _platform_catalog,
     _safe_child,
 )
+from material_price_audit.webapp.job_history import append_job
 
 
 def test_static_paths_cannot_escape_the_static_directory(tmp_path: Path):
@@ -86,3 +87,53 @@ def test_binary_excel_upload_is_not_consumed_as_json(tmp_path: Path, monkeypatch
     assert result["ok"] is True
     assert result["name"] == filename
     assert (tmp_path / "data" / "input" / filename).read_bytes() == payload
+
+
+def test_history_load_returns_without_state_lock_deadlock(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("MATERIAL_PRICE_AUDIT_HOME", str(tmp_path))
+    append_job(
+        tmp_path,
+        {
+            "id": "run-history-test",
+            "run_id": "run-history-test",
+            "phase": "done",
+            "full_k": 1,
+            "item_results": [
+                {
+                    "id": "sheet|2",
+                    "name": "薄壁不锈钢管",
+                    "spec": "DN100",
+                    "status": "full_k",
+                    "quote_list": [{"price": 63, "platform": "lingcai"}],
+                }
+            ],
+        },
+    )
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/history/load",
+            data=json.dumps({"id": "run-history-test"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=3) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert result["ok"] is True
+    assert result["run_id"] == "run-history-test"
+    assert result["item_results"][0]["spec"] == "DN100"
+    assert result.get("viewing_history") is True
+    # 不应把历史写回全局 STATE.item_results（避免污染当前任务面板）
+    from material_price_audit.webapp.job_state import STATE
+
+    assert not STATE.item_results or all(
+        r.get("id") != "sheet|2" for r in (STATE.item_results or [])
+    )

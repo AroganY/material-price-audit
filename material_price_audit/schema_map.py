@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -48,6 +49,20 @@ ROLE_HINTS: dict[str, list[str]] = {
     ],
     "sum_price": ["合价", "报送合价", "审定合价", "金额", "总价"],
     "remark": ["备注", "说明", "附注", "注释"],
+    "region": [
+        "地区",
+        "所在地区",
+        "项目地区",
+        "工程所在地",
+        "工程地点",
+        "建设地点",
+        "省市",
+        "城市",
+        "区域",
+        "适用地区",
+        "项目城市",
+        "地区名称",
+    ],
 }
 
 # higher = more specific when multiple match
@@ -59,6 +74,7 @@ ROLE_PRIORITY = {
     "brand": 30,
     "qty": 28,
     "unit": 26,
+    "region": 24,
     "sum_price": 20,
     "remark": 10,
     "ignore": 0,
@@ -268,12 +284,38 @@ def resolve_llm_api_key(settings: UserSettings) -> str:
 
 # 可选：记录每次 LLM usage（prompt/completion/total tokens）
 _LLM_USAGE_HOOK = None  # type: ignore
+_LLM_CALL_GUARD = None  # type: ignore
+
+
+class LLMItemCallBudget:
+    """单条材料跨平台共享的 API 调用预算（线程安全）。"""
+
+    def __init__(self, max_calls: int = 1) -> None:
+        self.max_calls = max(0, int(max_calls or 0))
+        self.calls = 0
+        self._lock = threading.Lock()
+
+    def reserve(self, req: dict[str, Any] | None = None) -> dict[str, Any]:
+        with self._lock:
+            if self.calls >= self.max_calls:
+                return {
+                    "allowed": False,
+                    "reason": f"本条材料 AI 调用已达 {self.max_calls} 次上限",
+                }
+            self.calls += 1
+            return {"allowed": True, "call_index": self.calls}
 
 
 def set_llm_usage_hook(hook) -> None:
     """hook(usage: dict) — usage 含 prompt_tokens/completion_tokens/total_tokens/model/ok"""
     global _LLM_USAGE_HOOK
     _LLM_USAGE_HOOK = hook
+
+
+def set_llm_call_guard(hook) -> None:
+    """设置 API 请求前硬预算钩子；返回 False/allowed=False 时不发请求。"""
+    global _LLM_CALL_GUARD
+    _LLM_CALL_GUARD = hook
 
 
 def _estimate_tokens(*parts: str) -> int:
@@ -311,7 +353,36 @@ def _emit_llm_usage(
         pass
 
 
-def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | None:
+def _parse_usage_tokens(usage: dict[str, Any], system: str, user: str, content: str = "") -> tuple[int, int, int]:
+    """兼容 OpenAI / 部分代理的 usage 字段名。"""
+    usage = usage or {}
+    pt = int(
+        usage.get("prompt_tokens")
+        or usage.get("input_tokens")
+        or usage.get("prompt_token_count")
+        or 0
+    )
+    ct = int(
+        usage.get("completion_tokens")
+        or usage.get("output_tokens")
+        or usage.get("completion_token_count")
+        or 0
+    )
+    tt = int(usage.get("total_tokens") or usage.get("total_token_count") or 0)
+    if not tt:
+        pt = pt or _estimate_tokens(system, user)
+        ct = ct or (_estimate_tokens(content) if content else 0)
+        tt = pt + ct
+    return pt, ct, tt
+
+
+def _llm_chat_json(
+    settings: UserSettings,
+    system: str,
+    user: str,
+    *,
+    role: str = "chat",
+) -> dict | None:
     if not settings.llm_enabled:
         return None
     key = resolve_llm_api_key(settings)
@@ -325,9 +396,63 @@ def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | Non
     ).rstrip("/")
     url = f"{base}/chat/completions"
     model = settings.llm_model or "gpt-4o-mini"
+    use_role = (role or "chat").strip() or "chat"
+    estimated_prompt_tokens = _estimate_tokens(system, user)
+    if _LLM_CALL_GUARD:
+        try:
+            verdict = _LLM_CALL_GUARD(
+                {
+                    "role": use_role,
+                    "model": model,
+                    "estimated_prompt_tokens": estimated_prompt_tokens,
+                }
+            )
+            allowed = (
+                bool(verdict.get("allowed"))
+                if isinstance(verdict, dict)
+                else bool(verdict)
+            )
+            if not allowed:
+                reason = (
+                    str(verdict.get("reason") or "已达到 AI 硬预算")
+                    if isinstance(verdict, dict)
+                    else "已达到 AI 硬预算"
+                )
+                print(f"[schema] LLM 请求已阻止（未消耗 Token）: {reason}")
+                return None
+        except Exception as e:
+            # 预算组件异常时采取 fail-closed，避免保护失效后继续烧 Token。
+            print(f"[schema] LLM 预算检查异常，请求已阻止（未消耗 Token）: {e}")
+            return None
+    item_guard = getattr(settings, "_llm_item_call_budget", None)
+    if item_guard is not None:
+        try:
+            verdict = item_guard.reserve(
+                {
+                    "role": use_role,
+                    "model": model,
+                    "estimated_prompt_tokens": estimated_prompt_tokens,
+                }
+            )
+            if not bool(verdict.get("allowed")):
+                print(
+                    "[schema] LLM 请求已阻止（未消耗 Token）: "
+                    + str(verdict.get("reason") or "本条材料 AI 预算已用尽")
+                )
+                return None
+        except Exception as e:
+            print(f"[schema] 本条材料 AI 预算检查异常，请求已阻止: {e}")
+            return None
+    # 限制单次输出；match_review 只需一个很短的 JSON，不能让模型输出上千 Token。
+    max_output_tokens = {
+        "match_review": 220,
+        "search_agent": 400,
+        "schema": 900,
+    }.get(use_role, 700)
     body = {
         "model": model,
         "temperature": 0.1,
+        "max_tokens": max_output_tokens,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system},
@@ -360,20 +485,14 @@ def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | Non
         usage = raw.get("usage") if isinstance(raw, dict) else None
         if not isinstance(usage, dict):
             usage = {}
-        pt = int(usage.get("prompt_tokens") or 0)
-        ct = int(usage.get("completion_tokens") or 0)
-        tt = int(usage.get("total_tokens") or 0)
-        if not tt:
-            # 兼容部分代理不返回 usage
-            pt = pt or _estimate_tokens(system, user)
-            ct = ct or _estimate_tokens(content)
-            tt = pt + ct
+        pt, ct, tt = _parse_usage_tokens(usage, system, user, content)
         _emit_llm_usage(
             ok=True,
             model=str(raw.get("model") or model),
             prompt_tokens=pt,
             completion_tokens=ct,
             total_tokens=tt,
+            role=use_role,
         )
         return json.loads(content)
     except (urllib.error.URLError, urllib.error.HTTPError, KeyError, json.JSONDecodeError, TimeoutError) as e:
@@ -384,6 +503,7 @@ def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | Non
             prompt_tokens=_estimate_tokens(system, user),
             completion_tokens=0,
             total_tokens=_estimate_tokens(system, user),
+            role=use_role,
         )
         return None
     except Exception as e:
@@ -394,24 +514,135 @@ def _llm_chat_json(settings: UserSettings, system: str, user: str) -> dict | Non
             prompt_tokens=_estimate_tokens(system, user),
             completion_tokens=0,
             total_tokens=_estimate_tokens(system, user),
+            role=use_role,
         )
         return None
 
 
+def check_llm_readiness(
+    settings: UserSettings | None,
+    *,
+    probe: bool = False,
+) -> dict[str, Any]:
+    """
+    运行前 AI 可用性检查。
+
+    - want_ai: 用户是否开启
+    - usable: 配置层面是否足以发起请求（Key/用途）
+    - live_ok: probe=True 时是否真连通
+    - blockers: 人类可读阻塞原因
+    """
+    s = settings or UserSettings()
+    want = bool(s.llm_enabled)
+    use_for = [str(x) for x in (s.llm_use_for or []) if str(x).strip()]
+    model = (s.llm_model or "gpt-4o-mini").strip()
+    base = (
+        (s.llm_api_base or "").strip()
+        or os.environ.get("OPENAI_API_BASE")
+        or "https://api.openai.com/v1"
+    ).rstrip("/")
+    key = resolve_llm_api_key(s)
+    key_ready = bool(key)
+    blockers: list[str] = []
+
+    if not want:
+        return {
+            "ok": True,
+            "want_ai": False,
+            "usable": False,
+            "live_ok": None,
+            "probed": False,
+            "key_ready": key_ready,
+            "model": model,
+            "api_base": base,
+            "use_for": use_for,
+            "blockers": [],
+            "summary": "AI 未开启 · 将纯规则运行（正常）",
+            "hint": "需要 AI 时请在第①步开启并配置 Key，再点「测试 AI 连接」。",
+        }
+
+    if not key_ready:
+        blockers.append(
+            "未配置 API Key（向导填写或环境变量 "
+            f"{s.llm_api_key_env or 'OPENAI_API_KEY'}）"
+        )
+    if not use_for:
+        blockers.append("未勾选任何 AI 用途（表头/语义/搜索）")
+    known = {"schema", "match_review", "search_agent"}
+    if use_for and not any(u in known for u in use_for):
+        blockers.append("用途配置无效")
+
+    usable = want and not blockers
+    live_ok: bool | None = None
+    probe_error = ""
+    if probe and usable:
+        # 强制视为开启做连通探测
+        probe_settings = UserSettings(
+            llm_enabled=True,
+            llm_api_base=s.llm_api_base,
+            llm_api_key_env=s.llm_api_key_env,
+            llm_api_key=s.llm_api_key,
+            llm_model=s.llm_model,
+            llm_use_for=list(use_for) or ["schema"],
+        )
+        ping = test_llm_connection(probe_settings)
+        live_ok = bool(ping.get("ok"))
+        if not live_ok:
+            probe_error = str(ping.get("error") or "连通测试失败")
+            blockers.append(probe_error)
+
+    if not usable:
+        summary = "AI 已开启但不可用 · " + "；".join(blockers)
+    elif probe and live_ok is False:
+        summary = "AI 配置看似完整，但连通失败 · " + (probe_error or "请检查网络/Base/模型")
+    elif probe and live_ok is True:
+        summary = f"AI 可用 · 已探测连通 model={model}"
+    else:
+        summary = f"AI 配置可用 · model={model}（尚未探测连通，建议点「测试 AI 连接」）"
+
+    return {
+        "ok": usable and (live_ok is not False),
+        "want_ai": True,
+        "usable": usable,
+        "live_ok": live_ok,
+        "probed": bool(probe),
+        "key_ready": key_ready,
+        "model": model,
+        "api_base": base,
+        "use_for": use_for,
+        "blockers": blockers,
+        "summary": summary,
+        "hint": (
+            "请回到第①步：填写 Key → 勾选用途 → 点「测试 AI 连接」通过后再询价。"
+            if blockers
+            else "开始询价时会再确认；失败可选择改用纯规则继续。"
+        ),
+    }
+
+
 def test_llm_connection(settings: UserSettings) -> dict[str, Any]:
     """向导「测试连接」：发一条最小 JSON 请求。"""
-    if not settings.llm_enabled:
-        return {"ok": False, "error": "请先开启 AI 辅助"}
+    # 测试时允许未勾「开启」——只要有 Key 就测
     if not resolve_llm_api_key(settings):
         return {
             "ok": False,
             "error": "未配置 API Key：请在下方填写，或设置环境变量 "
             f"{settings.llm_api_key_env or 'OPENAI_API_KEY'}",
         }
+    # 临时开启以通过 _llm_chat_json 开关
+    s = settings
+    if not s.llm_enabled:
+        from dataclasses import replace
+
+        try:
+            s = replace(settings, llm_enabled=True)
+        except Exception:
+            s.llm_enabled = True
     data = _llm_chat_json(
-        settings,
+        s,
         '只输出 JSON：{"ok":true,"pong":"material-price-audit"}',
         "ping",
+        role="ping",
     )
     if not data:
         return {
@@ -420,7 +651,7 @@ def test_llm_connection(settings: UserSettings) -> dict[str, Any]:
         }
     return {
         "ok": True,
-        "message": f"连接成功（model={settings.llm_model or 'gpt-4o-mini'}）",
+        "message": f"连接成功（model={s.llm_model or 'gpt-4o-mini'}）",
         "sample": data,
     }
 
@@ -434,7 +665,7 @@ def map_sheet_by_llm(ws, sheet_name: str, settings: UserSettings) -> SheetSchema
     system = (
         "你是工程造价询价表结构分析器。根据 Excel 网格识别表头行与列语义。"
         "只输出 JSON，不要定价。role 只能是: "
-        "name,spec,brand,unit,qty,submit_price,audit_price,sum_price,remark,ignore,unknown。"
+        "name,spec,brand,unit,qty,submit_price,audit_price,sum_price,remark,region,ignore,unknown。"
         "JSON 字段: header_row(int), data_start_row(int), columns:[{col,role,header_text,confidence}], "
         "layout_notes(string), confidence(0-1)。col 从 1 开始。"
     )
@@ -442,7 +673,7 @@ def map_sheet_by_llm(ws, sheet_name: str, settings: UserSettings) -> SheetSchema
         {"sheet": sheet_name, "grid_rows": preview},
         ensure_ascii=False,
     )
-    data = _llm_chat_json(settings, system, user)
+    data = _llm_chat_json(settings, system, user, role="schema")
     if not data:
         return None
     cols = []

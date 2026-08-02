@@ -11,6 +11,10 @@ inquiry:
   match_mode: practical
   # side_sheet | append_cols | both
   write_back_mode: side_sheet
+  # 造价站（广材/慧讯/领材/易择/造价通）每条材料最多几个检索词（建议 4～6）
+  cost_max_queries_per_item: 6
+  # 默认关闭；用户可在向导显式开启全网供应商线索（永不进正式价）
+  baidu_fallback_enabled: false
 
 # 默认关闭；也可在网页向导第①步「AI 智能辅助」中配置（写入 data/user/settings.json）
 # 开启后只辅助陌生表头和语义灰区，不参与定价或放宽硬规格
@@ -19,7 +23,12 @@ llm:
   api_base: ""   # 兼容 OpenAI 协议，如 https://api.openai.com/v1
   api_key_env: OPENAI_API_KEY
   model: gpt-4o-mini
-  use_for: [schema, match_review]
+  # schema=表头 | match_review=品名同义+规格灰区 | search_agent=改词/排序
+  use_for: [schema, match_review, search_agent]
+  # 硬预算：达到任一上限后自动关 AI，规则询价继续，绝不无限烧 Token
+  max_match_review_calls_per_item: 2
+  max_calls_per_run: 30
+  max_tokens_per_run: 24000
 
 browser:
   channel: chrome
@@ -27,6 +36,20 @@ browser:
   login_timeout_seconds: 180
   page_timeout_ms: 60000
   between_items_sleep: 1.2
+
+# 京东 / 1688 等电商（详见 docs/ECOMMERCE_POLICY.md）
+ecommerce:
+  # true：电商价永不进「合格价」，只进「电商参考」
+  treat_as_market_ref: true
+  # 检索词间隔（秒，随机落在区间内）
+  between_query_sleep_min: 2.5
+  between_query_sleep_max: 5.0
+  # 验证码出现后等人手过（LOGIN_CONTINUE）的最长秒数
+  captcha_wait_seconds: 180
+  # 每条材料在该电商站最多试几个检索词
+  max_queries_per_item: 2
+  # true：仅当本条尚无任何合格价时才跑电商（省风控）
+  fallback_only_when_no_formal: false
 
 platforms:
   # 平台和优先级由浏览器向导保存；这里仅作为首次运行的可选预设。

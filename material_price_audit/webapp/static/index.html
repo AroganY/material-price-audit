@@ -208,11 +208,35 @@
     .scope-item-check { width: 15px; height: 15px; accent-color: #3b82f6; cursor: pointer; }
     .result-detail {
       font-size: 12px; color: #94a3b8; line-height: 1.45; margin-top: 4px;
+      white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
     }
     .result-detail a { color: #93c5fd; word-break: break-all; }
+    .result-name-block { min-width: 200px; max-width: 420px; }
+    .result-name-block strong {
+      display: block; color: #0f172a; font-size: 13.5px; line-height: 1.45;
+      white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+    }
+    .result-name-block .spec-line {
+      margin-top: 5px; font-size: 12.5px; color: #1e293b; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+    }
+    .result-name-block .spec-line .lab {
+      color: #64748b; font-weight: 600; margin-right: 4px;
+    }
+    .result-name-block .meta-line {
+      margin-top: 4px; font-size: 11.5px; color: #64748b; line-height: 1.4;
+    }
+    .src-title {
+      display: block; margin: 2px 0 2px; color: #0f172a; font-size: 12.5px;
+      line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+    }
+    .src-spec {
+      display: block; margin: 0 0 3px; color: #334155; font-size: 12px;
+      line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+    }
     .price-cell { color: #86efac; font-weight: 700; white-space: nowrap; }
     .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
-    .table-wrap table { min-width: 720px; }
+    .table-wrap table { min-width: 860px; }
     .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
     button {
       border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer;
@@ -365,14 +389,468 @@
       border-radius: 0 7px 7px 0;
     }
     .steps {
-      display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 0;
       background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
       margin: 0 0 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,.03);
     }
     .step-pill {
-      position: relative; min-height: 54px; padding: 0 10px;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
+      position: relative; min-height: 54px; padding: 0 8px;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
       border: 0; border-right: 1px solid var(--line); border-radius: 0;
+      cursor: pointer; user-select: none;
+    }
+    .step-pill:hover { background: #f8fafc; }
+    /* 结果卡片 / 历史面板 */
+    .result-toolbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      justify-content: space-between; margin: 14px 0 12px;
+    }
+    .result-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+    .filter-chip {
+      border: 1px solid #cbd5e1; background: #fff; color: #475569;
+      border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 650;
+      cursor: pointer; line-height: 1; min-height: 30px;
+    }
+    .filter-chip:hover { border-color: #93c5fd; color: #1d4ed8; }
+    .filter-chip.on { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+    .filter-chip .n { opacity: .75; margin-left: 4px; font-weight: 600; }
+    .result-summary-bar {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0 0 14px;
+    }
+    .result-summary-bar .mini {
+      padding: 8px 10px; border-radius: 8px; border: 1px solid #e5e7eb;
+      background: #fff; text-align: center;
+    }
+    .result-summary-bar .mini b { display: block; font-size: 16px; color: #111827; line-height: 1.2; font-weight: 700; }
+    .result-summary-bar .mini span { font-size: 11px; color: #9ca3af; }
+    .result-summary-bar .mini.g b { color: #059669; }
+    .result-summary-bar .mini.a b { color: #d97706; }
+    .result-summary-bar .mini.r b { color: #dc2626; }
+    /* 结果：左侧清单 + 右侧详情（非表格） */
+    .result-split {
+      display: grid;
+      grid-template-columns: minmax(240px, 300px) 1fr;
+      gap: 0;
+      min-height: 420px;
+      max-height: min(72vh, 780px);
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .result-nav {
+      border-right: 1px solid #eef2f7;
+      background: #fafbfc;
+      overflow-y: auto;
+      overflow-x: hidden;
+      max-height: inherit;
+    }
+    .result-nav-item {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 8px;
+      align-items: start;
+      width: 100%;
+      padding: 10px 12px;
+      border: 0;
+      border-bottom: 1px solid #f1f5f9;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+    }
+    .result-nav-item > span { min-width: 0; }
+    .result-nav-item:hover { background: #f3f6fb; }
+    .result-nav-item.on {
+      background: #fff;
+      box-shadow: inset 3px 0 0 #2563eb;
+    }
+    .result-nav-item .rn-row {
+      font-size: 11px; font-weight: 700; color: #9ca3af; padding-top: 2px;
+    }
+    .result-nav-item .rn-name {
+      font-size: 13px; font-weight: 650; color: #111827; line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; word-break: break-word;
+    }
+    .result-nav-item .rn-spec {
+      margin-top: 2px; font-size: 11px; color: #9ca3af; line-height: 1.3;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .result-nav-item .rn-right { text-align: right; min-width: 84px; }
+    .result-nav-item .rn-price {
+      font-size: 11.5px; font-weight: 700; color: #059669; white-space: nowrap;
+    }
+    .result-nav-item .rn-price.empty { color: #9ca3af; font-weight: 500; }
+    .result-nav-item .rn-st { margin-top: 3px; }
+    .result-nav-item .rn-st .badge { font-size: 10px; padding: 1px 6px; }
+    .result-detail {
+      overflow: auto;
+      max-height: inherit;
+      padding: 16px 18px 20px;
+      background: #fff;
+    }
+    .result-detail .rd-empty {
+      display: grid; place-items: center; min-height: 280px;
+      color: #9ca3af; font-size: 13px; text-align: center; padding: 24px;
+    }
+    .rd-head {
+      display: flex; flex-wrap: wrap; gap: 10px 16px;
+      align-items: flex-start; justify-content: space-between;
+      padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; margin-bottom: 14px;
+    }
+    .rd-head .rd-title {
+      font-size: 17px; font-weight: 750; color: #0f172a; line-height: 1.4;
+      word-break: break-word; max-width: 100%;
+    }
+    .rd-head .rd-price {
+      font-size: 22px; font-weight: 800; color: #059669; letter-spacing: -.02em;
+      white-space: nowrap;
+    }
+    .rd-head .rd-price.empty { color: #9ca3af; font-size: 15px; font-weight: 600; }
+    .rd-spec-box {
+      margin: 0 0 14px; padding: 10px 12px;
+      background: #f8fafc; border: 1px solid #eef2f7; border-radius: 8px;
+    }
+    .rd-spec-box .lab {
+      display: block; font-size: 11px; font-weight: 700; color: #94a3b8;
+      margin-bottom: 4px; letter-spacing: .04em;
+    }
+    .rd-spec-box .val {
+      font-size: 13.5px; color: #1e293b; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .rd-meta {
+      display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+      margin: -6px 0 14px; font-size: 12px; color: #64748b;
+    }
+    .rd-price-block {
+      min-width: 154px; padding: 9px 11px; border: 1px solid #dbeafe;
+      border-radius: 9px; background: #f8fbff; text-align: right;
+    }
+    .rd-price-block .rd-price-label {
+      display: block; margin-bottom: 3px; color: #64748b; font-size: 10.5px;
+      font-weight: 700; letter-spacing: .03em;
+    }
+    .rd-price-block .rd-price-note {
+      display: block; margin-top: 3px; color: #94a3b8; font-size: 10.5px;
+      line-height: 1.35; white-space: normal;
+    }
+    .submitted-panel {
+      margin: 0 0 16px; overflow: hidden; border: 1px solid #bfdbfe;
+      border-radius: 10px; background: #fff;
+    }
+    .submitted-panel-head {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 9px 12px; background: #eff6ff; border-bottom: 1px solid #dbeafe;
+    }
+    .submitted-panel-head strong { color: #1e3a8a; font-size: 13px; }
+    .submitted-panel-head span { color: #64748b; font-size: 11px; }
+    .submitted-grid {
+      display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(130px, .65fr) minmax(150px, .7fr);
+    }
+    .submitted-field {
+      min-width: 0; padding: 10px 12px; border-right: 1px solid #eef2f7;
+      border-bottom: 1px solid #eef2f7;
+    }
+    .submitted-field:nth-child(3n) { border-right: 0; }
+    .submitted-field.wide { grid-column: span 2; }
+    .submitted-field .sf-label {
+      display: block; margin-bottom: 4px; color: #64748b; font-size: 10.5px;
+      font-weight: 700; letter-spacing: .03em;
+    }
+    .submitted-field .sf-value {
+      display: block; color: #172033; font-size: 13px; font-weight: 650;
+      line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    }
+    .submitted-field.price { background: #fffaf2; }
+    .submitted-field.price .sf-value {
+      color: #b45309; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;
+    }
+    .submitted-field .sf-empty { color: #94a3b8; font-weight: 500; }
+    .compare-legend {
+      display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+      margin: 0 0 10px; padding: 8px 10px; border: 1px solid #e2e8f0;
+      border-radius: 8px; background: #f8fafc; color: #64748b; font-size: 11px;
+    }
+    .compare-legend strong { color: #334155; }
+    .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; }
+    .legend-dot.ok { background: #16a34a; }
+    .legend-dot.warn { background: #d97706; }
+    .legend-dot.bad { background: #dc2626; }
+    .rd-section-title {
+      margin: 0 0 8px; font-size: 12px; font-weight: 700; color: #64748b;
+      letter-spacing: .03em;
+    }
+    .src-list { display: flex; flex-direction: column; gap: 8px; }
+    .src-card {
+      border: 1px solid #dfe6ef; border-radius: 10px; padding: 0;
+      background: #fff;
+      overflow: hidden;
+    }
+    .src-card:hover { border-color: #cbd5e1; box-shadow: 0 3px 12px rgba(15,23,42,.05); }
+    .src-card.is-formal { border-color: #a7f3d0; }
+    .src-card.is-review { border-color: #fcd34d; }
+    .src-card-top {
+      display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+      padding: 9px 11px; border-bottom: 1px solid #eef2f7; background: #fbfcfe;
+    }
+    .src-card.is-formal .src-card-top { background: #f0fdf4; }
+    .src-card.is-review .src-card-top { background: #fffbeb; }
+    .src-card-top .source-verdict { margin-left: auto; }
+    .src-card .quote-kind {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 34px; padding: 2px 7px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+    .quote-kind.formal { background: #ecfdf5; color: #047857; }
+    .quote-kind.review { background: #fffbeb; color: #b45309; }
+    .quote-kind.market { background: #eff6ff; color: #2563eb; }
+    .quote-kind.web { background: #f5f3ff; color: #7c3aed; }
+    .quote-kind.supplier { background: #f0fdfa; color: #0f766e; }
+    .src-card .qp {
+      font-size: 15px; font-weight: 750; color: #0f172a;
+      font-variant-numeric: tabular-nums;
+    }
+    .src-card .qplat {
+      font-size: 12px; color: #94a3b8; font-weight: 600;
+    }
+    .src-card .qtitle {
+      font-size: 13px; color: #1e293b; line-height: 1.45;
+      word-break: break-word;
+    }
+    .src-card .qspec {
+      margin-top: 3px; font-size: 12px; color: #64748b; line-height: 1.4;
+      word-break: break-word;
+    }
+    .src-card .qdetail {
+      margin-top: 4px; font-size: 11.5px; color: #94a3b8; line-height: 1.4;
+    }
+    .src-card .qurl {
+      display: block; margin-top: 6px; font-size: 11.5px; color: #64748b;
+      word-break: break-all; line-height: 1.35; text-decoration: none;
+    }
+    .src-card .qurl:hover { color: #2563eb; }
+    .source-verdict,
+    .cmp-state {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 23px; padding: 2px 8px; border-radius: 999px;
+      font-size: 10.5px; font-weight: 750; line-height: 1.25; white-space: nowrap;
+    }
+    .source-verdict.ok, .cmp-state.ok { color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; }
+    .source-verdict.warn, .cmp-state.warn { color: #a16207; background: #fffbeb; border: 1px solid #fde68a; }
+    .source-verdict.bad, .cmp-state.bad { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+    .source-verdict.info, .cmp-state.info { color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; }
+    .source-verdict.none, .cmp-state.none { color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; }
+    .compare-table { overflow: hidden; background: #fff; }
+    .compare-row {
+      display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr) 116px;
+      min-width: 620px; border-bottom: 1px solid #eef2f7;
+    }
+    .compare-row.compare-head { background: #f8fafc; }
+    .compare-row:last-child { border-bottom: 0; }
+    .compare-cell {
+      min-width: 0; padding: 8px 9px; border-right: 1px solid #eef2f7;
+      color: #334155; font-size: 11.5px; line-height: 1.45;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .compare-cell:last-child { border-right: 0; }
+    .compare-head .compare-cell {
+      padding-top: 6px; padding-bottom: 6px; color: #64748b; font-size: 10.5px;
+      font-weight: 750; letter-spacing: .02em;
+    }
+    .compare-field { color: #475569; font-weight: 750; background: #fbfcfe; }
+    .compare-value.missing { color: #94a3b8; }
+    .compare-result { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+    .compare-result small { color: #64748b; font-size: 10px; line-height: 1.35; }
+    .source-evidence {
+      padding: 9px 11px; border-top: 1px solid #eef2f7; background: #fbfcfe;
+    }
+    .source-evidence-line {
+      margin-top: 4px; color: #64748b; font-size: 11.5px; line-height: 1.45;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .source-evidence-line:first-child { margin-top: 0; }
+    .source-evidence-line b { color: #475569; }
+    .source-rule-note {
+      margin: 7px 11px 0; padding: 7px 9px; border-radius: 7px;
+      color: #475569; background: #f8fafc; font-size: 11px; line-height: 1.45;
+    }
+    .src-card-actions {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 11px 11px;
+      border-top: 1px solid #eef2f7; background: #fff;
+    }
+    .src-card-actions a, .src-card-actions button {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 650;
+      text-decoration: none; border: 1px solid #e5e7eb; background: #fff; color: #374151;
+      cursor: pointer; white-space: nowrap;
+    }
+    .src-card-actions a:hover, .src-card-actions button:hover {
+      background: #f8fafc; border-color: #d1d5db;
+    }
+    .src-card-actions a.primary-link,
+    .src-card-actions button.primary-link {
+      color: #fff; background: #2563eb; border-color: #2563eb;
+    }
+    .src-card-actions a.primary-link:hover,
+    .src-card-actions button.primary-link:hover { background: #1d4ed8; }
+    .src-card-actions a.is-disabled {
+      opacity: .4; pointer-events: none;
+    }
+    button.qurl {
+      display: block; width: 100%; text-align: left;
+      background: none; border: none; padding: 0; margin: 4px 0 0;
+      color: #2563eb; font-size: 12px; word-break: break-all;
+      cursor: pointer; text-decoration: underline;
+    }
+    button.qurl:hover { color: #1d4ed8; }
+    .src-card-actions .btn-yes {
+      color: #047857; border-color: #a7f3d0; background: #ecfdf5;
+    }
+    .src-card-actions .btn-no {
+      color: #b91c1c; border-color: #fecaca; background: #fef2f2;
+    }
+    .src-card-actions .btn-preview-evidence {
+      color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff;
+    }
+    .evidence-preview {
+      position: fixed; inset: 0; z-index: 1000; display: none;
+      align-items: center; justify-content: center; padding: 18px;
+      background: rgba(15, 23, 42, .72); backdrop-filter: blur(3px);
+    }
+    .evidence-preview.open { display: flex; }
+    .evidence-preview-dialog {
+      display: flex; flex-direction: column; width: min(1120px, 96vw);
+      height: min(900px, 94vh); overflow: hidden;
+      background: #fff; border-radius: 14px; box-shadow: 0 24px 70px rgba(15, 23, 42, .38);
+    }
+    .evidence-preview-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 14px; border-bottom: 1px solid #e5e7eb; background: #fff;
+    }
+    .evidence-preview-title {
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-size: 14px; font-weight: 750; color: #0f172a;
+    }
+    .evidence-preview-tools { display: flex; gap: 8px; flex: 0 0 auto; }
+    .evidence-preview-tools a, .evidence-preview-tools button {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 34px; padding: 0 12px; border: 1px solid #dbe3ee; border-radius: 7px;
+      background: #fff; color: #334155; text-decoration: none; font-size: 12px;
+      font-weight: 650; cursor: pointer;
+    }
+    .evidence-preview-tools button { color: #fff; background: #2563eb; border-color: #2563eb; }
+    .evidence-preview-stage {
+      position: relative; flex: 1; min-height: 0; overflow: auto;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 18px; background: #e9eef5;
+    }
+    .evidence-preview-stage img {
+      display: block; max-width: 100%; height: auto; border-radius: 6px;
+      background: #fff; box-shadow: 0 4px 18px rgba(15, 23, 42, .18);
+      cursor: zoom-in;
+    }
+    .evidence-preview-stage img.zoomed { max-width: none; cursor: zoom-out; }
+    .evidence-preview-message {
+      margin: auto; padding: 16px 20px; max-width: 520px; text-align: center;
+      color: #64748b; font-size: 13px; line-height: 1.6;
+    }
+    body.evidence-preview-open { overflow: hidden; }
+    .src-group-label {
+      margin: 12px 0 6px; font-size: 11px; font-weight: 700; color: #94a3b8;
+      text-transform: none; letter-spacing: .02em;
+    }
+    .src-group-label:first-child { margin-top: 0; }
+    .rcard-rownum {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: grid; place-items: center;
+      background: #f3f4f6; color: #6b7280; font-weight: 700; font-size: 11px;
+    }
+    @media (max-width: 820px) {
+      .result-split {
+        grid-template-columns: 1fr;
+        max-height: none;
+      }
+      .result-nav {
+        max-height: 220px;
+        border-right: 0;
+        border-bottom: 1px solid #eef2f7;
+      }
+      .result-detail { max-height: none; }
+      .submitted-grid { grid-template-columns: 1fr 1fr; }
+      .submitted-field:nth-child(3n) { border-right: 1px solid #eef2f7; }
+      .submitted-field:nth-child(2n) { border-right: 0; }
+      .submitted-field.wide { grid-column: 1 / -1; }
+      .compare-table { overflow-x: auto; }
+      .evidence-preview { padding: 6px; }
+      .evidence-preview-dialog { width: 100vw; height: 96vh; border-radius: 10px; }
+      .evidence-preview-head { align-items: flex-start; }
+      .evidence-preview-tools { flex-wrap: wrap; justify-content: flex-end; }
+    }
+    @media (max-width: 560px) {
+      .submitted-grid { grid-template-columns: 1fr; }
+      .submitted-field, .submitted-field:nth-child(2n), .submitted-field:nth-child(3n) { border-right: 0; }
+      .submitted-field.wide { grid-column: auto; }
+      .rd-price-block { width: 100%; text-align: left; }
+      .compare-row { min-width: 0; grid-template-columns: 1fr; }
+      .compare-row.compare-head { display: none; }
+      .compare-cell { border-right: 0; border-bottom: 1px dashed #e2e8f0; }
+      .compare-cell:last-child { border-bottom: 0; }
+      .compare-cell:not(.compare-field)::before {
+        content: attr(data-label); display: block; margin-bottom: 3px;
+        color: #94a3b8; font-size: 9.5px; font-weight: 750; letter-spacing: .03em;
+      }
+      .compare-field { background: #f8fafc; color: #1e293b; }
+    }
+    .hist-toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      justify-content: space-between; margin: 0 0 14px;
+    }
+    .hist-toolbar .left, .hist-toolbar .right {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    .hist-search {
+      min-width: 200px; flex: 1; max-width: 320px; height: 38px;
+      border: 1px solid #94a3b8; border-radius: 8px; padding: 0 12px;
+      background: #fff !important; color: #0f172a !important;
+    }
+    .hist-list { display: flex; flex-direction: column; gap: 10px; max-height: min(70vh, 760px); overflow: auto; }
+    .hist-card {
+      display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: start;
+      padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff;
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .hist-card:hover { border-color: #93c5fd; }
+    .hist-card .title { font-weight: 750; color: #0f172a; font-size: 14px; line-height: 1.4; }
+    .hist-card .meta { margin-top: 4px; font-size: 12px; color: #64748b; line-height: 1.5; }
+    .hist-card .msg { margin-top: 6px; font-size: 12.5px; color: #334155; line-height: 1.5; }
+    .hist-card .actions { display: flex; flex-direction: column; gap: 6px; min-width: 96px; }
+    .hist-card .actions button { min-height: 32px; padding: 0 10px; font-size: 12px; width: 100%; }
+    .hist-empty {
+      padding: 36px 20px; text-align: center; color: #64748b; border: 1px dashed #cbd5e1;
+      border-radius: 12px; background: #f8fafc;
+    }
+    .topbar-actions { display: flex; align-items: center; gap: 8px; }
+    .topbar-actions button { min-height: 34px; padding: 0 12px; font-size: 12px; }
+    .live-mini-list { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; }
+    .live-mini {
+      display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: start;
+      padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff;
+    }
+    .live-mini .nm { font-weight: 700; color: #0f172a; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+    .live-mini .sp { margin-top: 3px; font-size: 12px; color: #475569; white-space: pre-wrap; word-break: break-word; }
+    .live-mini .pr { font-weight: 800; color: #15803d; white-space: nowrap; }
+    .collapsible-ai { margin-top: 12px; }
+    .collapsible-ai summary {
+      cursor: pointer; font-weight: 700; color: #334155; font-size: 13px; padding: 8px 0;
+      list-style: none;
+    }
+    .collapsible-ai summary::-webkit-details-marker { display: none; }
+    .step-pill {
+      /* keep base props */
       background: var(--surface); color: #64748b; font-size: 12px; font-weight: 600;
     }
     .step-pill:last-child { border-right: 0; }
@@ -626,10 +1104,11 @@
     @media (max-width: 860px) {
       .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .quality-note { display: none; }
-      .steps { grid-template-columns: repeat(3, 1fr); }
-      .step-pill:nth-child(3) { border-right: 0; }
-      .step-pill:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+      .steps { grid-template-columns: repeat(4, 1fr); }
+      .step-pill:nth-child(4n) { border-right: 0; }
+      .step-pill:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
       .stats { grid-template-columns: repeat(3, 1fr); }
+      .result-summary-bar { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 560px) {
       .topbar { height: 58px; }
@@ -639,15 +1118,19 @@
       .page-intro { margin-bottom: 17px; }
       .sub { font-size: 13px; }
       .steps { display: flex; overflow-x: auto; }
-      .step-pill { min-width: 116px; border-bottom: 0 !important; }
+      .step-pill { min-width: 108px; border-bottom: 0 !important; }
       .card { padding: 18px 15px; }
       .grid { grid-template-columns: 1fr; }
       label.plat { min-height: 66px; }
       .btns button, .result-actions a { flex: 1 1 auto; }
       .result-actions a button { width: 100%; }
       .stats { grid-template-columns: repeat(2, 1fr); }
+      .result-summary-bar { grid-template-columns: repeat(2, 1fr); }
       .login-card .actions { width: 100%; }
       .login-card .actions button { flex: 1 1 140px; }
+      .hist-card { grid-template-columns: 24px 1fr; }
+      .hist-card .actions { grid-column: 1 / -1; flex-direction: row; }
+      .hist-card .actions button { width: auto; flex: 1; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
@@ -661,7 +1144,10 @@
         <div class="brand-mark" aria-hidden="true">价</div>
         <div class="brand-copy"><strong>材料询价工作台</strong><span>Material Price Audit</span></div>
       </div>
-      <div class="local-status">本地服务已连接</div>
+      <div class="topbar-actions">
+        <button type="button" class="ghost" id="btnOpenHistoryTop">任务历史</button>
+        <div class="local-status">本地服务已连接</div>
+      </div>
     </div>
   </header>
   <div class="wrap">
@@ -680,7 +1166,8 @@
       <div class="step-pill" data-s="3">识表确认</div>
       <div class="step-pill" data-s="4">登录面板</div>
       <div class="step-pill" data-s="5">执行询价</div>
-      <div class="step-pill" data-s="6">下载结果</div>
+      <div class="step-pill" data-s="6">询价结果</div>
+      <div class="step-pill" data-s="7">任务历史</div>
     </div>
 
     <!-- Step 1 -->
@@ -707,6 +1194,65 @@
         <strong>实用模式</strong>：名称/型号对上就保留「候选价+链接」，规格差一点进待核，不再整表「没查到」。
         严格模式才要求截面等硬参数全过才收价。
       </p>
+
+      <div class="ai-box" id="baiduBox" style="margin-top:14px;border-color:#bfdbfe;background:linear-gradient(180deg,#eff6ff 0%,#fff 70%)">
+        <h3 style="color:#1e3a8a">
+          百度全网兜底
+          <span class="ai-pill" style="background:#f1f5f9;color:#475569">可选·默认关</span>
+        </h3>
+        <label class="ai-toggle">
+          <input type="checkbox" id="baiduFallback" />
+          <span>
+            造价平台不足时，使用百度查找全网线索
+            <small>仅在勾选平台全部查完且正式价仍少于 K 时触发一次；最多 2 个查询词、打开 5 个来源页</small>
+          </span>
+        </label>
+        <p class="ai-warn" style="margin-top:8px;color:#1e40af;background:#dbeafe;border-color:#93c5fd">
+          百度结果只作<strong>全网参考 / 供应商线索</strong>，<strong>不进入正式报价</strong>。摘要价不采用，须打开原网页验证名称规格与数字价。
+        </p>
+      </div>
+
+      <div class="ai-box" id="regionBox" style="margin-top:14px;border-color:#bbf7d0;background:linear-gradient(180deg,#f0fdf4 0%,#fff 70%)">
+        <h3 style="color:#14532d">目标地区（询价）</h3>
+        <p class="hint" style="margin:0 0 10px;color:#166534">
+          优先级：Excel 行级地区 &gt; 下方任务地区 &gt; 未指定。供应商所在地<strong>不等于</strong>价格适用地区。
+        </p>
+        <div class="row">
+          <label class="field grow">省/直辖市
+            <input type="text" id="regionProvince" placeholder="如：四川省" list="regionProvList" autocomplete="off" />
+          </label>
+          <label class="field grow">市
+            <input type="text" id="regionCity" placeholder="如：成都市" list="regionCityList" autocomplete="off" />
+          </label>
+          <label class="field grow">区县（可选）
+            <input type="text" id="regionDistrict" placeholder="可选" autocomplete="off" />
+          </label>
+        </div>
+        <datalist id="regionProvList">
+          <option value="四川省"></option><option value="重庆市"></option><option value="北京市"></option>
+          <option value="上海市"></option><option value="广东省"></option><option value="浙江省"></option>
+          <option value="江苏省"></option><option value="湖北省"></option><option value="陕西省"></option>
+        </datalist>
+        <datalist id="regionCityList">
+          <option value="成都市"></option><option value="重庆市"></option><option value="北京市"></option>
+          <option value="上海市"></option><option value="广州市"></option><option value="深圳市"></option>
+          <option value="杭州市"></option><option value="南京市"></option><option value="武汉市"></option>
+          <option value="西安市"></option>
+        </datalist>
+        <div class="row" style="margin-top:8px">
+          <label class="field grow">地区策略
+            <select id="regionStrategy">
+              <option value="strict_city" selected>严格城市：必须精确城市价</option>
+              <option value="allow_province">允许省级：同省省级价可作正式价</option>
+              <option value="national_reference">全国参考：全国/异地只作参考</option>
+            </select>
+          </label>
+          <label class="ai-toggle" style="margin:0;align-self:flex-end">
+            <input type="checkbox" id="regionRequired" />
+            <span>强制地区证据<small>开启后无地区证据只能待核</small></span>
+          </label>
+        </div>
+      </div>
 
       <div class="ai-box" id="aiBox">
         <h3>
@@ -752,11 +1298,29 @@
             <label><input type="checkbox" id="llmUseMatch" checked /> 规格语义复核</label>
             <label><input type="checkbox" id="llmUseSearch" checked /> 搜索指挥（改词+排序）</label>
           </div>
+          <div class="row" style="margin-top:10px">
+            <label class="field">每条材料语义复核上限
+              <input type="number" id="llmMaxMatchPerItem" min="1" max="5" value="2" step="1" />
+            </label>
+            <label class="field">本轮 AI 调用上限
+              <input type="number" id="llmMaxCallsRun" min="1" max="200" value="30" step="1" />
+            </label>
+            <label class="field">本轮 Token 上限
+              <input type="number" id="llmMaxTokensRun" min="2000" max="500000" value="24000" step="1000" />
+            </label>
+          </div>
+          <p class="hint" style="margin-top:6px;color:#9a3412">
+            硬保护：任一上限命中即自动关闭本轮 AI，剩余询价继续走规则，不会无限调用。
+          </p>
           <div class="btns" style="margin-top:10px">
             <button type="button" class="ghost" id="btnLlmTest">测试 AI 连接</button>
+            <button type="button" class="ghost" id="btnLlmReady">检查能否使用</button>
             <button type="button" class="ghost" id="btnLlmClearKey">清除已存 Key</button>
           </div>
           <div class="msg" id="msgLlm"></div>
+          <p class="hint" id="llmReadyHint" style="margin-top:8px;line-height:1.5">
+            开启 AI 后请点「测试 AI 连接」。<b>连接不通就不要开着跑询价</b>——否则等于白开，只会误导。
+          </p>
         </div>
       </div>
 
@@ -887,7 +1451,11 @@
         <button type="button" class="primary" id="btnResume" style="display:none">继续</button>
         <button type="button" class="danger" id="btnStop" style="display:none">停止询价</button>
         <button type="button" class="ghost" id="btnContinue" style="display:none">继续询价（断点）</button>
+        <button type="button" class="primary" id="btnLoginDone" style="display:none" title="浏览器里登完后点这里，任务会继续">我已登录，继续</button>
       </div>
+      <p class="hint" id="loginWaitHint" style="display:none;margin:8px 0 0;color:#b45309;font-weight:650">
+        任务在等登录：请在<strong>弹出的询价浏览器</strong>完成登录（不要用系统自带 Chrome），然后点「我已登录，继续」。
+      </p>
       <div class="run-tools" id="runTools" style="display:none;margin:12px 0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#f8fafc">
         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
           <label class="ai-toggle" style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -917,41 +1485,142 @@
         <div class="stat r"><b id="stNone">0</b><span>没查到</span></div>
         <div class="stat"><b id="stCur">-</b><span>进度</span></div>
       </div>
+      <p class="hint" id="runIdLine" style="margin-top:8px;font-size:11px;color:#64748b">任务 run_id：—</p>
+      <div id="funnelBox" style="display:none;margin:10px 0;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;font-size:12px;line-height:1.55;color:#334155"></div>
       <p class="hint" id="curName" style="margin-top:12px"></p>
+      <div class="btns" style="margin:10px 0;gap:8px">
+        <button type="button" class="primary" id="btnViewPartial" style="padding:8px 14px">查看本轮结果</button>
+        <button type="button" class="ghost" id="btnOpenHistoryFromRun" style="padding:8px 12px">任务历史管理</button>
+      </div>
+      <div id="liveResultBox" style="margin:8px 0 12px;display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px">
+          <h3 style="font-size:14px;margin:0;color:#0f172a">本轮已完成（运行中也可看）</h3>
+          <button type="button" class="ghost" id="btnLiveToResults" style="padding:4px 10px;min-height:30px;font-size:12px">进入结果面板</button>
+        </div>
+        <div class="live-mini-list" id="liveResultBody"></div>
+      </div>
+      <details class="collapsible-ai" id="aiActivityRun">
+        <summary>AI 做了什么（点击展开）</summary>
+        <div id="aiActivityRunBody" style="margin-top:6px;padding:12px 14px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;font-size:12px;line-height:1.55;color:#334155;max-height:180px;overflow:auto;white-space:pre-wrap">本轮尚无 API 记录。若日志只有 [AI·配置]/[AI·说明]，说明还没真调模型。</div>
+      </details>
       <div class="log" id="log"></div>
     </section>
 
-    <!-- Step 6 -->
+    <!-- Step 6：询价结果（卡片式，一目了然） -->
     <section class="card" id="card6" style="display:none">
-      <h2>⑥ 询价结果</h2>
-      <p class="hint" id="doneMsg">—</p>
-      <div class="ai-status off" id="aiStatusDone">AI：—</div>
-      <div class="btns result-actions">
-        <a href="/api/download/result"><button type="button" class="primary">下载结果 Excel</button></a>
-        <a href="/api/download/rfq"><button type="button" class="ghost">下载未查到 RFQ</button></a>
-        <button type="button" class="primary" id="btnContinueDone" style="display:none">继续询价（断点）</button>
-        <button type="button" class="ghost" id="btnBackToRun" style="display:none">返回执行页</button>
-        <button type="button" class="ghost" id="btnRestart">再询一批</button>
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div>
+          <h2 style="margin:0 0 6px">⑥ 询价结果</h2>
+          <p class="hint" id="doneMsg" style="margin:0">—</p>
+        </div>
+        <div class="btns result-actions" style="margin:0">
+          <a href="/api/download/result"><button type="button" class="primary">下载结果 Excel</button></a>
+          <a href="/api/download/rfq"><button type="button" class="ghost">下载 RFQ</button></a>
+          <button type="button" class="ghost" id="btnOpenHistoryFromDone">任务历史</button>
+          <button type="button" class="primary" id="btnContinueDone" style="display:none">继续询价</button>
+          <button type="button" class="ghost" id="btnBackToRun" style="display:none">返回执行页</button>
+          <button type="button" class="ghost" id="btnRestart">再询一批</button>
+        </div>
       </div>
-      <div class="sheet-tabs" id="sheetTabs"></div>
-      <p class="hint" id="sheetSummary" style="margin:0 0 8px">—</p>
-      <div class="table-wrap" style="margin-top:8px; max-height:520px">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:48px">行</th>
-              <th>材料 / 规格</th>
-              <th style="width:72px">状态</th>
-              <th style="width:88px">审定/报价</th>
-              <th>来源与链接</th>
-            </tr>
-          </thead>
-          <tbody id="resultBody"></tbody>
-        </table>
+
+      <div class="ai-status off" id="aiStatusDone" style="margin-top:12px">AI：—</div>
+      <details class="collapsible-ai">
+        <summary>本轮 AI / Token 用量</summary>
+        <div class="usage-panel" id="usagePanelDone" style="margin:8px 0 4px">
+          <div class="stats" style="grid-template-columns:repeat(4,1fr);gap:8px">
+            <div class="stat"><b id="dTokens">0</b><span>总 Token</span></div>
+            <div class="stat"><b id="dTokIn">0</b><span>输入</span></div>
+            <div class="stat"><b id="dTokOut">0</b><span>输出</span></div>
+            <div class="stat"><b id="dCalls">0</b><span>API 次数</span></div>
+          </div>
+          <div id="aiActivityDoneBody" style="margin-top:10px;font-size:12px;line-height:1.55;color:#334155;max-height:140px;overflow:auto">—</div>
+        </div>
+      </details>
+
+      <div class="result-summary-bar" id="resultSummaryBar">
+        <div class="mini g"><b id="sumFull">0</b><span>已凑满</span></div>
+        <div class="mini g"><b id="sumPart">0</b><span>部分命中</span></div>
+        <div class="mini a"><b id="sumReview">0</b><span>候选待核</span></div>
+        <div class="mini r"><b id="sumNone">0</b><span>没查到</span></div>
+        <div class="mini"><b id="sumTotal">0</b><span>本表合计</span></div>
+      </div>
+
+      <div class="result-toolbar">
+        <div class="sheet-tabs" id="sheetTabs" style="margin:0"></div>
+        <div class="result-filters" id="resultFilters">
+          <button type="button" class="filter-chip on" data-filter="all">全部<span class="n" id="fcAll">0</span></button>
+          <button type="button" class="filter-chip" data-filter="full_k">满价<span class="n" id="fcFull">0</span></button>
+          <button type="button" class="filter-chip" data-filter="partial">部分<span class="n" id="fcPart">0</span></button>
+          <button type="button" class="filter-chip" data-filter="need_review">待核<span class="n" id="fcReview">0</span></button>
+          <button type="button" class="filter-chip" data-filter="no_match">没查到<span class="n" id="fcNone">0</span></button>
+        </div>
+      </div>
+      <p class="hint" id="sheetSummary" style="margin:0 0 10px">—</p>
+      <div class="result-split">
+        <aside class="result-nav" id="resultNav" aria-label="材料清单"></aside>
+        <main class="result-detail" id="resultBody" aria-label="材料详情"></main>
       </div>
     </section>
 
+    <!-- Step 7：任务历史独立管理面板 -->
+    <section class="card" id="card7" style="display:none">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">
+        <div>
+          <h2 style="margin:0 0 6px">⑦ 任务历史管理</h2>
+          <p class="hint" style="margin:0">回看往期询价结果、批量删除记录；可选同步清理 data/output 下关联文件。</p>
+        </div>
+        <div class="btns" style="margin:0">
+          <button type="button" class="ghost" id="btnHistBackResults">返回结果</button>
+          <button type="button" class="ghost" id="btnHistBackRun">返回执行页</button>
+        </div>
+      </div>
+
+      <div class="result-summary-bar" style="grid-template-columns:repeat(4,1fr)">
+        <div class="mini"><b id="histCountAll">0</b><span>历史任务</span></div>
+        <div class="mini g"><b id="histCountDone">0</b><span>已完成</span></div>
+        <div class="mini a"><b id="histCountStopped">0</b><span>已停止</span></div>
+        <div class="mini r"><b id="histCountError">0</b><span>异常</span></div>
+      </div>
+
+      <div class="hist-toolbar">
+        <div class="left">
+          <input type="search" class="hist-search" id="histSearch" placeholder="搜索时间 / 说明 / 平台…" />
+          <label style="display:inline-flex;align-items:center;gap:6px;color:#475569;font-size:12px;font-weight:650;cursor:pointer;user-select:none">
+            <input type="checkbox" id="histSelectAll" /> 全选
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:6px;color:#64748b;font-size:12px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="histDeleteFiles" /> 删除时同时删关联文件
+          </label>
+        </div>
+        <div class="right">
+          <button type="button" class="ghost" id="btnRefreshHistory2">刷新</button>
+          <button type="button" class="ghost" id="btnHistDeleteSelected" style="color:#b91c1c">删除所选</button>
+          <button type="button" class="ghost" id="btnHistClearAll" style="color:#b91c1c">清空全部</button>
+        </div>
+      </div>
+      <p class="hint" style="margin:0 0 10px;font-size:12px">
+        默认只删历史索引；勾选「同时删关联文件」才会尝试删除该任务的 result/rfq/evidence（仅限 data/ 目录）。
+      </p>
+      <div class="hist-list" id="jobHistoryBody">加载中…</div>
+    </section>
+
     <footer>材料询价工作台 · 本地运行 · 文件与登录信息保留在当前电脑</footer>
+  </div>
+
+  <div class="evidence-preview" id="evidencePreview" role="dialog" aria-modal="true" aria-labelledby="evidencePreviewTitle" hidden>
+    <div class="evidence-preview-dialog">
+      <div class="evidence-preview-head">
+        <div class="evidence-preview-title" id="evidencePreviewTitle">供应商报价图片</div>
+        <div class="evidence-preview-tools">
+          <button type="button" id="evidencePreviewOpen" class="btn-open-app-browser">脚本浏览器打开原图</button>
+          <button type="button" id="btnEvidencePreviewClose">关闭预览</button>
+        </div>
+      </div>
+      <div class="evidence-preview-stage">
+        <div class="evidence-preview-message" id="evidencePreviewMessage">正在加载报价图片…</div>
+        <img id="evidencePreviewImg" alt="供应商报价附件预览" hidden />
+      </div>
+    </div>
   </div>
 
   <script>
@@ -960,6 +1629,9 @@
     let platformsRendered = false; // 避免轮询刷新把用户勾选冲掉
     let selectedFileName = "";
     let activeSheet = ""; // 结果页当前 sheet
+    let resultFilter = "all"; // 结果筛选：all|full_k|partial|need_review|no_match
+    let activeResultKey = ""; // 结果详情当前选中材料 key
+    let historyJobsCache = []; // 历史列表缓存（供搜索）
     // 识表材料全量（供范围勾选）
     let allItems = [];
     let previewSheetFilter = ""; // 识表预览当前 sheet，空=全部
@@ -1066,6 +1738,9 @@
         api_key_env: ($("llmKeyEnv") && $("llmKeyEnv").value || "OPENAI_API_KEY").trim() || "OPENAI_API_KEY",
         model: ($("llmModel") && $("llmModel").value || "gpt-4o-mini").trim() || "gpt-4o-mini",
         use_for: use,
+        max_match_review_calls_per_item: Math.max(1, Math.min(5, Number($("llmMaxMatchPerItem") && $("llmMaxMatchPerItem").value) || 2)),
+        max_calls_per_run: Math.max(1, Math.min(200, Number($("llmMaxCallsRun") && $("llmMaxCallsRun").value) || 30)),
+        max_tokens_per_run: Math.max(2000, Math.min(500000, Number($("llmMaxTokensRun") && $("llmMaxTokensRun").value) || 24000)),
       };
       const keyVal = ($("llmApiKey") && $("llmApiKey").value || "").trim();
       if (opts.clearKey) payload.clear_api_key = true;
@@ -1073,6 +1748,26 @@
       // 测试连接时允许把输入框 Key 带上（即使未点保存）
       if (opts.forTest && keyVal) payload.api_key = keyVal;
       return payload;
+    }
+
+    function applyBaiduToForm(enabled) {
+      if ($("baiduFallback")) {
+        $("baiduFallback").checked = enabled === true;
+      }
+    }
+    function applyRegionToForm(st) {
+      st = st || state || {};
+      const dr = st.default_region || {};
+      if ($("regionProvince") && !window.__regionFormTouched)
+        $("regionProvince").value = dr.province || "";
+      if ($("regionCity") && !window.__regionFormTouched)
+        $("regionCity").value = dr.city || "";
+      if ($("regionDistrict") && !window.__regionFormTouched)
+        $("regionDistrict").value = dr.district || "";
+      if ($("regionStrategy") && st.region_strategy && !window.__regionFormTouched)
+        $("regionStrategy").value = st.region_strategy;
+      if ($("regionRequired") && st.region_required != null && !window.__regionFormTouched)
+        $("regionRequired").checked = !!st.region_required;
     }
 
     function applyLlmToForm(llm) {
@@ -1085,6 +1780,9 @@
       if ($("llmUseSchema")) $("llmUseSchema").checked = !use.length || use.includes("schema");
       if ($("llmUseMatch")) $("llmUseMatch").checked = !use.length || use.includes("match_review");
       if ($("llmUseSearch")) $("llmUseSearch").checked = !use.length || use.includes("search_agent");
+      if ($("llmMaxMatchPerItem")) $("llmMaxMatchPerItem").value = String(llm.max_match_review_calls_per_item || 2);
+      if ($("llmMaxCallsRun")) $("llmMaxCallsRun").value = String(llm.max_calls_per_run || 30);
+      if ($("llmMaxTokensRun")) $("llmMaxTokensRun").value = String(llm.max_tokens_per_run || 24000);
       if ($("llmApiKey")) {
         $("llmApiKey").value = "";
         $("llmApiKey").placeholder = llm.api_key_set
@@ -1140,14 +1838,24 @@
 
     function setStep(n) {
       step = n;
-      for (let i = 1; i <= 6; i++) {
+      if (n === 5) {
+        try { renderLiveResults(state.item_results || []); } catch (e) {}
+      }
+      if (n === 6) {
+        try { renderResults(state.item_results || []); } catch (e) {}
+      }
+      if (n === 7) {
+        try { refreshJobHistory(); } catch (e) {}
+      }
+      for (let i = 1; i <= 7; i++) {
         const el = $("card" + i);
         if (el) el.style.display = i === n ? "block" : "none";
       }
       document.querySelectorAll(".step-pill").forEach((el) => {
         const s = +el.dataset.s;
         el.classList.toggle("on", s === n);
-        el.classList.toggle("done", s < n);
+        // 历史(7) 不标 done；主流程 1-6 按序
+        el.classList.toggle("done", s < n && s < 7 && n < 7);
       });
       if (n === 4) {
         initLoginPanel();
@@ -1155,8 +1863,10 @@
       }
       if (n === 5) {
         const lp = state.login_panel || {};
-        $("runLoginSummary").textContent = lp.message
-          || `已验证：${(lp.verified || []).join("、") || "无"}`;
+        if ($("runLoginSummary")) {
+          $("runLoginSummary").textContent = lp.message
+            || `已验证：${(lp.verified || []).join("、") || "无"}`;
+        }
         initScopeUI();
       }
     }
@@ -1562,23 +2272,85 @@
     }
 
     function statusLabel(st) {
-      if (st === "full_k") return ["badge full", "绿·已凑满"];
-      if (st === "partial") return ["badge full", "绿·部分合格"];
-      if (st === "need_review") return ["badge partial", "黄·候选待核"];
-      if (st === "no_match") return ["badge none", "灰·没查到"];
+      if (st === "full_k") return ["badge full", "已凑满"];
+      if (st === "partial") return ["badge full", "部分"];
+      if (st === "need_review") return ["badge partial", "待核"];
+      if (st === "no_match") return ["badge none", "没查到"];
       if (st === "error") return ["badge none", "错误"];
+      if (st === "skipped") return ["badge", "跳过"];
+      if (st === "verified") return ["badge full", "有价"];
       return ["badge", st || "—"];
     }
 
+    function failReasonLabel(r) {
+      const fr = (r && r.fail_reason) || "";
+      if (fr) return fr;
+      if (r && (r.status === "no_match" || r.status === "need_review")) {
+        return (r.message || "").replace(/^没查到[：:]?\s*/, "").slice(0, 40) || "—";
+      }
+      return "";
+    }
+
+    function renderFunnelPanel() {
+      const box = $("funnelBox");
+      if (!box) return;
+      const f = state.funnel || (state.job_stats && state.job_stats.funnel) || {};
+      const fr = state.fail_reason_counts
+        || (state.job_stats && state.job_stats.fail_reason_counts)
+        || f.fail_reason_counts
+        || {};
+      const ps = state.platform_stats || (state.job_stats && state.job_stats.platform_stats) || {};
+      if (!f || !f.items_total) {
+        box.style.display = "none";
+        return;
+      }
+      box.style.display = "block";
+      const steps = [
+        ["材料总数", f.items_total],
+        ["已执行搜索", f.searched],
+        ["搜索有候选", f.has_candidates],
+        ["名称匹配", f.name_matched],
+        ["规格完全匹配", f.spec_full_match],
+        ["有真实数字价", f.has_real_price],
+        ["凑满K价", f.full_k],
+        ["部分命中", f.partial],
+        ["待核", f.need_review],
+        ["没查到", f.no_match],
+      ];
+      const funnelHtml = steps
+        .map(([lab, n]) => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;background:#fff;border:1px solid #e2e8f0;border-radius:999px"><b>${n ?? 0}</b> ${lab}</span>`)
+        .join("");
+      const why = Object.keys(fr).length
+        ? "<div style=\"margin-top:8px\"><b>为什么没查到 / 待核</b>：" +
+          Object.entries(fr)
+            .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+            .map(([k, v]) => `${esc(k)} <b>${v}</b>`)
+            .join(" · ") +
+          "</div>"
+        : "";
+      const platKeys = Object.keys(ps || {});
+      const platHtml = platKeys.length
+        ? "<div style=\"margin-top:8px;overflow:auto\"><b>分平台</b><table style=\"width:100%;margin-top:4px;font-size:11px\"><thead><tr>" +
+          "<th align=left>平台</th><th>查询词</th><th>候选</th><th>名称拒</th><th>规格拒</th><th>价隐藏</th><th>正式命中</th></tr></thead><tbody>" +
+          platKeys.map((pid) => {
+            const s = ps[pid] || {};
+            return `<tr><td>${esc(pid)}</td><td>${s.queries||0}</td><td>${s.candidates||0}</td><td>${s.name_reject||0}</td><td>${s.spec_reject||0}</td><td>${s.price_hidden||0}</td><td>${s.formal_hits||0}</td></tr>`;
+          }).join("") +
+          "</tbody></table></div>"
+        : "";
+      box.innerHTML = `<b>本任务询价漏斗</b>（不混历史） · run <code>${esc(state.run_id || "—")}</code><div style="margin-top:6px">${funnelHtml}</div>${why}${platHtml}`;
+    }
+
     function formatPrice(r) {
+      const ql = r.quote_list || [];
+      const hasFormal = ql.length > 0 || Number(r.quotes || 0) > 0;
+      // 待核候选不是正式报价：即使旧历史里残留 price/audit，也不放到主价格位。
+      if (r.status === "need_review" && !hasFormal) return "—";
       const audit = r.audit;
       const price = r.price != null ? r.price : (r.price_ex_tax != null ? r.price_ex_tax : null);
       if (audit != null && audit !== "") return Number(audit).toFixed(2);
       if (price != null && price !== "") return Number(price).toFixed(2);
-      const ql = r.quote_list || [];
       if (ql[0] && ql[0].price != null) return Number(ql[0].price).toFixed(2);
-      const rv = r.review_list || [];
-      if (rv[0] && rv[0].price != null) return Number(rv[0].price).toFixed(2) + "·待核";
       return "—";
     }
 
@@ -1588,41 +2360,52 @@
       return ["strict", "practical", "loose"].includes(v) ? v : "practical";
     }
 
-    function renderAiStatus(elId, st, llmCfg) {
+    function renderAiStatus(elId, st, llmCfg, jobStats) {
       const el = $(elId);
       if (!el) return;
       const ls = st || state.llm_status || {};
       const cfg = llmCfg || state.llm || {};
+      const js = jobStats || state.job_stats || {};
       const enabled = !!(ls.enabled || cfg.enabled);
       const model = ls.model || cfg.model || "—";
       const keyOk = ls.key_ready != null ? ls.key_ready : cfg.api_key_set;
       const counts = ls.counts || {};
-      const total = counts.total || 0;
+      const tokens = ls.tokens || {};
+      const total = counts.total || js.llm_calls_session || 0;
       const schemaOk = counts.schema_ok || 0;
       const matchOk = counts.match_review_ok || 0;
-      const fail = (counts.schema_fail || 0) + (counts.match_review_fail || 0)
-        + (counts.match_review_fail || 0);
-      // also count fail keys generically
+      const searchOk = counts.search_agent_ok || 0;
       let failN = 0;
       Object.keys(counts).forEach((k) => { if (k.endsWith("_fail")) failN += counts[k]; });
+      const promptT = js.prompt_tokens != null ? js.prompt_tokens : (tokens.prompt || 0);
+      const compT = js.completion_tokens != null ? js.completion_tokens : (tokens.completion || 0);
+      const totalT = js.total_tokens != null ? js.total_tokens : (tokens.total || 0);
+      const fmtTok = (n) => {
+        n = Number(n) || 0;
+        if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+        return String(n);
+      };
       el.className = "ai-status " + (enabled ? "on" : "off");
       if (!enabled) {
         el.innerHTML = "<b>AI 未开启</b> — 当前纯规则识表/匹配。开启后可在第①步配置，日志会出现 <code>[AI]</code> 记录。";
         return;
       }
-      if (!keyOk && total === 0) {
+      if (!keyOk && total === 0 && !totalT) {
         el.innerHTML = `<b>AI 已开启但未就绪</b> — model=${esc(model)}，Key 未配置，实际不会调用大模型。`;
         return;
       }
       const last = ls.last;
       const lastTxt = last
-        ? `最近：${last.ok ? "✓" : "×"} ${esc(last.role)} ${esc(last.detail || "")}`
-        : "尚未在本任务中调用";
+        ? `最近：${last.ok ? "✓" : "×"} ${esc(last.role)} ${esc(last.detail || "")}` +
+          (last.total_tokens ? ` · ${last.total_tokens} tok` : "")
+        : (total || totalT ? "本任务有调用，详见 Token" : "本任务尚未成功调用 API");
       el.innerHTML =
-        `<b>AI 已开启</b> · 模型 <b>${esc(model)}</b> · ` +
-        `实际调用 ${total} 次（识表成功 ${schemaOk} / 语义通过 ${matchOk}${failN ? " / 失败 " + failN : ""}）<br/>` +
+        `<b>AI 已开启</b> · 模型 <b>${esc(model)}</b><br/>` +
+        `API 调用 <b>${total}</b> 次（识表 ${schemaOk} / 语义 ${matchOk} / 搜索 ${searchOk}` +
+        `${failN ? " / 失败 " + failN : ""}） · ` +
+        `Token <b>${fmtTok(totalT)}</b>（入 ${fmtTok(promptT)} + 出 ${fmtTok(compT)}）<br/>` +
         `<span style="opacity:.9">${lastTxt}</span><br/>` +
-        `<span style="opacity:.8">说明：只有日志出现 [AI] 或本处计数增加，才表示大模型真正参与了。</span>`;
+        `<span style="opacity:.75">说明：日志里 [AI] 用途行可能不带 Token；Token 以本处合计为准。行上 AI 徽章=语义改判参与，不等于每次搜词都会标。</span>`;
     }
 
     function sheetsFromState() {
@@ -1673,67 +2456,730 @@
       });
     }
 
+    function _quoteUrl(q) {
+      // detail_url 是材料详情/供应商报价附件；url 常只是搜索结果页。
+      return String((q && (q.detail_url || q.url)) || "").trim();
+    }
+
+    function _quotePriceText(q, allowEmpty) {
+      if (q && q.price != null && Number(q.price) > 0.05) {
+        return "¥" + Number(q.price).toFixed(2);
+      }
+      return allowEmpty ? "无数字价" : "—";
+    }
+
+    function _sourceRowLabel(q) {
+      if (!q) return "";
+      if (q.source_row_label) return String(q.source_row_label).trim();
+      if (q.source_group_index && q.source_quote_index) {
+        return `搜索结果第${q.source_group_index}个材料组 / 第${q.source_quote_index}条厂家报价`;
+      }
+      if (q.source_row_index) return `搜索结果第${q.source_row_index}条厂家报价`;
+      if (String(q.evidence_scope || "") === "exact_result_row") {
+        const bits = [];
+        if (q.supplier) bits.push(`厂家「${q.supplier}」`);
+        if (q.price_text) bits.push(`价格「${q.price_text}」`);
+        if (q.sku) bits.push(`报价ID ${q.sku}`);
+        return bits.length ? `精确报价行：${bits.join(" · ")}` : "已保存精确报价行内容";
+      }
+      return "";
+    }
+
+    function _kindLabel(kind) {
+      return ({
+        formal: "正式",
+        review: "待核",
+        market: "电商",
+        web: "全网",
+        supplier: "线索",
+      })[kind] || kind;
+    }
+
+    function _moneyText(value, emptyText) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0.05) return emptyText || "未提供";
+      return `¥${n.toFixed(2)}`;
+    }
+
+    function _normCompare(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[\s_—–·,，。:：;；()（）\[\]【】]/g, "")
+        .replace(/[×＊*]/g, "x");
+    }
+
+    function _extractDisplayModel(text) {
+      const raw = String(text || "").replace(/[\n\r]+/g, " ");
+      const candidates = [];
+      const labelled = raw.match(
+        /(?:产品型号|规格型号|型号|model)\s*[:：]?\s*([A-Za-z0-9][A-Za-z0-9._/()\-]{2,})/i
+      );
+      if (labelled && labelled[1]) candidates.push(labelled[1]);
+      const found = raw.match(
+        /[A-Za-z]{1,8}[A-Za-z0-9]*(?:[-_/\.][A-Za-z0-9]+)+|[A-Za-z]{1,6}\d{3,}[A-Za-z0-9._/()\-]*/g
+      ) || [];
+      candidates.push(...found);
+      for (const tokenRaw of candidates) {
+        const token = String(tokenRaw || "").replace(/^[\-_/\.]+|[\-_/\.]+$/g, "");
+        const compact = token.replace(/\s+/g, "").toUpperCase();
+        if (compact.length < 4) continue;
+        if (/^(?:DN|PN|IP)\d/.test(compact)) continue;
+        if (/^(?:AC|DC)?\d+(?:\.\d+)?(?:V|W|KW|MM|MPA)$/.test(compact)) continue;
+        if (/^(?:AC|DC)\d+(?:\.\d+)?V(?:[\/\-].*)?$/.test(compact)) continue;
+        if (/^(?:\d+(?:\.\d+)?W-|W-)?(?:AC|DC)\d+(?:\.\d+)?V(?:[\/\-].*)?$/.test(compact)) continue;
+        if (/^(?:DMX|DALI|RS|RJ|TTL)\d/.test(compact)) continue;
+        if (/^\d+(?:\.\d+)?$/.test(compact)) continue;
+        return token;
+      }
+      return "";
+    }
+
+    function _verdict(tone, label, note) {
+      return { tone: tone || "none", label: label || "未判断", note: note || "" };
+    }
+
+    function _nameVerdict(q, kind) {
+      const decision = String(q.name_decision || "").toLowerCase();
+      const detail = String(q.match_detail || "");
+      if (decision === "different" || /名称未命中|名称不匹配|品名不匹配|不是同一/.test(detail)) {
+        return _verdict("bad", "名称不符", "不得作为同一材料");
+      }
+      if (decision === "same" || /名称命中|品名命中|确认同物|名称通过/.test(detail)) {
+        return _verdict("ok", "名称符合", "名称或同义关系已通过");
+      }
+      if (kind === "formal") return _verdict("ok", "名称符合", "已进入系统正式报价");
+      if (decision === "possible" || decision === "pending" || kind === "review") {
+        return _verdict("warn", "名称待核", "需要人工确认是否同物");
+      }
+      return _verdict("info", "仅供参考", "未作为正式名称结论");
+    }
+
+    function _modelVerdict(q, kind, targetModel, sourceModel) {
+      const detail = String(q.match_detail || "");
+      if (!targetModel) return _verdict("none", "Excel 未单列", "以原始规格型号为准");
+      if (/型号[^；;，,]*(?:冲突|错误|不符)|页面型号/.test(detail)) {
+        return _verdict("bad", "型号不符", "来源型号与报送型号冲突");
+      }
+      if (sourceModel && _normCompare(sourceModel) === _normCompare(targetModel)) {
+        return _verdict("ok", "型号符合", "型号文本一致");
+      }
+      if (!sourceModel) {
+        return kind === "formal"
+          ? _verdict("warn", "来源未单列", "系统已收价，但建议打开来源确认型号")
+          : _verdict("warn", "型号缺证", "来源页面未展示独立型号");
+      }
+      if (kind === "formal") {
+        return _verdict("warn", "编码需核", "界面识别到不同编码，请以来源原文为准");
+      }
+      return _verdict("warn", "型号待核", "识别文本不同，需人工核对");
+    }
+
+    function _specVerdict(q, kind, sourceSpec) {
+      const detail = String(q.match_detail || "");
+      if (/规格[^；;，,]*(?:冲突|错误|不符)|DN错误|尺寸冲突|参数冲突/.test(detail)) {
+        return _verdict("bad", "规格不符", "存在硬规格冲突");
+      }
+      if (/规格缺少|规格缺失|未展示规格|缺少[：:]/.test(detail)) {
+        return _verdict("warn", "规格缺证", "来源没有展示全部必要参数");
+      }
+      if (kind === "formal" || /规格全部命中|名称\+规格全部命中|硬规格.*通过/.test(detail)) {
+        return sourceSpec
+          ? _verdict("ok", "规格符合", "硬规格已通过系统校验")
+          : _verdict("warn", "规则已通过", "来源规格未单列，建议打开证据复核");
+      }
+      if (kind === "review") return _verdict("warn", "规格待核", "候选不能直接作为正式报价");
+      return _verdict("info", "仅供参考", "未进入正式规格校验结论");
+    }
+
+    function _unitVerdict(targetUnit, sourceUnit) {
+      if (!targetUnit) return _verdict("none", "Excel 未提供", "无法比较计价单位");
+      if (!sourceUnit) return _verdict("warn", "来源缺单位", "需打开来源确认计价口径");
+      if (_normCompare(targetUnit) === _normCompare(sourceUnit)) {
+        return _verdict("ok", "单位符合", "计价单位一致");
+      }
+      return _verdict("bad", "单位不同", "价格可能不是同一计价口径");
+    }
+
+    function _regionVerdict(q, targetRegion, sourceRegion) {
+      const rm = String(q.region_match || "").toLowerCase();
+      if (rm === "exact") return _verdict("ok", "地区符合", "城市/区县证据一致");
+      if (rm === "province") return _verdict("ok", "同省可用", "按省级价格策略通过");
+      if (rm === "conflict") return _verdict("bad", "地区不符", "价格适用地区冲突");
+      if (rm === "national") return _verdict("info", "全国参考", "不是精确城市价格");
+      if (targetRegion && !sourceRegion) return _verdict("warn", "地区缺证", "来源未展示价格适用地区");
+      if (!targetRegion) return _verdict("none", "未指定地区", "本条不做地区比较");
+      return _verdict("warn", "地区待核", "请核对平台选择器与来源地区");
+    }
+
+    function _priceVerdict(q, submitPrice) {
+      const source = Number(q.price);
+      const submit = Number(submitPrice);
+      const anomaly = String(q.price_anomaly || "").trim();
+      if (!Number.isFinite(source) || source <= 0.05) {
+        return _verdict("none", "无数字价", "不能参与价格比较");
+      }
+      if (!Number.isFinite(submit) || submit <= 0.05) {
+        return _verdict("info", "仅显示来源价", "Excel 未提供报送单价");
+      }
+      const delta = source - submit;
+      const pct = delta / submit;
+      const note = `差额 ${delta >= 0 ? "+" : "-"}¥${Math.abs(delta).toFixed(2)} · ${delta >= 0 ? "+" : ""}${(pct * 100).toFixed(1)}%`;
+      if (anomaly || pct <= -0.5) {
+        return _verdict("warn", "明显低于报送", anomaly || `${note}，请重点核对规格和单位`);
+      }
+      if (Math.abs(pct) <= 0.03) return _verdict("info", "接近报送", note);
+      if (pct < 0) return _verdict("ok", "低于报送", note);
+      return _verdict("warn", "高于报送", note);
+    }
+
+    function _overallVerdict(kind) {
+      if (kind === "formal") return _verdict("ok", "系统正式价", "名称和硬规格已通过");
+      if (kind === "review") return _verdict("warn", "需人工核对", "核对通过前不得采用");
+      if (kind === "market") return _verdict("info", "电商参考", "不进入正式报价");
+      if (kind === "web") return _verdict("info", "全网参考", "不进入正式报价");
+      return _verdict("none", "供应商线索", "需要另行询价");
+    }
+
+    function _compareRow(field, targetValue, sourceValue, verdict) {
+      const targetText = String(targetValue || "").trim() || "未提供";
+      const sourceText = String(sourceValue || "").trim() || "未展示";
+      const targetMissing = targetText === "未提供";
+      const sourceMissing = sourceText === "未展示";
+      return (
+        `<div class="compare-row">` +
+        `<div class="compare-cell compare-field">${esc(field)}</div>` +
+        `<div class="compare-cell compare-value${targetMissing ? " missing" : ""}" data-label="Excel 报送基准">${esc(targetText)}</div>` +
+        `<div class="compare-cell compare-value${sourceMissing ? " missing" : ""}" data-label="平台来源证据">${esc(sourceText)}</div>` +
+        `<div class="compare-cell compare-result" data-label="核对结论">` +
+        `<span class="cmp-state ${esc(verdict.tone)}">${esc(verdict.label)}</span>` +
+        (verdict.note ? `<small>${esc(verdict.note)}</small>` : "") +
+        `</div></div>`
+      );
+    }
+
+    function _submittedField(label, value, className) {
+      const text = String(value || "").trim();
+      return (
+        `<div class="submitted-field ${esc(className || "")}">` +
+        `<span class="sf-label">${esc(label)}</span>` +
+        `<span class="sf-value${text ? "" : " sf-empty"}">${esc(text || "未提供")}</span>` +
+        `</div>`
+      );
+    }
+
+    function _itemKey(r) {
+      return String(r.id || `${r.sheet || ""}#${r.row || ""}#${r.name || ""}`);
+    }
+
+    function _collectEntries(r) {
+      const entries = [];
+      (r.quote_list || []).forEach((q) => entries.push({ q, kind: "formal" }));
+      (r.review_list || []).forEach((q) => entries.push({ q, kind: "review" }));
+      (r.market_list || []).forEach((q) => entries.push({ q, kind: "market" }));
+      (r.web_list || []).forEach((q) => {
+        if (q && q.price != null && Number(q.price) > 0.05) {
+          entries.push({ q, kind: "web" });
+        }
+      });
+      // 无价供应商线索只进入 RFQ，不作为「询价结果」来源卡片展示。
+      if (!entries.length && (r.url || r.title || r.price != null)) {
+        entries.push({
+          q: {
+            title: r.title,
+            url: r.url,
+            platform: r.platform,
+            price: r.price,
+            match_detail: r.message || "",
+          },
+          kind: r.status === "need_review" ? "review" : "formal",
+        });
+      }
+      return entries;
+    }
+
+    function _fmtSrcCard(q, kind, target) {
+      const url = _quoteUrl(q);
+      const title = String(q.title || "").trim() || "（无标题）";
+      const specSeen = String(q.spec_seen || "").trim();
+      const plat = String(q.platform || "").trim();
+      const priceTxt = kind === "supplier"
+        ? "无公开价"
+        : _quotePriceText(q, kind === "review");
+      const needConfirm =
+        kind === "review" &&
+        /名称|同物|待核|品名/.test(String(q.match_detail || ""));
+      const detail = String(q.match_detail || "").trim();
+      const priceEvidence = String(q.price_context || q.price_text || "").trim();
+      const evidenceScope = String(q.evidence_scope || "").trim();
+      const sourceRowLabel = _sourceRowLabel(q);
+      const sourceModel = _extractDisplayModel(`${title} ${specSeen}`);
+      const requestedRegion = String(q.requested_region || target.region || "").trim();
+      const sourceRegion = String(
+        q.source_price_region || q.platform_selected_region || q.supplier_region || ""
+      ).trim();
+      const supBits = [];
+      if (q.supplier) supBits.push(q.supplier);
+      if (q.phone) supBits.push(q.phone);
+      if (q.contact) supBits.push(q.contact);
+
+      const nameCheck = _nameVerdict(q, kind);
+      const modelCheck = _modelVerdict(q, kind, target.model, sourceModel);
+      const specCheck = _specVerdict(q, kind, specSeen);
+      const unitCheck = _unitVerdict(target.unit, q.unit);
+      const regionCheck = _regionVerdict(q, requestedRegion, sourceRegion);
+      const priceCheck = _priceVerdict(q, target.submit);
+      const overall = _overallVerdict(kind);
+      const taxLabel = ({tax_excl: "不含税", tax_incl: "含税", unknown: "税口径未知"})[q.tax_mode] || "税口径未知";
+      const sourcePrice = q.price != null && Number(q.price) > 0.05
+        ? `${_moneyText(q.price)} · ${taxLabel}`
+        : "未展示数字价";
+      const targetPrice = target.submit != null && Number(target.submit) > 0.05
+        ? `${_moneyText(target.submit)} · Excel 报送单价`
+        : "Excel 未提供报送单价";
+      let compareRows = "";
+      compareRows += _compareRow("材料名称", target.name, title, nameCheck);
+      compareRows += _compareRow(
+        "型号",
+        target.model || "Excel 未单列型号",
+        sourceModel || "来源未单列型号",
+        modelCheck
+      );
+      compareRows += _compareRow("规格参数", target.spec || "Excel 未提供规格", specSeen || "来源未展示规格", specCheck);
+      compareRows += _compareRow("计价单位", target.unit || "Excel 未提供单位", q.unit || "来源未展示单位", unitCheck);
+      if (requestedRegion || sourceRegion || q.region_match) {
+        compareRows += _compareRow("价格地区", requestedRegion || "未指定地区", sourceRegion || "来源未展示地区", regionCheck);
+      }
+      compareRows += _compareRow("价格", targetPrice, sourcePrice, priceCheck);
+
+      const isQuoteAttachment = evidenceScope === "exact_quote_row";
+      const isSearchPage = /(?:\/so\.html|\/search|\/list)(?:[?#/]|$)/i.test(url);
+      const openLabel = isQuoteAttachment
+        ? "脚本浏览器打开附件"
+        : (isSearchPage ? "脚本浏览器打开搜索页" : "脚本浏览器打开来源");
+      const openBtn = url
+        ? `<button type="button" class="primary-link btn-open-app-browser" data-url="${esc(url)}">${esc(openLabel)}</button>`
+        : `<a class="is-disabled" href="javascript:void(0)">无链接</a>`;
+      const previewBtn = url && isQuoteAttachment
+        ? `<button type="button" class="btn-preview-evidence" data-url="${esc(url)}" data-title="${esc(title)}">预览报价图片 / 打开供应商报价附件</button>`
+        : "";
+      const copyBtn = url
+        ? `<button type="button" class="btn-copy-url" data-url="${esc(url)}">复制链接</button>`
+        : "";
+      const confirmBtns = needConfirm
+        ? `<button type="button" class="btn-yes name-alias-yes" data-a="${esc(target.name || "")}" data-b="${esc(title)}">确认同物</button>` +
+          `<button type="button" class="btn-no name-alias-no" data-a="${esc(target.name || "")}" data-b="${esc(title)}">确认不同</button>`
+        : "";
+
+      return (
+        `<article class="src-card is-${esc(kind)}">` +
+        `<div class="src-card-top">` +
+        `<span class="quote-kind ${esc(kind)}">${esc(_kindLabel(kind))}</span>` +
+        `<span class="qp">${esc(priceTxt)}</span>` +
+        (plat ? `<span class="qplat">${esc(plat)}</span>` : "") +
+        `<span class="source-verdict ${esc(overall.tone)}">${esc(overall.label)}</span>` +
+        `</div>` +
+        `<div class="compare-table">` +
+        `<div class="compare-row compare-head">` +
+        `<div class="compare-cell">核对项</div>` +
+        `<div class="compare-cell">Excel 报送基准</div>` +
+        `<div class="compare-cell">平台来源证据</div>` +
+        `<div class="compare-cell">核对结论</div>` +
+        `</div>${compareRows}</div>` +
+        (detail ? `<div class="source-rule-note"><b>系统判定依据：</b>${esc(detail)}</div>` : "") +
+        `<div class="source-evidence">` +
+        (sourceRowLabel ? `<div class="source-evidence-line"><b>精确页面定位：</b>${esc(sourceRowLabel)}</div>` : `<div class="source-evidence-line"><b>页面定位：</b>未保存精确行，请打开来源人工确认</div>`) +
+        (sourceRowLabel ? `<div class="source-evidence-line">请按页面定位核对上述厂家报价行，不要采用页面其它材料行的价格。</div>` : "") +
+        (priceEvidence ? `<div class="source-evidence-line"><b>价格原文：</b>${esc(priceEvidence)}</div>` : "") +
+        (evidenceScope ? `<div class="source-evidence-line"><b>证据类型：</b>${esc(evidenceScope)}</div>` : "") +
+        (supBits.length ? `<div class="source-evidence-line"><b>供应商：</b>${esc(supBits.join(" · "))}</div>` : "") +
+        (url
+          ? `<button type="button" class="qurl btn-open-app-browser" data-url="${esc(url)}" title="用已登录的脚本浏览器打开">${esc(url)}</button>`
+          : `<div class="source-evidence-line">（无链接地址）</div>`) +
+        `</div>` +
+        `<div class="src-card-actions">${previewBtn}${openBtn}${copyBtn}${confirmBtns}</div>` +
+        `</article>`
+      );
+    }
+
+    function _buildDetailSources(r) {
+      const entries = _collectEntries(r);
+      const target = {
+        name: String(r.name || "").trim(),
+        spec: String(r.spec || "").trim(),
+        model: _extractDisplayModel(`${r.name || ""} ${r.spec || ""}`),
+        unit: String(r.unit || "").trim(),
+        submit: r.submit,
+        region: String(r.region_raw || r.requested_region || "").trim(),
+      };
+      if (!entries.length) {
+        return (
+          `<div class="src-list">` +
+          `<div class="src-card"><div class="source-evidence"><div class="source-evidence-line">${esc(r.message || "无报价、无候选、无链接")}</div></div></div>` +
+          `</div>`
+        );
+      }
+      const order = ["formal", "review", "market", "web", "supplier"];
+      const labels = {
+        formal: "正式报价",
+        review: "候选待核",
+        market: "电商参考",
+        web: "全网参考",
+        supplier: "供应商线索",
+      };
+      let html = "";
+      order.forEach((kind) => {
+        const group = entries.filter((e) => e.kind === kind);
+        if (!group.length) return;
+        html += `<div class="src-group-label">${esc(labels[kind])} · ${group.length}</div>`;
+        html += group.map((e) => _fmtSrcCard(e.q, e.kind, target)).join("");
+      });
+      return `<div class="src-list">${html}</div>`;
+    }
+
+    function openEvidencePreview(url, title) {
+      const modal = $("evidencePreview");
+      const img = $("evidencePreviewImg");
+      const msg = $("evidencePreviewMessage");
+      const open = $("evidencePreviewOpen");
+      if (!modal || !img || !msg || !open || !url) return;
+      $("evidencePreviewTitle").textContent = title
+        ? `供应商报价图片 · ${title}`
+        : "供应商报价图片";
+      open.setAttribute("data-url", url);
+      open.onclick = () => openInAppBrowser(url, open);
+      img.hidden = true;
+      img.classList.remove("zoomed");
+      img.removeAttribute("src");
+      msg.style.display = "block";
+      msg.textContent = "正在加载报价图片…";
+      img.onload = () => {
+        msg.style.display = "none";
+        img.hidden = false;
+      };
+      img.onerror = () => {
+        img.hidden = true;
+        msg.style.display = "block";
+        msg.textContent = "该附件暂时无法在页面内显示，请用右上角「脚本浏览器打开原图」（复用登录）。";
+      };
+      modal.hidden = false;
+      modal.classList.add("open");
+      document.body.classList.add("evidence-preview-open");
+      img.src = url;
+    }
+
+    function closeEvidencePreview() {
+      const modal = $("evidencePreview");
+      const img = $("evidencePreviewImg");
+      if (img) {
+        img.onload = null;
+        img.onerror = null;
+        img.removeAttribute("src");
+        img.hidden = true;
+      }
+      if (modal) {
+        modal.classList.remove("open");
+        modal.hidden = true;
+      }
+      document.body.classList.remove("evidence-preview-open");
+    }
+
+    async function openInAppBrowser(url, btn) {
+      url = String(url || "").trim();
+      if (!url) return;
+      const old = btn ? btn.textContent : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "正在打开…";
+      }
+      try {
+        const rr = await fetch("/api/open-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const jj = await rr.json();
+        if (jj.ok) {
+          if (btn) {
+            btn.textContent = "已打开✓";
+            setTimeout(() => {
+              btn.textContent = old || "脚本浏览器打开";
+              btn.disabled = false;
+            }, 1500);
+          }
+          if ($("doneMsg")) {
+            $("doneMsg").textContent = jj.message || "已在脚本浏览器中打开（复用登录）";
+          }
+        } else {
+          if (btn) {
+            btn.textContent = old || "打开";
+            btn.disabled = false;
+          }
+          alert(jj.error || "打开失败");
+        }
+      } catch (e) {
+        if (btn) {
+          btn.textContent = old || "打开";
+          btn.disabled = false;
+        }
+        alert("打开失败：" + e);
+      }
+    }
+
+    function _bindResultActions(root) {
+      if (!root) return;
+      root.querySelectorAll(".btn-preview-evidence").forEach((btn) => {
+        btn.onclick = () => {
+          openEvidencePreview(
+            btn.getAttribute("data-url") || "",
+            btn.getAttribute("data-title") || ""
+          );
+        };
+      });
+      root.querySelectorAll(".btn-open-app-browser").forEach((btn) => {
+        btn.onclick = () => openInAppBrowser(btn.getAttribute("data-url") || "", btn);
+      });
+      root.querySelectorAll(".btn-copy-url").forEach((btn) => {
+        btn.onclick = async () => {
+          const url = btn.getAttribute("data-url") || "";
+          if (!url) return;
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(url);
+            } else {
+              const ta = document.createElement("textarea");
+              ta.value = url;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              ta.remove();
+            }
+            const old = btn.textContent;
+            btn.textContent = "已复制";
+            setTimeout(() => { btn.textContent = old || "复制链接"; }, 1200);
+          } catch (e) {
+            prompt("复制以下链接：", url);
+          }
+        };
+      });
+      root.querySelectorAll(".name-alias-yes, .name-alias-no").forEach((btn) => {
+        btn.onclick = async () => {
+          const same = btn.classList.contains("name-alias-yes");
+          const a = btn.getAttribute("data-a") || "";
+          const b = btn.getAttribute("data-b") || "";
+          if (!a || !b) return;
+          btn.disabled = true;
+          try {
+            const rr = await fetch("/api/name-alias/confirm", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ same, inquiry_name: a, candidate_name: b }),
+            });
+            const jj = await rr.json();
+            if (jj.ok) {
+              btn.textContent = same ? "已确认同物✓" : "已确认不同✓";
+              const parent = btn.closest(".src-card-actions");
+              if (parent) {
+                parent.querySelectorAll(".name-alias-yes, .name-alias-no").forEach((b2) => {
+                  b2.disabled = true;
+                });
+              }
+              if ($("doneMsg")) {
+                $("doneMsg").textContent = same
+                  ? `已学习同义：${a} ≈ ${b}（下次 Token=0，仍核规格）`
+                  : `已学习负向：${a} ≠ ${b}（下次直接拒绝）`;
+              }
+            } else {
+              btn.disabled = false;
+              alert(jj.error || "保存失败");
+            }
+          } catch (e) {
+            btn.disabled = false;
+            alert(String(e));
+          }
+        };
+      });
+    }
+
+    function _renderResultDetail(r) {
+      const body = $("resultBody");
+      if (!body) return;
+      if (!r) {
+        body.innerHTML = '<div class="rd-empty">从左侧选择一条材料查看详情</div>';
+        return;
+      }
+      const [cls, label] = statusLabel(r.status || "");
+      const price = formatPrice(r);
+      const priceEmpty = !price || price === "—" || price === "-";
+      const priceShow = priceEmpty
+        ? "—"
+        : (String(price).startsWith("¥") ? price : ("¥" + price));
+      const nameFull = (r.name || "").trim() || "（无名称）";
+      const specFull = (r.spec || "").trim() || "—";
+      const modelFull = _extractDisplayModel(`${nameFull} ${specFull}`);
+      const submitPrice = r.submit != null && Number(r.submit) > 0.05
+        ? _moneyText(r.submit)
+        : "";
+      const sourceLocation = [
+        r.sheet ? `Sheet「${r.sheet}」` : "",
+        r.row != null ? `第 ${r.row} 行` : "",
+      ].filter(Boolean).join(" · ");
+      const metaBits = [];
+      if (sourceLocation) metaBits.push(sourceLocation);
+      if (r.match_via_llm) metaBits.push("AI 参与语义判断");
+      const nQ = (r.quote_list || []).length;
+      const nRev = (r.review_list || []).length;
+      const why = failReasonLabel(r);
+      const cntHint = nQ
+        ? `${nQ} 个正式价`
+        : (nRev ? `${nRev} 个待核` : (why || "无价"));
+
+      body.innerHTML =
+        `<div class="rd-head">` +
+        `<div style="flex:1;min-width:180px">` +
+        `<div class="rd-title">询价材料：${esc(nameFull)}</div>` +
+        `<div class="rd-meta" style="margin:8px 0 0">` +
+        `<span class="${cls}">${label}</span>` +
+        `<span>${esc(cntHint)}</span>` +
+        (metaBits.length ? `<span>${esc(metaBits.join(" · "))}</span>` : "") +
+        `</div></div>` +
+        `<div class="rd-price-block">` +
+        `<span class="rd-price-label">系统参考审定价</span>` +
+        `<div class="rd-price${priceEmpty ? " empty" : ""}">${esc(priceEmpty && r.status === "need_review" ? "无正式价" : priceShow)}</div>` +
+        `<span class="rd-price-note">只由正式报价生成，待核候选不计入</span>` +
+        `</div>` +
+        `</div>` +
+        `<div class="submitted-panel">` +
+        `<div class="submitted-panel-head">` +
+        `<strong>Excel 报送基准</strong>` +
+        `<span>以下字段来自上传的询价表，是每条平台结果的核对基准</span>` +
+        `</div>` +
+        `<div class="submitted-grid">` +
+        _submittedField("材料名称", nameFull, "wide") +
+        _submittedField("报送单价", submitPrice || "Excel 未提供报送价", "price") +
+        _submittedField("识别型号", modelFull || "未识别到独立型号", "") +
+        _submittedField("计价单位", r.unit || "未提供", "") +
+        _submittedField("品牌要求", r.brand || "未指定", "") +
+        _submittedField("Excel 原始规格型号", specFull === "—" ? "未提供" : specFull, "wide") +
+        _submittedField("Excel 位置", sourceLocation || "未记录", "") +
+        `</div>` +
+        `</div>` +
+        `<div class="rd-section-title">平台结果逐条核对</div>` +
+        `<div class="compare-legend" aria-label="核对结论图例">` +
+        `<strong>怎么看：</strong>` +
+        `<span class="legend-item"><i class="legend-dot ok"></i>符合</span>` +
+        `<span class="legend-item"><i class="legend-dot warn"></i>缺证或待核</span>` +
+        `<span class="legend-item"><i class="legend-dot bad"></i>明确冲突</span>` +
+        `<span class="legend-item"><i class="legend-dot"></i>未提供/仅参考</span>` +
+        `<span>价格高低只做对比，不替代名称、型号和规格判断。</span>` +
+        `</div>` +
+        _buildDetailSources(r);
+      _bindResultActions(body);
+    }
+
     function renderResultsForActiveSheet() {
-      const tb = $("resultBody");
+      const nav = $("resultNav");
+      const body = $("resultBody");
       const sum = $("sheetSummary");
-      if (!tb) return;
-      tb.innerHTML = "";
+      if (!nav || !body) return;
+      nav.innerHTML = "";
+      body.innerHTML = "";
       const groups = sheetsFromState();
       const g = groups.find((x) => x.sheet === activeSheet) || groups[0];
       if (!g) {
         if (sum) sum.textContent = "暂无结果";
+        ["sumFull","sumPart","sumReview","sumNone","sumTotal","fcAll","fcFull","fcPart","fcReview","fcNone"].forEach((id) => {
+          if ($(id)) $(id).textContent = "0";
+        });
+        nav.innerHTML = "";
+        body.innerHTML =
+          '<div class="rd-empty">暂无询价结果。<br/>完成任务或从「任务历史」加载后在此查看。</div>';
         return;
       }
-      if (sum) {
-        sum.textContent =
-          `表「${g.sheet}」共 ${g.count} 条 · 满价 ${g.full_k || 0} · 部分 ${g.partial || 0} · 待核 ${g.need_review || 0} · 没查到 ${g.no_match || 0}`;
+      const counts = {
+        all: g.count || 0,
+        full_k: g.full_k || 0,
+        partial: g.partial || 0,
+        need_review: g.need_review || 0,
+        no_match: g.no_match || 0,
+      };
+      if ($("sumFull")) $("sumFull").textContent = counts.full_k;
+      if ($("sumPart")) $("sumPart").textContent = counts.partial;
+      if ($("sumReview")) $("sumReview").textContent = counts.need_review;
+      if ($("sumNone")) $("sumNone").textContent = counts.no_match;
+      if ($("sumTotal")) $("sumTotal").textContent = counts.all;
+      if ($("fcAll")) $("fcAll").textContent = counts.all;
+      if ($("fcFull")) $("fcFull").textContent = counts.full_k;
+      if ($("fcPart")) $("fcPart").textContent = counts.partial;
+      if ($("fcReview")) $("fcReview").textContent = counts.need_review;
+      if ($("fcNone")) $("fcNone").textContent = counts.no_match;
+
+      let items = g.items || [];
+      if (resultFilter && resultFilter !== "all") {
+        if (resultFilter === "no_match") {
+          items = items.filter((r) => r.status === "no_match" || r.status === "error");
+        } else {
+          items = items.filter((r) => (r.status || "") === resultFilter);
+        }
       }
-      (g.items || []).forEach((r) => {
+      if (sum) {
+        const filtLab = {
+          all: "全部", full_k: "满价", partial: "部分",
+          need_review: "待核", no_match: "没查到",
+        }[resultFilter] || "全部";
+        sum.textContent =
+          `「${g.sheet}」${filtLab} ${items.length}/${g.count || 0} · ` +
+          `满价${g.full_k || 0} 部分${g.partial || 0} 待核${g.need_review || 0} 没查到${g.no_match || 0}` +
+          ` · 左侧点材料，右侧看规格与链接`;
+      }
+      if (!items.length) {
+        activeResultKey = "";
+        body.innerHTML =
+          '<div class="rd-empty">当前筛选下没有材料。<br/>试试切换上方状态筛选。</div>';
+        return;
+      }
+
+      // 保持选中项；若被筛掉则选第一条
+      const keys = items.map(_itemKey);
+      if (!activeResultKey || !keys.includes(activeResultKey)) {
+        activeResultKey = keys[0];
+      }
+      const selected =
+        items.find((r) => _itemKey(r) === activeResultKey) || items[0];
+
+      items.forEach((r) => {
+        const key = _itemKey(r);
         const [cls, label] = statusLabel(r.status || "");
         const price = formatPrice(r);
-        const quotes = r.quote_list || [];
-        const reviews = r.review_list || [];
-        let src = "";
-        if (quotes.length) {
-          src = quotes.map((q, i) => {
-            const link = q.url
-              ? `<a href="${esc(q.url)}" target="_blank" rel="noopener">链接${i + 1}</a>`
-              : "";
-            return `${esc(q.platform || "")} ¥${q.price != null ? Number(q.price).toFixed(2) : "—"} ${esc((q.title || "").slice(0, 40))} ${link}`;
-          }).join("<br/>");
-        } else if (reviews.length) {
-          src = "<strong style=\"color:#92400e\">候选价（请点链接核对后采用）</strong><br/>" + reviews.map((q, i) =>
-            `${i + 1}. ${esc(q.platform || "")} <b>¥${q.price != null ? Number(q.price).toFixed(2) : "—"}</b> ` +
-            `${esc((q.title || "").slice(0, 48))}` +
-            (q.url ? ` <a href="${esc(q.url)}" target="_blank" rel="noopener">打开核对</a>` : "") +
-            (q.match_detail ? `<div class="result-detail">${esc(String(q.match_detail).slice(0, 100))}</div>` : "")
-          ).join("");
-        } else if (r.url) {
-          src = `${esc(r.platform || "")} ${esc((r.title || "").slice(0, 50))} <a href="${esc(r.url)}" target="_blank" rel="noopener">打开</a>`;
-        } else {
-          src = esc(r.message || "无报价");
-        }
-        const aiTag = r.match_via_llm ? ' <span class="badge" style="background:#1d4ed8;color:#dbeafe">AI</span>' : "";
-        const nRev = (reviews && reviews.length) || 0;
-        const nQ = r.quotes != null ? r.quotes : (quotes.length || 0);
-        const cntTxt = nQ
-          ? `${nQ} 个合格价`
-          : (nRev ? `${nRev} 个候选·待核` : "无价");
-        const tr = document.createElement("tr");
-        if (r.status === "need_review") tr.style.background = "#fffbeb";
-        else if (r.status === "no_match" || r.status === "error") tr.style.background = "#f8fafc";
-        else if (r.status === "full_k" || r.status === "partial") tr.style.background = "#f0fdf4";
-        tr.innerHTML = `
-          <td>${r.row ?? ""}</td>
-          <td>
-            <strong>${esc(r.name || "")}</strong>${aiTag}
-            <div class="result-detail">${esc((r.spec || "").slice(0, 120))}${r.brand ? " · " + esc(r.brand) : ""}${r.submit != null ? " · 报送 " + r.submit : ""}</div>
-          </td>
-          <td><span class="${cls}">${label}</span><div class="result-detail">${cntTxt}</div></td>
-          <td class="price-cell">${price}</td>
-          <td><div class="result-detail">${src}</div></td>`;
-        tb.appendChild(tr);
+        const priceEmpty = !price || price === "—" || price === "-";
+        const priceShow = priceEmpty
+          ? (r.status === "need_review" ? "无正式价" : "—")
+          : (String(price).startsWith("¥") ? ("审定 " + price) : ("审定 ¥" + price));
+        const nameFull = (r.name || "").trim() || "（无名称）";
+        const specShort = (r.spec || "").trim();
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "result-nav-item" + (key === activeResultKey ? " on" : "");
+        btn.setAttribute("data-key", key);
+        btn.innerHTML =
+          `<span class="rn-row">${r.row ?? "—"}</span>` +
+          `<span>` +
+          `<div class="rn-name">${esc(nameFull)}</div>` +
+          (specShort ? `<div class="rn-spec">${esc(specShort)}</div>` : "") +
+          `</span>` +
+          `<span class="rn-right">` +
+          `<div class="rn-price${priceEmpty ? " empty" : ""}">${esc(priceShow)}</div>` +
+          `<div class="rn-st"><span class="${cls}">${label}</span></div>` +
+          `</span>`;
+        btn.onclick = () => {
+          activeResultKey = key;
+          nav.querySelectorAll(".result-nav-item").forEach((el) => {
+            el.classList.toggle("on", el.getAttribute("data-key") === key);
+          });
+          _renderResultDetail(r);
+        };
+        nav.appendChild(btn);
       });
+      _renderResultDetail(selected);
     }
 
     function renderResults(rows) {
@@ -1806,6 +3252,19 @@
       showBtn("btnContinue", stopped || done);
       showBtn("btnContinueDone", stopped || done);
       showBtn("btnBackToRun", stopped || done);
+      // 询价中 / 登录等待：显示「我已登录，继续」
+      const loginWait =
+        phase === "login" ||
+        (running &&
+          /等待.*登录|LOGIN_WAIT|请在.*浏览器.*登录|需重登|重新登录/i.test(
+            String((st && st.message) || "")
+          ));
+      // 运行中也常驻显示（用户可随时放行登录等待），避免消息未同步时找不到按钮
+      showBtn("btnLoginDone", running || paused || phase === "login");
+      if ($("loginWaitHint")) {
+        $("loginWaitHint").style.display =
+          loginWait || phase === "login" ? "block" : "none";
+      }
       if ($("btnBack4")) $("btnBack4").disabled = running || paused;
       if ($("runPhaseLabel")) {
         const map = {
@@ -1874,11 +3333,48 @@
           (on ? "AI 开启中" : "AI 已关闭") +
           ` · 模型 ${model}` +
           ` · 本轮 ${fmtTok(totalT)} tokens（输入 ${fmtTok(promptT)} + 输出 ${fmtTok(compT)}）` +
-          ` · 请求 ${calls} 次` +
-          `（识表${schemaOk}/语义${matchOk}/搜索${searchOk}` +
-          (failN ? `/失败${failN}` : "") +
-          "）· 关闭后本轮不再请求大模型，规则匹配仍继续";
+          ` · 真实 API ${calls} 次` +
+          `（识表schema ${schemaOk} / 语义match_review ${matchOk} / 搜索search_agent ${searchOk}` +
+          (failN ? ` / 失败${failN}` : "") +
+          "）· Token 仅计实时API；缓存命中为 0。关闭后本轮不再请求大模型，规则匹配仍继续";
       }
+      // AI 活动清单：让人看懂「做了什么 / 有没有烧 Token」
+      const act = (ls.activity || []).slice().reverse();
+      const renderAct = (bodyId) => {
+        const box = $(bodyId);
+        if (!box) return;
+        if (!act.length) {
+          box.textContent =
+            totalT > 0
+              ? `已消耗 ${fmtTok(totalT)} tokens，但活动明细为空（请强刷后再跑一小段）。`
+              : "本轮尚无真实 API 调用。若日志有 [AI·缓存]：用了历史语义结果，不计 Token；[AI·用途]：说明触发了 AI 路径但未附带用量。";
+          return;
+        }
+        box.innerHTML = act
+          .slice(0, 12)
+          .map((a) => {
+            const kind =
+              a.kind === "api"
+                ? `<span style="color:#15803d">实时API</span>`
+                : a.kind === "cache"
+                  ? `<span style="color:#b45309">缓存·不计Token</span>`
+                  : `<span style="color:#64748b">说明</span>`;
+            const roleMap = {
+              schema: "识表schema",
+              match_review: "语义match_review",
+              search_agent: "搜索search_agent",
+            };
+            const roleLabel = roleMap[a.role] || (a.role || "");
+            const tok =
+              a.kind === "api"
+                ? ` · <b>${Number(a.tokens) || 0} tok</b>`
+                : " · 0 tok";
+            return `${esc(a.ts || "")} ${kind} <b>${esc(roleLabel)}</b>${tok} — ${esc((a.detail || "").slice(0, 120))}`;
+          })
+          .join("<br/>");
+      };
+      renderAct("aiActivityRunBody");
+      renderAct("aiActivityDoneBody");
     }
 
     async function jobControl(action) {
@@ -1914,6 +3410,20 @@
       try {
         const r = await fetch("/api/state");
         state = await r.json();
+        if (state.service && state.service.restart_required && $("msg4")) {
+          $("msg4").textContent = "检测到源码已更新，当前向导还是旧进程；请先重启向导再询价。";
+          $("msg4").className = "msg err";
+        }
+        // 历史明细只在前端缓存：轮询 /api/state 时不要冲掉
+        if (
+          window.__viewingHistoryId &&
+          window.__historyResults &&
+          state.phase !== "running" &&
+          state.phase !== "paused" &&
+          state.phase !== "login"
+        ) {
+          state.item_results = window.__historyResults;
+        }
         updateRunControls(state);
         // 平台列表：有 catalog 就渲染（列表为空也强制重绘一次）
         if (state.catalog && state.catalog.length) {
@@ -1928,60 +3438,106 @@
         if (state.llm && !window.__llmFormTouched) {
           applyLlmToForm(state.llm);
         }
+        if (!window.__baiduFormTouched && state.baidu_fallback_enabled != null) {
+          applyBaiduToForm(state.baidu_fallback_enabled);
+        }
+        try { applyRegionToForm(state); } catch (e) {}
         if (!selectedFileName && state.input_path) {
           selectedFileName = basename(state.input_path);
         }
         renderFiles(state.input_files || []);
         if ($("stFull")) $("stFull").textContent = state.full_k ?? 0;
+        if ($("runIdLine")) {
+          $("runIdLine").textContent = state.run_id
+            ? `任务 run_id：${state.run_id}（统计仅本任务，不混历史）`
+            : "任务 run_id：—";
+        }
+        try { renderFunnelPanel(); } catch (e) {}
         if ($("stPart")) $("stPart").textContent = state.partial ?? 0;
         if ($("stReview")) $("stReview").textContent = state.need_review ?? 0;
         if ($("stNone")) $("stNone").textContent = state.no_match ?? 0;
         if ($("stCur")) $("stCur").textContent = state.total ? `${state.current || 0}/${state.total}` : "-";
         if ($("prog")) $("prog").style.width = (state.progress_pct || 0) + "%";
         if ($("curName")) {
+          // 完整展示当前材料名称/规格（后端 current_name 已拼好）
+          $("curName").style.whiteSpace = "pre-wrap";
+          $("curName").style.wordBreak = "break-word";
           $("curName").textContent = state.current_name
-            ? `当前：${state.current_name} — ${state.message || ""}`
+            ? `当前：${state.current_name}${state.message ? "\n" + state.message : ""}`
             : (state.message || "");
         }
         if ($("log")) $("log").textContent = (state.logs || []).join("\n");
-        renderAiStatus("aiStatusParse", state.llm_status, state.llm);
-        renderAiStatus("aiStatusRun", state.llm_status, state.llm);
-        renderAiStatus("aiStatusDone", state.llm_status, state.llm);
+        renderAiStatus("aiStatusParse", state.llm_status, state.llm, state.job_stats);
+        renderAiStatus("aiStatusRun", state.llm_status, state.llm, state.job_stats);
+        renderAiStatus("aiStatusDone", state.llm_status, state.llm, state.job_stats);
+        // 结果页 token 数字
+        const jsD = state.job_stats || {};
+        const lsD = state.llm_status || {};
+        const tokD = lsD.tokens || {};
+        const fmtD = (n) => {
+          n = Number(n) || 0;
+          if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+          return String(n);
+        };
+        const pT = jsD.prompt_tokens != null ? jsD.prompt_tokens : (tokD.prompt || 0);
+        const cT = jsD.completion_tokens != null ? jsD.completion_tokens : (tokD.completion || 0);
+        const tT = jsD.total_tokens != null ? jsD.total_tokens : (tokD.total || 0);
+        const callsD = jsD.llm_calls_session || (lsD.counts && lsD.counts.total) || 0;
+        if ($("dTokens")) $("dTokens").textContent = fmtD(tT);
+        if ($("dTokIn")) $("dTokIn").textContent = fmtD(pT);
+        if ($("dTokOut")) $("dTokOut").textContent = fmtD(cT);
+        if ($("dCalls")) $("dCalls").textContent = String(callsD);
         if (state.login_panel && step === 4) {
           renderLoginPanel();
         }
-        if (state.phase === "done") {
-          if ($("doneMsg")) $("doneMsg").textContent = state.message || "完成";
-          renderResults(state.item_results || []);
-          if (step === 5 || step === 4) setStep(6);
-        }
-        if (state.phase === "stopped") {
-          const nRes = (state.item_results || []).length;
-          const msg =
-            state.message ||
-            (nRes
-              ? `已停止，已完成 ${nRes} 条结果可查看；可点「继续询价（断点）」`
-              : "已停止（尚无完成条目）");
-          if ($("msg4")) {
-            $("msg4").textContent = msg;
-            $("msg4").className = "msg ok";
-          }
-          if ($("doneMsg")) {
-            $("doneMsg").textContent = msg + " · 下方为已完成结果";
-          }
-          // 停止后跳到结果页展示已完成内容（与「完成」一致）
-          renderResults(state.item_results || []);
-          if ((step === 5 || step === 4) && nRes > 0) setStep(6);
-          else if (step === 5 && nRes === 0) {
-            // 仍停在第 5 步，提示可继续
+        // 正在查看历史：不让 /api/state 把结果面板盖回「当前空面板」
+        if (window.__viewingHistoryId && window.__historyResults) {
+          if (step === 6) {
+            // 仅更新下载路径等元数据，保留历史明细渲染
+            if ($("doneMsg") && state.phase === "running") {
+              // 新任务开始则退出历史视图
+              window.__viewingHistoryId = "";
+              window.__historyResults = null;
+            }
           }
         }
-        if (state.phase === "running" || state.phase === "paused") {
-          // 运行/暂停中也刷新结果表（按 sheet），方便边跑边看
+        if (state.phase === "done" || state.phase === "stopped") {
+          if (window.__viewingHistoryId && window.__historyResults) {
+            // 历史明细视图：不覆盖
+          } else {
+            const nLive = (state.item_results || []).length;
+            const baseMsg = state.message || (state.phase === "stopped" ? "已停止" : "完成");
+            if ($("doneMsg")) {
+              $("doneMsg").textContent = nLive
+                ? `${baseMsg} · 下方 ${nLive} 条可点开核对`
+                : (baseMsg + " · 本轮无明细（若刚完成请看下载 Excel / 历史）");
+            }
+            // 始终渲染本轮结果（含「没查到」行），禁止空白结果页
+            renderResults(state.item_results || []);
+            if ((step === 5 || step === 4) && !window.__pinRunPage) {
+              setStep(6);
+            }
+            if ($("msg4") && step === 5 && state.phase === "stopped") {
+              $("msg4").textContent = baseMsg + (nLive ? ` · 已出 ${nLive} 条` : "");
+              $("msg4").className = "msg ok";
+            }
+          }
+        }
+        if (state.phase === "running" || state.phase === "paused" || state.phase === "error") {
+          // 新任务运行时清掉历史视图标记
+          if (state.phase === "running") {
+            window.__viewingHistoryId = "";
+            window.__historyResults = null;
+          }
+          // 运行/暂停中看实时进度
           if (state.item_results && state.item_results.length) {
             renderSheetTabs();
             if (step === 6) renderResultsForActiveSheet();
+            renderLiveResults(state.item_results);
           }
+        }
+        if (state.item_results && state.item_results.length && step === 5) {
+          renderLiveResults(state.item_results);
         }
         if (state.phase === "error" && $("msg4")) {
           $("msg4").textContent = state.error || state.message || "出错";
@@ -1997,7 +3553,7 @@
 
     on("btnCost", "onclick", () => {
       document.querySelectorAll("#platList input").forEach((el) => {
-        el.checked = ["guangcai", "lingcai", "huixun", "yize", "jd", "1688"].includes(el.value);
+        el.checked = ["guangcai", "lingcai", "huixun", "yize", "zaojiatong", "jd", "1688"].includes(el.value);
       });
     });
     on("btnClear", "onclick", () => {
@@ -2019,6 +3575,15 @@
         quotes_per_item: readQuotes(),
         limit: readLimit(),
         match_mode: readMatchMode(),
+        baidu_fallback_enabled: $("baiduFallback") ? $("baiduFallback").checked : false,
+        region_strategy: $("regionStrategy") ? $("regionStrategy").value : "strict_city",
+        region_required: $("regionRequired") ? $("regionRequired").checked : false,
+        default_region: {
+          province: $("regionProvince") ? ($("regionProvince").value || "").trim() : "",
+          city: $("regionCity") ? ($("regionCity").value || "").trim() : "",
+          district: $("regionDistrict") ? ($("regionDistrict").value || "").trim() : "",
+          source: "task",
+        },
         llm: collectLlmPayload(),
       };
       setBusy("btnSave1", true, "正在保存…");
@@ -2055,8 +3620,9 @@
       }
       if ($("llmApiKey")) $("llmApiKey").value = "";
       const aiHint = body.llm && body.llm.enabled ? "；AI 已开启" : "；AI 未开启";
+      const baiduHint = body.baidu_fallback_enabled ? "；百度全网兜底开" : "；百度兜底关";
       $("msg1").textContent = `已保存（仅这些站会登录）：${platforms.join("、")}，每条询 ${savedK} 个价` +
-        (savedLimit ? `，试跑 ${savedLimit} 条` : "，全量") + aiHint;
+        (savedLimit ? `，试跑 ${savedLimit} 条` : "，全量") + aiHint + baiduHint;
       $("msg1").className = "msg ok";
       state.platforms = platforms;
       if (state.catalog && state.catalog.length) {
@@ -2074,12 +3640,44 @@
       window.__llmFormTouched = true;
       toggleAiFields();
     });
-    ["llmApiBase", "llmApiKey", "llmModel", "llmKeyEnv", "llmUseSchema", "llmUseMatch", "llmUseSearch"].forEach((id) => {
+    ["llmApiBase", "llmApiKey", "llmModel", "llmKeyEnv", "llmUseSchema", "llmUseMatch", "llmUseSearch", "llmMaxMatchPerItem", "llmMaxCallsRun", "llmMaxTokensRun"].forEach((id) => {
       const el = $(id);
       if (!el) return;
       el.addEventListener("input", () => { window.__llmFormTouched = true; });
       el.addEventListener("change", () => { window.__llmFormTouched = true; });
     });
+    async function fetchLlmReady(opts) {
+      opts = opts || {};
+      const payload = collectLlmPayload({ forTest: true });
+      payload.enabled = $("llmEnabled") ? $("llmEnabled").checked : !!payload.enabled;
+      payload.runtime_enabled = $("llmRuntimeToggle")
+        ? $("llmRuntimeToggle").checked
+        : payload.enabled;
+      payload.probe = !!opts.probe;
+      const r = await fetch("/api/llm/ready", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return r.json();
+    }
+
+    function paintLlmReadyHint(j) {
+      const hint = $("llmReadyHint");
+      const msg = $("msgLlm");
+      if (!j) return;
+      const text = j.summary || j.error || "—";
+      if (hint) {
+        hint.innerHTML = esc(text) +
+          (j.hint ? `<br/><span style="opacity:.85">${esc(j.hint)}</span>` : "");
+        hint.style.color = j.ok ? "#15803d" : (j.want_ai ? "#b91c1c" : "#64748b");
+      }
+      if (msg && j.want_ai) {
+        msg.textContent = text;
+        msg.className = "msg " + (j.ok ? "ok" : "err");
+      }
+    }
+
     on("btnLlmTest", "onclick", async () => {
       const msg = $("msgLlm");
       if (msg) {
@@ -2105,9 +3703,35 @@
       }
       setBusy("btnLlmTest", false);
       if (msg) {
-        msg.textContent = j.ok ? (j.message || "连接成功") : (j.error || "连接失败");
+        msg.textContent = j.ok
+          ? ((j.message || "连接成功") + " · 可以开着 AI 开始询价")
+          : (j.error || "连接失败 · 请勿在未修好前开着 AI 跑任务");
         msg.className = "msg " + (j.ok ? "ok" : "err");
       }
+      if ($("llmReadyHint")) {
+        $("llmReadyHint").textContent = j.ok
+          ? "探测通过：大模型当前可用。"
+          : ("探测失败：" + (j.error || "不可用"));
+        $("llmReadyHint").style.color = j.ok ? "#15803d" : "#b91c1c";
+      }
+    });
+    on("btnLlmReady", "onclick", async () => {
+      const msg = $("msgLlm");
+      if (msg) {
+        msg.textContent = "正在检查 AI 能否使用…";
+        msg.className = "msg";
+      }
+      setBusy("btnLlmReady", true, "检查中…");
+      try {
+        const j = await fetchLlmReady({ probe: true });
+        paintLlmReadyHint(j);
+      } catch (e) {
+        if (msg) {
+          msg.textContent = "检查失败：" + e;
+          msg.className = "msg err";
+        }
+      }
+      setBusy("btnLlmReady", false);
     });
     on("btnLlmClearKey", "onclick", async () => {
       if (!confirm("确定清除本机已保存的 API Key？")) return;
@@ -2357,6 +3981,10 @@
     async function startInquiry(opts) {
       opts = opts || {};
       const isContinue = !!opts.continue;
+      if (opts._forceRules) {
+        // 服务端二次拦截后的纯规则重试
+        if ($("llmRuntimeToggle")) $("llmRuntimeToggle").checked = false;
+      }
       $("msg4").textContent = isContinue ? "继续询价…" : "正在启动…";
       $("msg4").className = "msg";
       let plats = state.platforms || selectedPlatforms();
@@ -2377,6 +4005,46 @@
       lockLimitFromUser();
       const limitVal = itemScope.mode === "first_n" ? (itemScope.n || 0) : 0;
       if ($("limit")) $("limit").value = String(limitVal);
+      let llmForceRules = !!opts._forceRules;
+      const wantAi = llmForceRules
+        ? false
+        : ($("llmRuntimeToggle")
+          ? $("llmRuntimeToggle").checked
+          : !!(state.llm && state.llm.enabled));
+
+      // 开着 AI 却不能用 → 启动前必须说清楚
+      if (wantAi) {
+        $("msg4").textContent = "正在检查 AI 是否真的可用…";
+        let ready;
+        try {
+          ready = await fetchLlmReady({ probe: true });
+        } catch (e) {
+          $("msg4").textContent = "AI 检查失败：" + e;
+          $("msg4").className = "msg err";
+          return;
+        }
+        if (!ready.ok) {
+          const blockers = (ready.blockers || []).join("；") || ready.summary || "未知原因";
+          const goRules = confirm(
+            "AI 当前不能用，开着也白开：\n\n" +
+              blockers +
+              "\n\n【确定】= 关闭 AI，用纯规则开始询价\n" +
+              "【取消】= 回第①步改 Key / 测连接"
+          );
+          if (!goRules) {
+            $("msg4").textContent = "已取消启动。请先修好 AI（测试连接通过）再开着跑。";
+            $("msg4").className = "msg err";
+            setStep(1);
+            return;
+          }
+          llmForceRules = true;
+          if ($("llmRuntimeToggle")) $("llmRuntimeToggle").checked = false;
+          $("msg4").textContent = "将以纯规则模式启动（AI 已关闭）…";
+        } else {
+          $("msg4").textContent = "AI 可用，正在启动…";
+        }
+      }
+
       const body = {
         platforms: plats,
         quotes_per_item: readQuotes(),
@@ -2385,7 +4053,10 @@
         item_scope: itemScope,
         require_all_login: true,
         continue: isContinue,
-        llm_enabled: $("llmRuntimeToggle") ? $("llmRuntimeToggle").checked : undefined,
+        llm_enabled: llmForceRules
+          ? false
+          : ($("llmRuntimeToggle") ? $("llmRuntimeToggle").checked : undefined),
+        llm_force_rules: llmForceRules,
       };
       writeQuotesLocal(body.quotes_per_item);
       writeLimitLocal(body.limit);
@@ -2409,6 +4080,19 @@
       setBusy("btnStart", false);
       if ($("btnContinue")) setBusy("btnContinue", false);
       if (!j.ok) {
+        if (j.code === "llm_not_ready") {
+          const goRules = confirm(
+            (j.error || "AI 不可用") +
+              "\n\n【确定】= 纯规则继续\n【取消】= 回第①步修 AI"
+          );
+          if (goRules) {
+            return startInquiry({ ...opts, _forceRules: true });
+          }
+          setStep(1);
+          $("msg4").textContent = j.error || "AI 不可用";
+          $("msg4").className = "msg err";
+          return;
+        }
         $("msg4").textContent = j.error || "启动失败";
         $("msg4").className = "msg err";
         if (j.pending && j.pending.length) setStep(4);
@@ -2435,21 +4119,380 @@
       $("msg4").className = "msg ok";
     }
 
-    on("btnStart", "onclick", () => startInquiry({ continue: false }));
+    on("btnStart", "onclick", () => {
+      window.__pinRunPage = false;
+      startInquiry({ continue: false });
+    });
     on("btnContinue", "onclick", () => {
+      window.__pinRunPage = false;
       setStep(5);
       startInquiry({ continue: true });
     });
     on("btnContinueDone", "onclick", () => {
+      window.__pinRunPage = false;
       setStep(5);
       startInquiry({ continue: true });
     });
-    on("btnBackToRun", "onclick", () => setStep(5));
+    on("btnBackToRun", "onclick", () => {
+      // 允许在完成后查看执行日志，不被轮询强制拉回结果页
+      window.__pinRunPage = true;
+      setStep(5);
+      if ($("msg4")) {
+        $("msg4").textContent = "已返回执行页（可看日志与 Token）。点「询价结果」或完成态自动跳转已暂停。";
+        $("msg4").className = "msg ok";
+      }
+    });
+    function renderLiveResults(rows) {
+      const box = $("liveResultBox");
+      const tb = $("liveResultBody");
+      if (!box || !tb) return;
+      rows = rows || [];
+      if (!rows.length) {
+        box.style.display = "none";
+        return;
+      }
+      box.style.display = "block";
+      tb.innerHTML = rows
+        .slice()
+        .reverse()
+        .slice(0, 30)
+        .map((r) => {
+          const [cls, label] = statusLabel(r.status || "");
+          const price =
+            r.price != null
+              ? "¥" + Number(r.price).toFixed(2)
+              : ((r.market_list || [])[0] && (r.market_list[0].price != null)
+                ? "参考¥" + Number(r.market_list[0].price).toFixed(2)
+                : "—");
+          const nameFull = (r.name || "").trim() || "—";
+          const specFull = (r.spec || "").trim();
+          return (
+            `<div class="live-mini">` +
+            `<div class="rcard-rownum" style="width:40px;height:40px;font-size:12px">${r.row ?? "—"}</div>` +
+            `<div>` +
+            `<div class="nm">${esc(nameFull)}</div>` +
+            `<div class="sp"><span class="lab" style="font-weight:700;color:#64748b;margin-right:4px">规格</span>${specFull ? esc(specFull) : "—"}</div>` +
+            `<div style="margin-top:4px"><span class="${cls}">${label}</span></div>` +
+            `</div>` +
+            `<div class="pr">${price}</div>` +
+            `</div>`
+          );
+        })
+        .join("");
+    }
+    function histDeleteFilesChecked() {
+      return !!( $("histDeleteFiles") && $("histDeleteFiles").checked );
+    }
+    function phaseLabel(phase) {
+      const m = { done: "完成", stopped: "已停止", error: "异常", running: "运行中" };
+      return m[phase] || phase || "—";
+    }
+    function phaseBadge(phase) {
+      const p = phase || "";
+      if (p === "done") return '<span class="badge full">完成</span>';
+      if (p === "stopped") return '<span class="badge partial">已停止</span>';
+      if (p === "error") return '<span class="badge none">异常</span>';
+      if (p === "running") return '<span class="badge opened">运行中</span>';
+      return `<span class="badge">${esc(phaseLabel(p))}</span>`;
+    }
+    function renderHistoryList(jobs) {
+      const body = $("jobHistoryBody");
+      if (!body) return;
+      const q = (($("histSearch") && $("histSearch").value) || "").trim().toLowerCase();
+      let list = jobs || [];
+      if (q) {
+        list = list.filter((job) => {
+          const plats = Array.isArray(job.platforms)
+            ? job.platforms.join(" ")
+            : String(job.platforms || "");
+          const blob = [
+            job.ts, job.phase, job.message, plats, job.id, job.items_done, job.tokens,
+          ].join(" ").toLowerCase();
+          return blob.includes(q);
+        });
+      }
+      if ($("histSelectAll")) $("histSelectAll").checked = false;
+      if (!list.length) {
+        body.innerHTML = jobs && jobs.length
+          ? '<div class="hist-empty">没有匹配的历史任务，试试清空搜索。</div>'
+          : '<div class="hist-empty">暂无历史任务。<br/>跑完或中途停止后会自动记录，可在此回看与管理。</div>';
+        return;
+      }
+      body.innerHTML = list
+        .map((job) => {
+          const plats = Array.isArray(job.platforms)
+            ? job.platforms.join("、")
+            : (job.platforms || "");
+          const id = esc(job.id || "");
+          const msg = esc(job.message || "—");
+          return (
+            `<div class="hist-card" data-id="${id}">` +
+            `<input type="checkbox" class="hist-check" data-id="${id}" style="margin-top:4px;width:16px;height:16px;accent-color:#2563eb" />` +
+            `<div>` +
+            `<div class="title">${esc(job.ts || "—")} · 完成 ${job.items_done || 0} 条 · Token ${job.tokens || 0}</div>` +
+            `<div class="meta">${phaseBadge(job.phase)}` +
+            (plats ? ` · 平台 ${esc(String(plats))}` : "") +
+            (job.k ? ` · 每条 ${job.k} 价` : "") +
+            `</div>` +
+            `<div class="msg">${msg}</div>` +
+            `</div>` +
+            `<div class="actions">` +
+            `<button type="button" class="primary hist-load" data-id="${id}">查看结果</button>` +
+            `<button type="button" class="ghost hist-del" data-id="${id}" style="color:#b91c1c">删除</button>` +
+            `</div>` +
+            `</div>`
+          );
+        })
+        .join("");
+      body.querySelectorAll(".hist-load").forEach((btn) => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+          try {
+            const rr = await fetch("/api/history/load", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id }),
+            });
+            const jj = await rr.json();
+            if (!jj.ok) {
+              alert(jj.error || "加载失败");
+              return;
+            }
+            // 历史明细仅本地展示，不写回服务端 STATE，避免污染当前任务面板
+            activeResultKey = "";
+            window.__viewingHistoryId = id;
+            window.__pinRunPage = false;
+            const rows = Array.isArray(jj.item_results) ? jj.item_results.slice() : [];
+            window.__historyResults = rows;
+            // 仅更新本页展示用字段，不把 phase 改成 done 以免 refresh 拉回空面板时误跳
+            state = Object.assign({}, state, {
+              item_results: rows,
+              result_by_sheet: jj.result_by_sheet || [],
+              result_path: jj.result_path || "",
+              rfq_path: jj.rfq_path || "",
+              evidence_path: jj.evidence_path || "",
+              full_k: jj.full_k || 0,
+              partial: jj.partial || 0,
+              need_review: jj.need_review || 0,
+              no_match: jj.no_match || 0,
+              message: (jj.job && jj.job.message) || jj.message || "历史任务",
+              run_id: jj.run_id || id,
+            });
+            resultFilter = "all";
+            document.querySelectorAll("#resultFilters .filter-chip").forEach((c) => {
+              c.classList.toggle("on", c.getAttribute("data-filter") === "all");
+            });
+            renderResults(rows);
+            setStep(6);
+            const n = rows.length;
+            const head = n ? (rows[0].name || "") : "";
+            if ($("doneMsg")) {
+              $("doneMsg").textContent =
+                "【历史】" +
+                ((jj.job && jj.job.message) || "历史任务") +
+                ` · 共 ${n} 条` +
+                (head ? ` · 首条：${head}` : "") +
+                " · 证据链请点「脚本浏览器打开」";
+            }
+          } catch (e) {
+            alert("加载失败：" + e);
+          }
+        };
+      });
+      body.querySelectorAll(".hist-del").forEach((btn) => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+          const withFiles = histDeleteFilesChecked();
+          const tip = withFiles
+            ? "确定删除该条历史，并尝试删除关联结果文件？"
+            : "确定删除该条历史记录？（不删 Excel 文件）";
+          if (!confirm(tip)) return;
+          try {
+            const rr = await fetch("/api/history/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id, delete_files: withFiles }),
+            });
+            const jj = await rr.json();
+            if (!jj.ok) {
+              alert(jj.error || "删除失败");
+              return;
+            }
+            await refreshJobHistory();
+          } catch (e) {
+            alert("删除失败：" + e);
+          }
+        };
+      });
+    }
+    async function refreshJobHistory() {
+      const body = $("jobHistoryBody");
+      if (!body) return;
+      try {
+        const r = await fetch("/api/history");
+        const j = await r.json();
+        const jobs = j.jobs || [];
+        historyJobsCache = jobs;
+        const nAll = jobs.length;
+        const nDone = jobs.filter((x) => x.phase === "done").length;
+        const nStop = jobs.filter((x) => x.phase === "stopped").length;
+        const nErr = jobs.filter((x) => x.phase === "error").length;
+        if ($("histCountAll")) $("histCountAll").textContent = nAll;
+        if ($("histCountDone")) $("histCountDone").textContent = nDone;
+        if ($("histCountStopped")) $("histCountStopped").textContent = nStop;
+        if ($("histCountError")) $("histCountError").textContent = nErr;
+        renderHistoryList(jobs);
+      } catch (e) {
+        body.innerHTML = `<div class="hist-empty">历史加载失败：${esc(String(e))}</div>`;
+      }
+    }
+    async function deleteSelectedHistory() {
+      const checks = Array.from(document.querySelectorAll(".hist-check:checked"));
+      const ids = checks.map((c) => c.getAttribute("data-id")).filter(Boolean);
+      if (!ids.length) {
+        alert("请先勾选要删除的历史任务");
+        return;
+      }
+      const withFiles = histDeleteFilesChecked();
+      const tip = withFiles
+        ? `确定删除选中的 ${ids.length} 条历史，并尝试删除关联结果文件？`
+        : `确定删除选中的 ${ids.length} 条历史记录？`;
+      if (!confirm(tip)) return;
+      try {
+        const rr = await fetch("/api/history/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, delete_files: withFiles }),
+        });
+        const jj = await rr.json();
+        if (!jj.ok && !(jj.deleted && jj.deleted.length)) {
+          alert(jj.error || "删除失败");
+          return;
+        }
+        await refreshJobHistory();
+      } catch (e) {
+        alert("删除失败：" + e);
+      }
+    }
+    async function clearAllHistory() {
+      const withFiles = histDeleteFilesChecked();
+      const tip = withFiles
+        ? "确定清空全部任务历史，并尝试删除所有关联结果文件？此操作不可恢复。"
+        : "确定清空全部任务历史？此操作不可恢复。（不会删除 Excel，除非勾选同时删文件）";
+      if (!confirm(tip)) return;
+      if (!confirm("再次确认：真的要清空全部历史吗？")) return;
+      try {
+        const rr = await fetch("/api/history/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ delete_files: withFiles }),
+        });
+        const jj = await rr.json();
+        if (!jj.ok) {
+          alert(jj.error || "清空失败");
+          return;
+        }
+        await refreshJobHistory();
+      } catch (e) {
+        alert("清空失败：" + e);
+      }
+    }
+    on("btnViewPartial", "onclick", () => {
+      window.__pinRunPage = false;
+      renderResults(state.item_results || []);
+      setStep(6);
+      if ($("doneMsg")) {
+        $("doneMsg").textContent =
+          "本轮已完成结果（任务可能仍在跑/已停）。可下载 Excel 或返回执行页继续。";
+      }
+    });
+    on("btnLiveToResults", "onclick", () => {
+      if ($("btnViewPartial")) $("btnViewPartial").click();
+    });
+    function openHistoryPanel() {
+      window.__pinRunPage = true;
+      setStep(7);
+    }
+    on("btnOpenHistoryTop", "onclick", () => openHistoryPanel());
+    on("btnOpenHistoryFromRun", "onclick", () => openHistoryPanel());
+    on("btnOpenHistoryFromDone", "onclick", () => openHistoryPanel());
+    on("btnHistBackResults", "onclick", () => {
+      window.__pinRunPage = false;
+      setStep(6);
+    });
+    on("btnHistBackRun", "onclick", () => {
+      window.__pinRunPage = true;
+      setStep(5);
+    });
+    on("btnRefreshHistory2", "onclick", () => refreshJobHistory());
+    on("btnHistDeleteSelected", "onclick", () => deleteSelectedHistory());
+    on("btnHistClearAll", "onclick", () => clearAllHistory());
+    on("histSelectAll", "onchange", (e) => {
+      const on = !!(e && e.target && e.target.checked);
+      document.querySelectorAll(".hist-check").forEach((c) => {
+        c.checked = on;
+      });
+    });
+    if ($("histSearch")) {
+      $("histSearch").addEventListener("input", () => {
+        renderHistoryList(historyJobsCache || []);
+      });
+    }
+    document.querySelectorAll("#resultFilters .filter-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        resultFilter = chip.getAttribute("data-filter") || "all";
+        document.querySelectorAll("#resultFilters .filter-chip").forEach((c) => {
+          c.classList.toggle("on", c === chip);
+        });
+        renderResultsForActiveSheet();
+      });
+    });
+    // 步骤条可点击：历史(7)随时可进；结果(6)有数据时可进
+    document.querySelectorAll(".step-pill").forEach((el) => {
+      el.addEventListener("click", () => {
+        const s = +el.dataset.s;
+        if (s === 7) {
+          openHistoryPanel();
+          return;
+        }
+        if (s === 6) {
+          window.__pinRunPage = false;
+          setStep(6);
+          return;
+        }
+        // 其它步骤仅允许在未跑主流程时随意跳；运行中不强制
+        if (s >= 1 && s <= 5) {
+          if (s === 5) window.__pinRunPage = true;
+          setStep(s);
+        }
+      });
+    });
     on("btnPause", "onclick", () => jobControl("pause"));
     on("btnResume", "onclick", () => jobControl("resume"));
     on("btnStop", "onclick", () => {
       if (confirm("确定停止询价？已完成的结果会保存，之后可「继续询价」。")) {
         jobControl("stop");
+      }
+    });
+    on("btnLoginDone", "onclick", async () => {
+      try {
+        const r = await fetch("/api/login-done", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const j = await r.json();
+        if ($("msg4")) {
+          $("msg4").textContent = j.ok
+            ? "已通知任务：登录完成，正在继续…"
+            : j.error || "发送登录完成信号失败";
+          $("msg4").className = j.ok ? "msg ok" : "msg err";
+        }
+      } catch (e) {
+        if ($("msg4")) {
+          $("msg4").textContent = "发送登录完成信号失败：" + e;
+          $("msg4").className = "msg err";
+        }
       }
     });
     if ($("llmRuntimeToggle")) {
@@ -2484,6 +4527,18 @@
       platformsRendered = false;
       // 保留用户价数锁定，不要被服务端旧值盖回去
       refresh();
+    });
+    on("btnEvidencePreviewClose", "onclick", () => closeEvidencePreview());
+    on("evidencePreview", "onclick", (e) => {
+      if (e && e.target === $("evidencePreview")) closeEvidencePreview();
+    });
+    on("evidencePreviewImg", "onclick", (e) => {
+      if (e && e.target) e.target.classList.toggle("zoomed");
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && $("evidencePreview") && !$("evidencePreview").hidden) {
+        closeEvidencePreview();
+      }
     });
 
     // 价数一改就锁定 + 写 localStorage，轮询再也改不回去
@@ -2524,7 +4579,13 @@
       // 若用户没动过，用服务端；动过则以本地为准
       hydrateQuotesLimitFromState(state);
       if (state.llm) applyLlmToForm(state.llm);
+      if (state.baidu_fallback_enabled != null) applyBaiduToForm(state.baidu_fallback_enabled);
       toggleAiFields();
+    });
+    on("baiduFallback", "onchange", () => { window.__baiduFormTouched = true; });
+    ["regionProvince","regionCity","regionDistrict","regionStrategy","regionRequired"].forEach((id) => {
+      on(id, "onchange", () => { window.__regionFormTouched = true; });
+      on(id, "oninput", () => { window.__regionFormTouched = true; });
     });
     setInterval(refresh, 1500);
   </script>

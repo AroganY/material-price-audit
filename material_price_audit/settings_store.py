@@ -32,6 +32,25 @@ class UserSettings:
         # search_agent: 指挥检索词 + 列表排序 + 空结果改词（Playwright 仍负责真打开页面）
         default_factory=lambda: ["schema", "match_review", "search_agent"]
     )
+    # 硬预算：即使候选页异常返回几百条，也不能逐条无限调用模型。
+    # 每条材料名称灰区批量判决最多 1 次 API（同名缓存跨条复用）
+    llm_max_match_review_calls_per_item: int = 1
+    llm_max_calls_per_run: int = 30
+    llm_max_tokens_per_run: int = 24_000
+    # 全网线索默认关闭；只有用户在界面显式开启才执行，永不进正式价。
+    baidu_fallback_enabled: bool = False
+    # 用于迁移旧版“默认开”的 settings.json，避免旧 true 继续自动查。
+    baidu_fallback_confirmed: bool = False
+    # Phase1：用户默认目标地区（dict=RegionTarget；空=未指定）
+    default_region: dict = field(default_factory=dict)
+    # strict_city | allow_province | national_reference
+    region_strategy: str = "strict_city"
+    # false：无地区证据时保持旧行为可进 formal（兼容）
+    region_required: bool = False
+    # Phase3：材料族共享候选池（默认开；同品名 DN 变体共搜，省 Token）
+    use_family_pool: bool = True
+    # Phase5：平台有界并发调度（默认开；MPA_SCHEDULER=0 可关）
+    use_platform_scheduler: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -47,6 +66,11 @@ class UserSettings:
             "use_for": list(
                 self.llm_use_for or ["schema", "match_review", "search_agent"]
             ),
+            "max_match_review_calls_per_item": int(
+                self.llm_max_match_review_calls_per_item
+            ),
+            "max_calls_per_run": int(self.llm_max_calls_per_run),
+            "max_tokens_per_run": int(self.llm_max_tokens_per_run),
         }
 
     @classmethod
@@ -77,6 +101,15 @@ class UserSettings:
             model = nested.get("model") or "gpt-4o-mini"
         if nested.get("use_for") and not d.get("llm_use_for"):
             use_for = nested.get("use_for") or use_for
+        per_item_calls = d.get("llm_max_match_review_calls_per_item")
+        if per_item_calls is None:
+            per_item_calls = nested.get("max_match_review_calls_per_item", 2)
+        max_calls = d.get("llm_max_calls_per_run")
+        if max_calls is None:
+            max_calls = nested.get("max_calls_per_run", 30)
+        max_tokens = d.get("llm_max_tokens_per_run")
+        if max_tokens is None:
+            max_tokens = nested.get("max_tokens_per_run", 24_000)
         allowed = {"schema", "match_review", "search_agent"}
         use_for = [str(x) for x in use_for if str(x) in allowed] or [
             "schema",
@@ -86,6 +119,21 @@ class UserSettings:
         mode = str(d.get("match_mode") or "practical").strip().lower()
         if mode not in ("strict", "practical", "loose"):
             mode = "practical"
+        baidu_confirmed = bool(d.get("baidu_fallback_confirmed", False))
+        baidu_fb = bool(d.get("baidu_fallback_enabled", False))
+        if not baidu_confirmed:
+            # 旧版曾把 true 当默认值；未经用户新版确认的一律关闭。
+            baidu_fb = False
+        reg = d.get("default_region")
+        if not isinstance(reg, dict):
+            reg = {}
+        r_strat = str(d.get("region_strategy") or "strict_city").strip().lower()
+        if r_strat not in (
+            "strict_city",
+            "allow_province",
+            "national_reference",
+        ):
+            r_strat = "strict_city"
         return cls(
             platforms_enabled=[str(p).strip() for p in plats if str(p).strip()],
             quotes_per_item=max(1, min(10, int(d.get("quotes_per_item") or 3))),
@@ -100,6 +148,20 @@ class UserSettings:
             llm_api_key=str(api_key or ""),
             llm_model=str(model or "gpt-4o-mini"),
             llm_use_for=list(use_for),
+            llm_max_match_review_calls_per_item=max(
+                1, min(5, int(per_item_calls or 2))
+            ),
+            llm_max_calls_per_run=max(1, min(200, int(max_calls or 30))),
+            llm_max_tokens_per_run=max(
+                2_000, min(500_000, int(max_tokens or 24_000))
+            ),
+            baidu_fallback_enabled=bool(baidu_fb),
+            baidu_fallback_confirmed=baidu_confirmed,
+            default_region=dict(reg),
+            region_strategy=r_strat,
+            region_required=bool(d.get("region_required", False)),
+            use_family_pool=bool(d.get("use_family_pool", True)),
+            use_platform_scheduler=bool(d.get("use_platform_scheduler", True)),
         )
 
 
@@ -154,6 +216,11 @@ def merge_settings_from_config(settings: UserSettings, cfg: dict | None) -> User
         mode = str(inquiry.get("match_mode") or pricing.get("match_mode") or "").lower()
         if mode in ("strict", "practical", "loose"):
             settings.match_mode = mode
+    if "baidu_fallback_enabled" in inquiry:
+        requested_baidu = bool(inquiry["baidu_fallback_enabled"])
+        settings.baidu_fallback_enabled = bool(
+            requested_baidu and settings.baidu_fallback_confirmed
+        )
     if llm:
         if "enabled" in llm:
             settings.llm_enabled = bool(llm["enabled"])
@@ -165,4 +232,16 @@ def merge_settings_from_config(settings: UserSettings, cfg: dict | None) -> User
             settings.llm_model = str(llm["model"])
         if llm.get("use_for"):
             settings.llm_use_for = list(llm["use_for"])
+        if llm.get("max_match_review_calls_per_item") is not None:
+            settings.llm_max_match_review_calls_per_item = max(
+                1, min(5, int(llm["max_match_review_calls_per_item"] or 2))
+            )
+        if llm.get("max_calls_per_run") is not None:
+            settings.llm_max_calls_per_run = max(
+                1, min(200, int(llm["max_calls_per_run"] or 30))
+            )
+        if llm.get("max_tokens_per_run") is not None:
+            settings.llm_max_tokens_per_run = max(
+                2_000, min(500_000, int(llm["max_tokens_per_run"] or 24_000))
+            )
     return settings

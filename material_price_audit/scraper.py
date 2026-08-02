@@ -26,8 +26,36 @@ def parse_price(text: str | None) -> float | None:
 
 
 def score_title(title: str, must: list[str]) -> int:
-    t = (title or "").lower()
-    return sum(1 for m in must if m and m.lower() in t)
+    """
+    标题与 must 命中分。中文材料站标题常比询价名短/异序：
+    「薄壁不锈钢管」vs 标题「不锈钢管」应至少得 1 分，不能整串硬比。
+    """
+    import re
+
+    raw = (title or "")
+    t = re.sub(r"\s+", "", raw).lower()
+    if not t:
+        return 0
+    score = 0
+    for m in must or []:
+        if not m:
+            continue
+        mm = re.sub(r"\s+", "", str(m)).lower()
+        if not mm:
+            continue
+        if mm in t or t in mm:
+            score += 1
+            continue
+        # 中文：连续 2 字片段命中也算（薄壁/不锈钢/钢管）
+        cn = re.findall(r"[\u4e00-\u9fff]{2,4}", mm)
+        if cn and any(frag in t for frag in cn):
+            score += 1
+            continue
+        # 型号/口径：DN100、XZP100
+        alnum = re.findall(r"[a-z]{0,8}\d{2,}[a-z0-9\-_]*", mm, flags=re.I)
+        if alnum and any(a.lower() in t for a in alnum):
+            score += 1
+    return score
 
 
 def clean_profile_locks(profile_dir: Path) -> list[str]:
@@ -185,6 +213,56 @@ def kill_stale_profile_browsers(profile_dir: Path) -> int:
     return killed
 
 
+def launch_ephemeral_with_state(
+    storage_state: dict | str | Path | None,
+    channel: str = "chrome",
+    headless: bool = False,
+):
+    """
+    非持久化浏览器 + 注入 storage_state（Cookie/LocalStorage）。
+    用于「一平台一 Worker」并发：各 Worker 独立 Browser，共享登录态，
+    互不抢 .browser-profile 的 user-data-dir 锁。
+    返回 (pw, context, page, browser)。
+    """
+    from playwright.sync_api import sync_playwright
+
+    state = storage_state
+    if isinstance(state, (str, Path)):
+        p = Path(state)
+        if p.is_file():
+            import json
+
+            state = json.loads(p.read_text(encoding="utf-8"))
+        else:
+            state = None
+
+    pw = sync_playwright().start()
+    try:
+        launch_kwargs = dict(
+            headless=headless,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        try:
+            browser = pw.chromium.launch(channel=channel, **launch_kwargs)
+        except Exception:
+            browser = pw.chromium.launch(**launch_kwargs)
+        ctx_kwargs = dict(
+            viewport={"width": 1400, "height": 900},
+            locale="zh-CN",
+        )
+        if state:
+            ctx_kwargs["storage_state"] = state
+        context = browser.new_context(**ctx_kwargs)
+        page = context.pages[0] if context.pages else context.new_page()
+        return pw, context, page, browser
+    except Exception:
+        try:
+            pw.stop()
+        except Exception:
+            pass
+        raise
+
+
 def launch_context(profile_dir: Path, channel: str = "chrome", headless: bool = False):
     """
     启动持久化浏览器（同一 user-data-dir 复用登录 Cookie）。
@@ -293,16 +371,38 @@ def url_left_login(start_url: str, cur_url: str, platform_id: str = "") -> bool:
     # URL changed from the page we opened
     c0 = c.split("?")[0]
     if s and c0 != s and not url_looks_like_login(c):
+        # 领材：userInfo 是登录入口本身，停在 userInfo 不算「已离开登录」
+        pid0 = (platform_id or "").lower()
+        if pid0 == "lingcai" and "hylcw.cn" in c and "userinfo" in c:
+            return False
         return True
     # opened login, now not login
     if url_looks_like_login(s) and not url_looks_like_login(c):
         return True
     pid = (platform_id or "").lower()
     if pid == "lingcai":
-        # 领材登录在 userInfo；已登录时往往仍在同域用户页，靠 cookie/不再跳转
-        # 仅当从明确 login 子路径离开，或 title 不再含登录
-        if "hylcw.cn" in c and "/login" not in c:
-            return not url_looks_like_login(c)
+        # 领材：只有从登录/用户中心进入市场价/业务页才算离开登录。
+        # 禁止：打开 userInfo 时立刻把「同域非 /login」当成已登录（会 0 秒假通过，
+        # 随后校验失败 → 用户感觉「登完任务却不继续」）。
+        if "hylcw.cn" not in c or url_looks_like_login(c):
+            return False
+        if "userinfo" in c:
+            return False
+        # 到达市场价/首页等业务路径
+        if any(
+            x in c
+            for x in (
+                "/marketprice",
+                "/market",
+                "/so.html",
+                "/lcindex",
+                "/index",
+            )
+        ):
+            return True
+        # start 是登录/userInfo，当前已不在这些入口
+        if ("/login" in s or "userinfo" in s) and "userinfo" not in c and "/login" not in c:
+            return True
     return False
 
 
@@ -337,6 +437,16 @@ def agent_login_signaled(package_root: Path | None = None) -> bool:
     return agent_login_signal_path(package_root).exists()
 
 
+def _lingcai_login_surface(url: str) -> bool:
+    """领材登录入口：/login* 或用户中心 userInfo（非市场价业务页）。"""
+    u = (url or "").lower()
+    if not u or "hylcw.cn" not in u:
+        return False
+    if url_looks_like_login(u):
+        return True
+    return "userinfo" in u
+
+
 def wait_for_login_agent(
     page,
     *,
@@ -347,34 +457,63 @@ def wait_for_login_agent(
     timeout_s: int = 600,
     poll_s: float = 1.5,
     allow_stdin: bool = True,
+    cancel_check=None,
+    on_wait_start=None,
 ) -> str:
     """
     Agent 友好登录等待：
-    - **绝不** page.reload / 重复 goto / 扫 DOM
-    - 只读 page.url（被动）
-    - Agent 可 touch data/output/LOGIN_CONTINUE 立刻放行
+    - **绝不** page.reload / 重复 goto / 扫 DOM（URL 轮询除外）
+    - 只读 page.url（被动）+ 可选轻量 Cookie 探测
+    - Agent / 向导可 touch data/output/LOGIN_CONTINUE 立刻放行
     - TTY 下也可回车放行
-    返回: already_ok | logged_in | agent_continue | timeout
+    返回: already_ok | logged_in | agent_continue | timeout | cancelled
     """
     root = package_root or Path(__file__).resolve().parents[1]
     clear_agent_login_signal(root)
     start_url = _safe_url(page) or login_url
+    pid = (platform_id or "").lower()
 
     # 仅当「当前/目标」明确是登录页且已离开 → 秒过
     # 禁止：login_url 是首页时把「随便一个非 login URL」当成已登录（1688 曾中招）
     hard_login = url_looks_like_login(start_url) or url_looks_like_login(login_url)
+    # 领材 userInfo 是真·登录入口，必须按「硬登录」等满时长，禁止 45s 假超时
+    if pid == "lingcai" and (
+        _lingcai_login_surface(start_url) or _lingcai_login_surface(login_url)
+    ):
+        hard_login = True
+    # 会员站统一给足等待（用户可能要扫码/短信）
+    membership = pid in ("guangcai", "lingcai", "huixun", "yize", "zaojiatong")
+
     if hard_login and page_looks_logged_in(page, platform_id, login_url):
-        if not url_looks_like_login(_safe_url(page)):
+        cur0 = _safe_url(page)
+        if not url_looks_like_login(cur0) and not (
+            pid == "lingcai" and _lingcai_login_surface(cur0)
+        ):
             print(f"  [{name}] ✓ 已离开登录页，继续")
             return "already_ok"
-    if hard_login and url_looks_like_login(start_url) and not url_looks_like_login(_safe_url(page)):
+    if (
+        hard_login
+        and url_looks_like_login(start_url)
+        and not url_looks_like_login(_safe_url(page))
+        and not (pid == "lingcai" and _lingcai_login_surface(_safe_url(page)))
+    ):
         print(f"  [{name}] ✓ 当前不是登录 URL，继续")
         return "already_ok"
     # 首页类 login_url 且当前也不像登录页：不假定已登录，仍等 Agent/短超时
-    if not hard_login and not url_looks_like_login(_safe_url(page)):
+    # 会员站 / 领材 userInfo 不走短超时
+    if (
+        not hard_login
+        and not membership
+        and not url_looks_like_login(_safe_url(page))
+    ):
         print(f"  [{name}] 目标不是登录页；请确认已登录或 touch LOGIN_CONTINUE 跳过")
         # 缩短：首页探测最多 45s，避免死等
         timeout_s = min(int(timeout_s), 45)
+    elif membership and int(timeout_s) > 0:
+        # 默认至少 3 分钟，避免扫码未完成就被跳过；
+        # 调用方显式传入更短 timeout（如测试）时不强制抬高
+        if int(timeout_s) >= 60:
+            timeout_s = max(int(timeout_s), 180)
 
     sig = agent_login_signal_path(root)
     print("")
@@ -383,24 +522,67 @@ def wait_for_login_agent(
     print(f"login_url: {login_url}")
     print(f"browser  : {_safe_url(page)[:100]}")
     print("请用户在【已打开的浏览器窗口】登录。")
-    print("程序只被动看 URL，不会刷新页面。")
-    print("Agent 在用户说「登完了」后任选：")
-    print(f"  1) touch {sig}")
-    print("  2) 终端回车（若有 TTY）")
-    print("  3) URL 自动离开登录页也会继续")
+    print("程序只被动看 URL / Cookie，不会刷新页面。")
+    print("登完后任选：")
+    print("  1) 向导点「我已登录，继续」")
+    print(f"  2) touch {sig}")
+    print("  3) 终端回车（若有 TTY）")
+    print("  4) URL 自动离开登录页也会继续")
     print("========================================")
 
-    deadline = time.time() + max(30, int(timeout_s))
+    if on_wait_start is not None:
+        try:
+            on_wait_start(
+                {
+                    "platform": platform_id,
+                    "name": name,
+                    "login_url": login_url,
+                    "timeout_s": int(timeout_s),
+                    "signal": str(sig),
+                }
+            )
+        except Exception:
+            pass
+
+    # 允许测试传入短 timeout；生产默认调用一般 ≥180s
+    deadline = time.time() + max(1, int(timeout_s))
     last_log = 0.0
     stdin_ok = allow_stdin and sys.stdin.isatty()
 
+    def _cookie_session_ready() -> bool:
+        """轻量 Cookie 探测：有登录会话 Cookie 即视为可继续（不扫 DOM、不刷新）。"""
+        try:
+            from .login_gate import auth_cookie_hits
+
+            hits = auth_cookie_hits(page, pid)
+            return bool(hits)
+        except Exception:
+            return False
+
     # 非阻塞读回车：用 select
     while time.time() < deadline:
+        if cancel_check is not None:
+            try:
+                if cancel_check():
+                    print(f"  [{name}] 已取消登录/验证等待")
+                    clear_agent_login_signal(root)
+                    return "cancelled"
+            except Exception:
+                pass
         cur = _safe_url(page)
         if url_left_login(start_url, cur, platform_id) or (
-            not url_looks_like_login(cur) and url_looks_like_login(start_url)
+            not url_looks_like_login(cur)
+            and url_looks_like_login(start_url)
+            and not (pid == "lingcai" and _lingcai_login_surface(cur))
         ):
             print(f"  [{name}] ✓ URL 已离开登录页 → {_safe_url(page)[:80]}")
+            clear_agent_login_signal(root)
+            return "logged_in"
+
+        # 仍停在 userInfo/登录页时：若 Cookie 已写入，也可放行（领材常见）
+        # 后续 _login_one 会再 goto 校验页真检
+        if membership and _cookie_session_ready():
+            print(f"  [{name}] ✓ 检测到登录 Cookie，继续校验")
             clear_agent_login_signal(root)
             return "logged_in"
 
@@ -554,10 +736,27 @@ def open_detail(
     timeout_ms: int,
     extra_price_selectors: list[str] | None = None,
 ) -> dict:
+    platform = str(cand.get("platform") or "")
+    # 造价通详情必须走带 Cookie 的 HTTP，禁止先 page.goto 再判断；
+    # 否则 SPA 会踢到登录页，打断后续材料。
+    if platform == "zaojiatong":
+        try:
+            from .adapters import zaojiatong as zjt
+
+            return zjt.enrich_detail(page, cand, timeout_ms)
+        except Exception as e:
+            out = dict(cand)
+            out["detail_error"] = str(e)
+            out["needs_detail_price"] = True
+            out["detail_text"] = str(
+                cand.get("detail_text") or cand.get("spec_seen") or ""
+            )
+            out["detail_title"] = str(cand.get("title") or "")
+            out["detail_confirmed"] = True
+            return out
     try:
         page.goto(cand["url"], wait_until="domcontentloaded", timeout=timeout_ms)
         page.wait_for_timeout(2500)
-        platform = str(cand.get("platform") or "")
         title = _product_title(page, str(cand.get("title") or ""))
         price = None
         price_text = ""

@@ -49,10 +49,36 @@ pricing:
     assert settings.tax_divisor == 1.09
 
 
-def test_core_builtin_maintained_platforms_include_yize():
-    assert CORE_PLATFORM_IDS == ("guangcai", "lingcai", "huixun", "yize", "jd", "1688")
+def test_core_builtin_maintained_platforms_include_yize_and_zaojiatong():
+    assert CORE_PLATFORM_IDS == (
+        "guangcai",
+        "lingcai",
+        "huixun",
+        "yize",
+        "zaojiatong",
+        "jd",
+        "1688",
+    )
 
 
 def test_project_home_environment_override_is_respected(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("MATERIAL_PRICE_AUDIT_HOME", str(tmp_path))
     assert project_root() == tmp_path.resolve()
+
+
+def test_llm_hard_budgets_have_safe_defaults_and_are_clamped():
+    defaults = UserSettings.from_dict({})
+    assert defaults.llm_max_match_review_calls_per_item == 2
+    assert defaults.llm_max_calls_per_run == 30
+    assert defaults.llm_max_tokens_per_run == 24_000
+
+    clamped = UserSettings.from_dict(
+        {
+            "llm_max_match_review_calls_per_item": 999,
+            "llm_max_calls_per_run": 9999,
+            "llm_max_tokens_per_run": 99_999_999,
+        }
+    )
+    assert clamped.llm_max_match_review_calls_per_item == 5
+    assert clamped.llm_max_calls_per_run == 200
+    assert clamped.llm_max_tokens_per_run == 500_000

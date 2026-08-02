@@ -1,7 +1,8 @@
 """
 Multi-platform registry.
 
-Maintained built-ins: Guangcai, Lingcai, Huixun, Yize (EasyBii), JD, and 1688.
+Maintained built-ins: Guangcai, Lingcai, Huixun, Yize (EasyBii), Zaojiatong,
+JD, and 1688.
 Additional sites can be registered in ``config.yaml`` with the generic adapter.
 """
 
@@ -142,6 +143,28 @@ BUILTIN: dict[str, PlatformSpec] = {
         ],
         notes="官网 https://www.easybii.com/ · 产品信息/信息价双通道搜索",
     ),
+    "zaojiatong": PlatformSpec(
+        id="zaojiatong",
+        name="造价通",
+        # 必须带 url= 回跳参数：登录成功后跳回分站市场价，才能写齐 .zjtcn.com 会话
+        # （只停在 member 登录页时，后续每开一条 gd 链接都会再被踢去登录）
+        login_url=(
+            "https://member.zjtcn.com/common/login.html"
+            "?url=https%3A%2F%2Fgd.zjtcn.com%2Fshichangjia%2Flist%2Fc_t_d_k.html"
+        ),
+        # 默认广东分站市场价；{query} 拼入路径（实测 c_t_d_k_关键词.html）
+        search_url_template="https://gd.zjtcn.com/shichangjia/list/c_t_d_k_{query}.html",
+        handler="zaojiatong",
+        item_link_contains="zjtcn.com",
+        item_link_selector='a[href*="shichangjia/info_"], a[href*="zjtcn.com"]',
+        detail_price_selectors=[
+            ".text-orange-color",
+            "[class*='price']",
+            "[class*='Price']",
+            "td",
+        ],
+        notes="官网 https://www.zjtcn.com/ · 市场价 gd.zjtcn.com/shichangjia · 登录须带 url 回跳分站",
+    ),
     # ========== 电商 / 工业品 ==========
     "jd": PlatformSpec(
         id="jd",
@@ -171,7 +194,18 @@ BUILTIN: dict[str, PlatformSpec] = {
 }
 
 # Product UI order and the only built-ins covered by maintained adapters/tests.
-CORE_PLATFORM_IDS = ("guangcai", "lingcai", "huixun", "yize", "jd", "1688")
+CORE_PLATFORM_IDS = ("guangcai", "lingcai", "huixun", "yize", "zaojiatong", "jd", "1688")
+
+# 零售/批发电商：价只作市场参考，不得写入正式合格价（见 docs/ECOMMERCE_POLICY.md）
+ECOMMERCE_PLATFORM_IDS = frozenset({"jd", "1688", "taobao", "tmall", "jingdong"})
+
+
+def is_ecommerce_platform(pid: str | None) -> bool:
+    p = normalize_platform_id(pid) if pid is not None else ""
+    if p in ECOMMERCE_PLATFORM_IDS:
+        return True
+    # normalize may map 京东→jd already; keep bare checks
+    return str(pid or "").strip().lower() in ECOMMERCE_PLATFORM_IDS
 
 
 def normalize_platform_id(pid) -> str:
@@ -207,6 +241,11 @@ def normalize_platform_id(pid) -> str:
         "易泽网": "yize",
         "easybii": "yize",
         "yizewang": "yize",
+        "造价通": "zaojiatong",
+        "zjtcn": "zaojiatong",
+        "zjt": "zaojiatong",
+        "zaojia": "zaojiatong",
+        "中建普联": "zaojiatong",
     }
     if p in aliases:
         return aliases[p]
@@ -667,7 +706,17 @@ def _search_gldjc(page, query: str, must: list[str], timeout_ms: int, min_score:
                 "quotation_url": str(row.get("quotationUrl") or ""),
                 "unit": str(row.get("unit") or ""),
                 "price_text": str(row.get("price") or ""),
-                "price_context": "同一厂家报价行",
+                "price_context": (
+                    f"广材搜索结果第{int(row.get('ri') or 0) + 1}个材料组 / "
+                    f"第{int(row.get('qi') or 0) + 1}条厂家报价；"
+                    f"页面价格={str(row.get('price') or '').strip()}"
+                ),
+                "source_group_index": int(row.get("ri") or 0) + 1,
+                "source_quote_index": int(row.get("qi") or 0) + 1,
+                "source_row_label": (
+                    f"广材搜索结果第{int(row.get('ri') or 0) + 1}个材料组 / "
+                    f"第{int(row.get('qi') or 0) + 1}条厂家报价"
+                ),
                 "price_source": "platform_quote_row",
                 "tax_mode": "tax_incl",
                 "sku_scope": "exact_quote_row",
@@ -852,7 +901,19 @@ def _member_rows_to_candidates(
             "unit": unit_value,
             "tax_mode": tax_mode,
             "price_text": price_text[:300],
-            "price_context": text[:500],
+            "price_context": (
+                f"领材搜索结果第{int(row.get('index') or 0) + 1}条厂家报价；"
+                f"{price_text[:180]}；报价ID={str(row.get('dataId') or '-')}"
+            ),
+            "source_row_index": int(row.get("index") or 0) + 1,
+            "source_row_label": (
+                f"领材搜索结果第{int(row.get('index') or 0) + 1}条厂家报价"
+                + (
+                    f"（报价ID {str(row.get('dataId'))}）"
+                    if row.get("dataId")
+                    else ""
+                )
+            ),
             "price_source": "platform_result_row" if price else "missing",
             "spec_seen": text[:1200],
         }
@@ -907,45 +968,153 @@ def _huixun_try_resume_if_needed(page, timeout_ms: int) -> bool:
     return True
 
 
-def _search_huixun(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
-    # 慧讯是 SPA：进入产品库后用页面搜索框输入 Unicode，不在 URL 二次编码。
-    # 关窗重开后常停在登录页但有账号缓存，只需点「一键登录」。
-    from .login_gate import looks_like_hard_login_url, page_shows_one_click_login
+def _huixun_on_products(page) -> bool:
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    if "login" in url or "passport" in url:
+        return False
+    return "iccchina.com" in url and "/products" in url
 
-    current = (page.url or "").lower()
-    if "iccchina.com/products" not in current or looks_like_hard_login_url(current):
+
+def ensure_platform_workspace(
+    page,
+    platform_id: str,
+    spec: PlatformSpec,
+    timeout_ms: int,
+) -> tuple[bool, str]:
+    """
+    保证浏览器停在该站「搜价工作台」页，而不是每条材料都重新打开登录/新链接。
+
+    返回 (是否可用, 原因)。造价通/慧讯等会员站：工作台一旦就绪，后续只改搜索框。
+    """
+    pid = (platform_id or "").lower()
+    if pid == "huixun":
+        from .login_gate import looks_like_hard_login_url, page_shows_one_click_login
+
+        if _huixun_on_products(page):
+            return True, "已在慧讯产品库"
         if not _huixun_try_resume_if_needed(page, timeout_ms):
+            if looks_like_hard_login_url((page.url or "").lower()) or page_shows_one_click_login(
+                page
+            ):
+                return False, "need_login"
+        if not _huixun_on_products(page):
             try:
                 page.goto(
-                    spec.search_url_template,
+                    spec.search_url_template or "https://services.iccchina.com/products",
                     wait_until="domcontentloaded",
                     timeout=timeout_ms,
                 )
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(1200)
+            except Exception as e:
+                return False, f"error:{e}"
+            if not _huixun_try_resume_if_needed(page, timeout_ms):
+                return False, "need_login"
+        return (True, "慧讯工作台就绪") if _huixun_on_products(page) else (False, "need_login")
+
+    if pid == "zaojiatong":
+        from .login_gate import (
+            install_zaojiatong_dialog_auto_accept,
+            try_handle_zaojiatong_session_conflict,
+        )
+
+        install_zaojiatong_dialog_auto_accept(page)
+        try_handle_zaojiatong_session_conflict(page)
+        if _zaojiatong_on_market_page(page):
+            # 确认搜索框还在
+            try:
+                if page.locator("#indexKey2, input[placeholder*='关键词'], input[placeholder*='材料名称']").count() > 0:
+                    return True, "已在造价通市场价页"
             except Exception:
-                pass
-            if not _huixun_try_resume_if_needed(page, timeout_ms):
-                if looks_like_hard_login_url((page.url or "").lower()) or page_shows_one_click_login(
-                    page
-                ):
-                    return None, "need_login"
-        # 仍不在产品库则显式打开
-        if "iccchina.com/products" not in ((page.url or "").lower()):
-            page.goto(spec.search_url_template, wait_until="domcontentloaded", timeout=timeout_ms)
-            page.wait_for_timeout(1800)
-            if not _huixun_try_resume_if_needed(page, timeout_ms):
-                return None, "need_login"
+                return True, "已在造价通市场价页"
+        landing = "https://gd.zjtcn.com/shichangjia/list/c_t_d_k.html"
+        try:
+            page.goto(landing, wait_until="domcontentloaded", timeout=timeout_ms)
+            page.wait_for_timeout(600)  # 短等：尽快用框，别等 SPA 踢登录太久
+        except Exception as e:
+            return False, f"error:{e}"
+        try_handle_zaojiatong_session_conflict(page)
+        if _zaojiatong_on_market_page(page):
+            return True, "造价通工作台已打开"
+        # 被踢登录页
+        state, _ = _zaojiatong_page_state(page)
+        if state == "need_login":
+            return False, "need_login"
+        return False, "empty_page"
+
+    # 其它站：有 search 模板则打开一次
+    tpl = spec.search_url_template or ""
+    if tpl and "{query}" not in tpl:
+        try:
+            cur = (page.url or "").lower()
+        except Exception:
+            cur = ""
+        if tpl.split("?")[0].split("/")[-1] and tpl.split("/")[2] in cur:
+            return True, "已在目标站"
+        try:
+            page.goto(tpl, wait_until="domcontentloaded", timeout=timeout_ms)
+            page.wait_for_timeout(1000)
+            return True, "已打开目标站"
+        except Exception as e:
+            return False, f"error:{e}"
+    return True, "ok"
+
+
+def restore_platform_workspace(
+    page,
+    platform_id: str,
+    registry: dict[str, PlatformSpec] | None = None,
+    timeout_ms: int = 30000,
+) -> None:
+    """详情页看完后回到搜价工作台，避免下一条又 goto 登录。"""
+    pid = normalize_platform_id(platform_id)
+    reg = registry or BUILTIN
+    spec = reg.get(pid) or BUILTIN.get(pid)
+    if not spec:
+        return
+    try:
+        ensure_platform_workspace(page, pid, spec, timeout_ms)
+    except Exception:
+        pass
+
+
+def _search_huixun(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
+    """
+    慧讯：登录一次进产品库后，**只改搜索框重搜**，禁止每条材料重新 goto 登录/产品库。
+    """
+    ok_ws, ws_reason = ensure_platform_workspace(page, "huixun", spec, timeout_ms)
+    if not ok_ws:
+        return None, ws_reason if ws_reason.startswith("need_login") or ws_reason == "need_login" else (
+            "need_login" if "login" in ws_reason else ws_reason
+        )
+
     state, _body = _member_page_state(page, "huixun")
     if state == "need_login":
         if not _huixun_try_resume_if_needed(page, timeout_ms):
             return None, "need_login"
+        # 一键登录后回到产品库，仍不重新 goto 除非丢了
+        if not _huixun_on_products(page):
+            ok_ws, ws_reason = ensure_platform_workspace(page, "huixun", spec, timeout_ms)
+            if not ok_ws:
+                return None, "need_login"
         state, _body = _member_page_state(page, "huixun")
     if state not in ("ok", "empty_page"):
         return None, state
+
+    # 核心：同页改词
     if not _try_fill_site_search(page, query):
         return [], "search_control_missing"
     page.wait_for_timeout(1800)
+    # 若填词后被踢登录，再试一次恢复，仍失败才 need_login
     state, _body = _member_page_state(page, "huixun")
+    if state == "need_login":
+        if _huixun_try_resume_if_needed(page, timeout_ms) and _try_fill_site_search(page, query):
+            page.wait_for_timeout(1800)
+            state, _body = _member_page_state(page, "huixun")
+        else:
+            return None, "need_login"
     if state != "ok":
         return ([] if state == "empty_page" else None), state
     rows = _extract_member_rows(page, "huixun")
@@ -1398,6 +1567,666 @@ def _search_yize(page, query: str, must: list[str], timeout_ms: int, min_score: 
     return [], "search_control_missing"
 
 
+def _zaojiatong_page_state(page) -> tuple[str, str]:
+    """造价通登录/会员/空结果状态（仅用于「整页 goto 后」的 DOM 判断）。"""
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    try:
+        title = page.title() or ""
+    except Exception:
+        title = ""
+    try:
+        body = (page.inner_text("body") or "")[:2500]
+    except Exception:
+        body = ""
+    text = f"{title}\n{body}"
+
+    if "member.zjtcn.com" in url and ("login" in url or "登录" in title):
+        return "need_login", body
+    if "/common/login" in url or ("passport" in url and "zjtcn" in url):
+        return "need_login", body
+    if title.strip().startswith("会员登录"):
+        return "need_login", body
+    if any(
+        k in text
+        for k in (
+            "会员登录",
+            "请输入手机号/账号",
+            "请输入密码",
+            "扫码登录",
+            "登录后查看",
+            "请先登录",
+            "账号密码登录",
+        )
+    ) and not any(k in text for k in ("退出登录", "我的造价通", "退出", "会员中心", "个人中心")):
+        # 列表页未登录时价列也显示「查看价格」，不能单凭它判登录；硬登录页才 need_login
+        if "请输入密码" in text or "会员登录" in title or "common/login" in url:
+            return "need_login", body
+
+    if any(
+        k in text
+        for k in (
+            "服务已到期",
+            "套餐已过期",
+            "开通会员",
+            "请开通服务",
+            "无访问权限",
+            "权限不足",
+            "续费后使用",
+            "开通VIP",
+            "成为会员后",
+        )
+    ):
+        return "no_membership", body
+
+    if any(k in body for k in ("暂无数据", "暂无结果", "没有找到", "未找到相关", "无搜索结果", "没有相关数据")):
+        return "empty_page", body
+    if len(body.strip()) < 40:
+        return "empty_page", body
+    return "ok", body
+
+
+def _zaojiatong_has_auth_cookies(page) -> list[str]:
+    """是否有登录态 Cookie（token/userId 等；jsid 不算）。"""
+    try:
+        from .login_gate import auth_cookie_hits
+
+        return list(auth_cookie_hits(page, "zaojiatong") or [])
+    except Exception:
+        return []
+
+
+def _zaojiatong_list_url(spec: PlatformSpec, query: str) -> str:
+    q = (query or "").strip()[:40]
+    if "{query}" in (spec.search_url_template or ""):
+        return spec.search_url_template.format(query=quote(q))
+    return f"https://gd.zjtcn.com/shichangjia/list/c_t_d_k_{quote(q)}.html"
+
+
+def _zaojiatong_fetch_list_html(page, query: str, spec: PlatformSpec, timeout_ms: int) -> str:
+    """
+    用不执行 JS 的 HTTP 请求抓市场价 SSR HTML。
+
+    实测：page.goto 后 SPA 约 0.3s 内会踢到会员登录页，列表 DOM 被清空；
+    但同一 URL 的 SSR 响应始终含材料行（价格列可能是「查看价格」）。
+    用 context.request 可避开 SPA 拦截，且自动带上浏览器 Cookie。
+    """
+    url = _zaojiatong_list_url(spec, query)
+    # 优先走 Playwright 上下文请求（共享登录 Cookie）
+    for getter in (
+        lambda: page.context.request.get(url, timeout=timeout_ms),
+        lambda: page.request.get(url, timeout=timeout_ms),
+    ):
+        try:
+            resp = getter()
+            if resp is None:
+                continue
+            status = int(getattr(resp, "status", 0) or 0)
+            ok = bool(getattr(resp, "ok", False)) or status == 200
+            if not ok:
+                continue
+            text = resp.text()
+            if text and len(text) > 500 and (
+                "material-title" in text or "shichangjia/info_" in text or "原始名称" in text
+            ):
+                return text
+        except Exception:
+            continue
+    # 回退：短 goto + 立即抽 outerHTML（在 SPA 跳转前）
+    try:
+        page.goto(url, wait_until="commit", timeout=timeout_ms)
+        # 尽快取 HTML，勿等 networkidle
+        html = page.content()
+        if html and "material-title" in html:
+            return html
+        page.wait_for_timeout(200)
+        html = page.content()
+        if html:
+            return html
+    except Exception:
+        pass
+    return ""
+
+
+def parse_zaojiatong_ssr_html(html: str) -> list[dict[str, Any]]:
+    """
+    从市场价列表 SSR HTML 抽行（可单测、无需浏览器 DOM）。
+    未登录时价格多为「查看价格」/占位，price 为 None。
+    """
+    if not html:
+        return []
+    import html as html_lib
+
+    out: list[dict[str, Any]] = []
+    # 行块
+    blocks = re.findall(r'<tr class="flex flex-row"[^>]*>(.*?)</tr>', html, re.S | re.I)
+    if not blocks:
+        # 兼容无 class 的 tr
+        blocks = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I)
+    for index, block in enumerate(blocks):
+        if "材料名称及规格型号" in block and "除税市场价" in block:
+            continue
+        if "material-title" not in block and "/shichangjia/info_" not in block:
+            continue
+        href_m = re.search(r'href="(/shichangjia/info_[^"]+)"', block)
+        href = html_lib.unescape(href_m.group(1)) if href_m else ""
+        title_m = re.search(
+            r'class="material-title[^"]*"[^>]*>(.*?)</a>', block, re.S | re.I
+        )
+        title = ""
+        if title_m:
+            title = re.sub(r"<[^>]+>", "", title_m.group(1))
+            title = html_lib.unescape(title).strip()
+        name_m = re.search(r"原始名称：\s*</span>\s*<span[^>]*>([^<]+)", block)
+        if not name_m:
+            name_m = re.search(r"原始名称：\s*([^<\s][^<]{0,80})", block)
+        name = (name_m.group(1).strip() if name_m else title) or title
+        # 规格：优先标签；否则拼「品种/牌号/直径」等片段
+        spec = ""
+        sm = re.search(r"规格型号：\s*</span>\s*<span[^>]*>([^<]+)", block)
+        if sm:
+            spec = sm.group(1).strip()
+        texts = [t.strip() for t in re.findall(r">([^<>]{1,80})<", block) if t.strip()]
+        if not spec:
+            bits = [
+                t
+                for t in texts
+                if any(
+                    k in t
+                    for k in (
+                        "品种",
+                        "牌号",
+                        "直径",
+                        "规格",
+                        "DN",
+                        "Φ",
+                        "Ф",
+                        "mm",
+                        "×",
+                        "x",
+                    )
+                )
+                and "原始名称" not in t
+                and "规格型号" not in t
+            ]
+            spec = " ".join(bits[:6])
+        supplier = ""
+        sup = re.search(r"供应商名称：\s*</span>\s*<span[^>]*>([^<]+)", block)
+        if sup:
+            supplier = sup.group(1).strip()
+        else:
+            for t in texts:
+                if re.search(r"(公司|厂|商行|经营部|集团)$", t) and len(t) >= 4:
+                    supplier = t
+                    break
+        unit = ""
+        for t in texts:
+            if re.fullmatch(r"(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨|项|张|根)", t, re.I):
+                unit = t
+                break
+        # 价格：跳过「查看价格」
+        price = None
+        price_text = ""
+        tax_mode = "unknown"
+        plain = re.sub(r"<[^>]+>", " ", block)
+        plain = re.sub(r"\s+", " ", plain)
+        for label, mode in (
+            ("除税市场价", "tax_excl"),
+            ("含税市场价", "tax_incl"),
+            ("除税建议价", "tax_excl"),
+            ("含税建议价", "tax_incl"),
+            ("除税价", "tax_excl"),
+            ("含税价", "tax_incl"),
+        ):
+            m = re.search(rf"{label}\s*[:：]?\s*[¥￥]?\s*(\d+(?:\.\d+)?)", plain)
+            if m:
+                price = parse_price(m.group(1))
+                price_text = m.group(0)
+                tax_mode = mode
+                break
+        if price is None:
+            # NUXT 压缩字段 noTaxPrice:123.4
+            m = re.search(r"noTaxPrice:(\d+(?:\.\d+)?)", block)
+            if m:
+                price = parse_price(m.group(1))
+                price_text = m.group(0)
+                tax_mode = "tax_excl"
+            else:
+                m = re.search(r"taxPrice:(\d+(?:\.\d+)?)", block)
+                if m:
+                    price = parse_price(m.group(1))
+                    price_text = m.group(0)
+                    tax_mode = "tax_incl"
+        if not name and not title:
+            continue
+        out.append(
+            {
+                "index": index,
+                "name": (name or title)[:180],
+                "text": plain[:2000],
+                "spec": spec[:400],
+                "price": price,
+                "price_text": price_text[:300],
+                "tax_mode": tax_mode,
+                "unit": unit,
+                "supplier": supplier[:80],
+                "brand": "",
+                "href": href,
+            }
+        )
+    return out
+
+
+def parse_zaojiatong_result_rows(raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    将造价通市场价表格行规范化（可单测）。
+    未登录时价格常为「查看价格」——price 为 None，由上层标 needs_detail_price。
+    """
+    out: list[dict[str, Any]] = []
+    for row in raw_rows or []:
+        text = re.sub(r"\s+", " ", str(row.get("text") or "")).strip()
+        name = re.sub(r"\s+", " ", str(row.get("name") or "")).strip()
+        if not text and not name:
+            continue
+        if len(text) < 4:
+            continue
+        # 表头
+        if re.search(r"材料名称及规格型号|除税市场价|除税建议价", text) and "原始名称" not in text:
+            continue
+        if re.fullmatch(r"(名称|规格型号|单位|市场价|建议价|税率|供应商|操作).*", name or text):
+            continue
+
+        # 优先「原始名称」，截到下一字段标签
+        m_name = re.search(
+            r"原始名称\s*[:：]\s*(.+?)(?=\s*(?:规格型号|查看价格|除税|含税|税率|单位|供应商|档次|品牌|$))",
+            text,
+        )
+        if m_name:
+            name = m_name.group(1).strip()
+        if not name:
+            name = text[:120]
+
+        # 规格
+        spec_seen = str(row.get("spec") or "")
+        m_spec = re.search(
+            r"规格型号\s*[:：]\s*(.+?)(?=\s*(?:查看价格|原始名称|除税|含税|税率|单位|供应商|档次|品牌|$))",
+            text,
+        )
+        if m_spec:
+            spec_seen = m_spec.group(1).strip()
+        if not spec_seen:
+            # 行内常有「名称 + 规格」两段
+            pass
+
+        price = None
+        price_text = ""
+        tax_mode = "unknown"
+        for label, mode in (
+            ("除税市场价", "tax_excl"),
+            ("含税市场价", "tax_incl"),
+            ("除税建议价", "tax_excl"),
+            ("含税建议价", "tax_incl"),
+            ("除税价", "tax_excl"),
+            ("含税价", "tax_incl"),
+            ("市场价", "tax_incl"),
+            ("建议价", "tax_incl"),
+        ):
+            m = re.search(rf"{label}\s*[:：]?\s*[¥￥]?\s*(\d+(?:\.\d+)?)", text)
+            if m:
+                price = parse_price(m.group(1))
+                price_text = m.group(0)
+                tax_mode = mode
+                break
+        if price is None:
+            cell = str(row.get("priceText") or "")
+            if cell and "查看" not in cell and re.search(r"\d", cell):
+                price = parse_price(cell)
+                price_text = cell[:80]
+                if "除税" in cell:
+                    tax_mode = "tax_excl"
+                elif "含税" in cell:
+                    tax_mode = "tax_incl"
+
+        unit = str(row.get("unit") or "")
+        if not unit:
+            um = re.search(
+                r"(?:单位|计价单位)\s*[:：]?\s*(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨|项|张|根)",
+                text,
+                re.I,
+            )
+            if um:
+                unit = um.group(1)
+            else:
+                # 税率后常接单位：13% 个 / 13% t
+                um2 = re.search(r"\d+%\s*(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨|项|张|根)\b", text, re.I)
+                if um2:
+                    unit = um2.group(1)
+
+        supplier = str(row.get("supplier") or "")
+        if not supplier:
+            sm = re.search(r"供应商名称\s*[:：]\s*([^\s]{2,60})", text)
+            if sm:
+                supplier = sm.group(1).strip()
+            else:
+                sm = re.search(r"([^\s]{2,40}(?:公司|厂|商行|经营部|集团|有限公司))", text)
+                if sm:
+                    supplier = sm.group(1)
+
+        brand = str(row.get("brand") or "")
+        href = str(row.get("href") or "")
+        combined = f"{name} {spec_seen}".strip()
+        out.append(
+            {
+                "name": name[:180],
+                "text": (combined + " " + text)[:2000],
+                "spec": spec_seen[:400],
+                "price": price,
+                "price_text": price_text[:300],
+                "tax_mode": tax_mode,
+                "unit": unit,
+                "supplier": supplier[:80],
+                "brand": brand[:60],
+                "href": href,
+                "index": row.get("index", len(out)),
+            }
+        )
+    return out
+
+
+def _zaojiatong_extract_dom_rows(page) -> list[dict[str, Any]]:
+    """从造价通市场价表 tbody 抽同行材料名/规格/价/供应商。"""
+    try:
+        rows = page.evaluate(
+            """() => {
+              const out = [];
+              const seen = new Set();
+              const rows = document.querySelectorAll(
+                'tbody tr, tr.flex.flex-row, .el-table__row, [class*="table-row"]'
+              );
+              for (const [index, row] of rows.entries()) {
+                const text = (row.innerText || '').replace(/\\s+/g, ' ').trim();
+                if (!text || text.length < 8 || text.length > 2200) continue;
+                if (/材料名称及规格型号/.test(text) && /除税市场价|操作/.test(text)) continue;
+                if (/登录|注册|网站导航/.test(text) && text.length < 80) continue;
+
+                const a = row.querySelector('a.material-title, a[href*="shichangjia/info_"], a[href*="/info_"]');
+                let href = a?.href || '';
+                let name = (a?.innerText || '').replace(/\\s+/g, ' ').trim();
+                const rawName = text.match(/原始名称\\s*[:：]\\s*([^\\s][^|]{1,80})/);
+                if (rawName) name = rawName[1].trim();
+                if (!name) {
+                  const titleEl = row.querySelector('[class*="material-title"], [class*="name"]');
+                  name = (titleEl?.innerText || '').replace(/\\s+/g, ' ').trim();
+                }
+                if (!name) continue;
+
+                let spec = '';
+                const sm = text.match(/规格型号\\s*[:：]\\s*(.+?)(?=\\s*(?:查看价格|原始名称|税率|单位|供应商|$))/);
+                if (sm) spec = sm[1].trim();
+
+                // 价格列：跳过「查看价格」占位
+                let priceText = '';
+                const priceCells = row.querySelectorAll(
+                  '[class*="price"], .text-orange-color, td'
+                );
+                for (const cell of priceCells) {
+                  const t = (cell.innerText || '').replace(/\\s+/g, ' ').trim();
+                  if (!t || /查看价格|查看联系|查看报价/.test(t)) continue;
+                  if (/\\d/.test(t) && t.length < 40) {
+                    priceText = t;
+                    break;
+                  }
+                }
+                if (!priceText) {
+                  const m = text.match(/(?:除税市场价|含税市场价|市场价|建议价)\\s*[:：]?\\s*[¥￥]?\\s*(\\d+(?:\\.\\d+)?)/);
+                  if (m) priceText = m[0];
+                }
+
+                let unit = '';
+                const um = text.match(/(\\d+%\\s*)(m²|m³|㎡|米|m|个|件|套|台|组|kg|t|吨|项|张|根)\\b/i);
+                if (um) unit = um[2];
+
+                let supplier = '';
+                const sup = text.match(/供应商名称\\s*[:：]\\s*([^\\s]{2,60})/);
+                if (sup) supplier = sup[1];
+                else {
+                  const sc = text.match(/([\\u4e00-\\u9fffA-Za-z0-9（）()]{2,40}(?:公司|厂|商行|经营部|集团))/);
+                  if (sc) supplier = sc[1];
+                }
+
+                let brand = '';
+                // 档次/品牌列常是短中文词
+                const brandCand = Array.from(row.querySelectorAll('td')).map(
+                  td => (td.innerText || '').replace(/\\s+/g, ' ').trim()
+                ).filter(t => t && t.length <= 12 && !/查看|%|\\d{4}-\\d{2}/.test(t));
+
+                const key = `${href}|${name}|${spec.slice(0, 40)}|${priceText}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                out.push({
+                  index,
+                  href,
+                  name: name.slice(0, 180),
+                  text: text.slice(0, 1800),
+                  spec: spec.slice(0, 400),
+                  priceText: priceText.slice(0, 80),
+                  unit,
+                  supplier: supplier.slice(0, 80),
+                  brand: (brand || brandCand[0] || '').slice(0, 40),
+                });
+                if (out.length >= 60) break;
+              }
+              return out;
+            }"""
+        )
+        return list(rows or [])
+    except Exception:
+        return []
+
+
+def _zaojiatong_rows_to_candidates(
+    page,
+    rows: list[dict[str, Any]],
+    query: str,
+    must: list[str],
+    min_score: int,
+    spec: PlatformSpec,
+) -> list[dict[str, Any]]:
+    parsed = parse_zaojiatong_result_rows(rows)
+    current_url = page.url or spec.search_url_template
+    out: list[dict[str, Any]] = []
+    for row in parsed:
+        name = str(row.get("name") or "")
+        text = str(row.get("text") or "")
+        spec_seen = str(row.get("spec") or "")
+        blob = f"{name} {spec_seen} {text}"
+        sc = score_title(blob, must)
+        href = str(row.get("href") or "")
+        if href and href.startswith("/"):
+            # 相对路径补全域名
+            base = "https://gd.zjtcn.com"
+            try:
+                from urllib.parse import urlparse
+
+                p = urlparse(current_url)
+                if p.scheme and p.netloc:
+                    base = f"{p.scheme}://{p.netloc}"
+            except Exception:
+                pass
+            href = base + href
+        if href and spec.item_link_contains and spec.item_link_contains not in href:
+            # 仍保留，造价通分站域名可能变化
+            pass
+        price = row.get("price")
+        cand: dict[str, Any] = {
+            "title": name[:180] if name else blob[:160],
+            "price_tax": float(price) if price else 0.01,
+            "url": href or current_url,
+            "sku": f"zaojiatong:{row.get('index', '')}:{_norm_row_key(name, text)}",
+            "score": max(sc, 1),
+            "platform": spec.id,
+            "supplier": str(row.get("supplier") or ""),
+            "unit": str(row.get("unit") or ""),
+            "tax_mode": str(row.get("tax_mode") or "unknown"),
+            "price_text": str(row.get("price_text") or "")[:300],
+            "price_context": text[:500],
+            "spec_seen": (spec_seen or text)[:1200],
+            "brand": str(row.get("brand") or ""),
+        }
+        if price:
+            cand.update(
+                price_source="platform_result_row",
+                inline_detail=True,
+                detail_text=text[:4000],
+                sku_scope="exact_result_row",
+            )
+        else:
+            cand["price_source"] = "missing"
+            cand["needs_detail_price"] = True
+        out.append(cand)
+    out.sort(key=lambda x: (-x.get("score", 0), x.get("price_tax", 1e18)))
+    return out[:40]
+
+
+def _zaojiatong_on_market_page(page) -> bool:
+    """是否已在分站市场价/信息价页（非会员登录页）。"""
+    try:
+        url = (page.url or "").lower()
+    except Exception:
+        url = ""
+    if "member.zjtcn.com" in url or "login" in url:
+        return False
+    if "zjtcn.com" not in url:
+        return False
+    return any(x in url for x in ("shichangjia", "xinxijia", "ration", "facx"))
+
+
+def _zaojiatong_fill_search(page, query: str) -> bool:
+    """在已打开的市场价页用搜索框改词，避免每条材料整页 goto 新链接触发再登录。"""
+    q = (query or "").strip()[:40]
+    if not q:
+        return False
+    # 优先顶栏关键词，其次列表上方「材料名称搜索」
+    for sel in (
+        "#indexKey2",
+        'input[placeholder*="关键词"]',
+        'input[placeholder*="快速查找"]',
+        'input[placeholder*="材料名称"]',
+        ".search-keywords input",
+        ".cailiao-keywords input",
+        "input.el-input__inner",
+    ):
+        try:
+            loc = page.locator(sel).first
+            if loc.count() == 0 or not loc.is_visible(timeout=600):
+                continue
+            loc.click(timeout=1200)
+            try:
+                loc.fill("")
+            except Exception:
+                loc.press("Control+a")
+                loc.press("Backspace")
+            loc.fill(q)
+            submitted = False
+            for bsel in (
+                ".search-btn",
+                ".module-search .search-btn",
+                "div.search-btn",
+                ".search-icon",
+                "button:has-text('搜索')",
+            ):
+                try:
+                    btn = page.locator(bsel).first
+                    if btn.count() > 0 and btn.is_visible(timeout=400):
+                        btn.click(timeout=1500)
+                        submitted = True
+                        break
+                except Exception:
+                    continue
+            if not submitted:
+                loc.press("Enter")
+            # 短等结果刷新即可，不要 2s+（SPA 可能跳登录）
+            page.wait_for_timeout(1200)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _zaojiatong_try_reveal_list_prices(page, max_clicks: int = 6) -> None:
+    """
+    列表价列「查看价格」：登录后点击可就地展开数字，减少逐条打开详情链接。
+    若点击触发登录墙则立即停止。
+    """
+    try:
+        nodes = page.locator("text=查看价格")
+        n = min(int(nodes.count() or 0), max_clicks)
+    except Exception:
+        return
+    for i in range(n):
+        try:
+            el = nodes.nth(i)
+            if not el.is_visible(timeout=400):
+                continue
+            el.click(timeout=1200)
+            page.wait_for_timeout(600)
+            state, _ = _zaojiatong_page_state(page)
+            if state == "need_login":
+                return
+            # 点开后可能变成弹层，Esc 关掉以免挡下一行
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
+        except Exception:
+            continue
+
+
+def _zaojiatong_extract_after_inpage_search(
+    page, query: str, must: list[str], min_score: int, spec: PlatformSpec
+) -> list[dict[str, Any]]:
+    """同页搜完立刻抽结果（优先 DOM，失败再用当前 HTML SSR 解析）。"""
+    page.wait_for_timeout(900)
+    rows = _zaojiatong_extract_dom_rows(page)
+    if rows:
+        cands = _zaojiatong_rows_to_candidates(page, rows, query, must, min_score, spec)
+        if cands:
+            return cands
+    try:
+        html = page.content()
+        parsed = parse_zaojiatong_ssr_html(html)
+        if parsed:
+            return _zaojiatong_rows_to_candidates(page, parsed, query, must, min_score, spec)
+    except Exception:
+        pass
+    return []
+
+
+def _search_zaojiatong(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
+    """
+    造价通专用：委托 adapters.zaojiatong（纯 HTTP SSR，禁止 page.goto 搜价）。
+
+    规则见 adapters/zaojiatong.py 文件头 R1–R7。
+    """
+    from .adapters import zaojiatong as zjt
+
+    # 可选：装上路由守卫，防止其它逻辑误把页面带去登录
+    try:
+        zjt.install_browser_guards(page)
+    except Exception:
+        pass
+    return zjt.search(page, query, must, timeout_ms, min_score, spec)
+
+
+# 兼容旧测试 / 外部引用：SSR 解析入口指向专用适配器
+def parse_zaojiatong_ssr_html(html: str) -> list[dict[str, Any]]:  # type: ignore[no-redef]
+    from .adapters import zaojiatong as zjt
+
+    return zjt.parse_list_html(html)
+
+
 def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_score: int, spec: PlatformSpec):
     """
     通用搜索：慧讯(iccchina)、领材(hylcw) 等非广材站。
@@ -1489,7 +2318,7 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
         )
     cands = _filter_cands(goods, must, min_score, spec.id, contains)
     # 领材/慧讯列表价常藏在表格，过滤过严时放宽：有名有链即可进详情抽价
-    if not cands and goods and spec.id in ("lingcai", "huixun", "guangcai", "yize"):
+    if not cands and goods and spec.id in ("lingcai", "huixun", "guangcai", "yize", "zaojiatong"):
         loose = []
         for g in goods:
             href = g.get("href") or ""
@@ -1499,8 +2328,10 @@ def _search_generic(page, query: str, must: list[str], timeout_ms: int, min_scor
             price = parse_price(g.get("priceText"))
             sc = score_title(name + " " + href, must)
             if sc < 1 and must:
-                # 至少命中 must 里一个字或直接放行进详情（造价站已按 keyword 过滤）
-                if not any((m or "")[:2] in name for m in must if m):
+                # 造价站列表本身已按关键词过滤：名称 ≥2 字有链接就放行，
+                # 正式精度交给 strict_name_spec_match（避免「人能搜到程序 0 条」）
+                name_ns = re.sub(r"\s+", "", name)
+                if len(name_ns) < 2:
                     continue
             loose.append(
                 {
@@ -1557,6 +2388,7 @@ HANDLERS: dict[str, Callable] = {
     "lingcai": _search_lingcai,
     "huixun": _search_huixun,
     "yize": _search_yize,
+    "zaojiatong": _search_zaojiatong,
     "generic": _search_generic,
 }
 
@@ -1573,6 +2405,9 @@ def search_on_platform(
     """
     Returns (candidates_sorted, status)
     status: ok | need_login | unknown_platform | bad_config | error:...
+
+    返回值保持 list[dict] 以兼容现有 inquiry。
+    需要 CandidateRecord 时请用 candidate_adapt.search_as_records。
     """
     pid = normalize_platform_id(platform_id)
     spec = registry.get(pid)
@@ -1604,6 +2439,8 @@ def search_on_platform(
         handler_name = "lingcai"
     elif pid == "yize":
         handler_name = "yize"
+    elif pid == "zaojiatong":
+        handler_name = "zaojiatong"
     try:
         fn = HANDLERS[handler_name]
         result, status = fn(page, query, must, timeout_ms, min_score, spec)
@@ -1611,8 +2448,14 @@ def search_on_platform(
             return [], status
         # specialized handlers may return single best historically — normalize to list
         if isinstance(result, dict):
-            return [result], status
-        return list(result), status
+            cands = [result]
+        else:
+            cands = list(result)
+        # Phase2：为每条候选补 platform 字段（不改其它结构）
+        for c in cands:
+            if isinstance(c, dict) and not c.get("platform"):
+                c["platform"] = pid
+        return cands, status
     except Exception as e:
         return [], f"error:{type(e).__name__}:{e}"
 

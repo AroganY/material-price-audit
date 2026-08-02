@@ -34,11 +34,13 @@ CHECK_URLS: dict[str, str] = {
     "huixun": "https://services.iccchina.com/products",
     # 易择：登录后进信息价首页；有「我的易择/服务有效期」等线索
     "yize": "https://www.easybii.com/P4-3-info-price-home.html",
+    # 造价通：登录后进广东分站市场价列表
+    "zaojiatong": "https://gd.zjtcn.com/shichangjia/list/c_t_d_k.html",
     "jd": "https://www.jd.com/",
     "1688": "https://www.1688.com/",
 }
 
-MEMBERSHIP_PLATFORMS = frozenset({"guangcai", "lingcai", "huixun", "yize"})
+MEMBERSHIP_PLATFORMS = frozenset({"guangcai", "lingcai", "huixun", "yize", "zaojiatong"})
 
 # 页面可见文案（SPA 常延迟渲染，不能作为唯一证据）
 _POSITIVE_HINTS: dict[str, tuple[str, ...]] = {
@@ -85,6 +87,17 @@ _POSITIVE_HINTS: dict[str, tuple[str, ...]] = {
         "个人中心",
         "提交人工询价",
     ),
+    "zaojiatong": (
+        "退出登录",
+        "退出",
+        "我的造价通",
+        "会员中心",
+        "个人中心",
+        "账户中心",
+        "我的收藏",
+        "云造价",
+        "退出账号",
+    ),
     "jd": ("退出登录", "退出", "我的京东", "我的订单", "你好，"),
     "1688": ("退出登录", "退出", "我的阿里", "买家工作台", "卖家工作台", "已登录"),
 }
@@ -94,6 +107,7 @@ _NEGATIVE_HINTS: dict[str, tuple[str, ...]] = {
     "lingcai": ("账号登录", "手机验证码登录", "登录后查看", "请先登录"),
     "huixun": ("微信扫码登录", "账号密码登录", "免费注册", "登录后可见"),
     "yize": ("密码登录", "免密登录", "立即登录", "申请试用", "还没有账号"),
+    "zaojiatong": ("会员登录", "请输入密码", "请输入手机号/账号", "扫码登录", "登录后查看", "请先登录"),
     "jd": ("扫码登录", "账户登录"),
     "1688": ("扫码登录", "密码登录", "免费注册"),
 }
@@ -103,6 +117,7 @@ DOMAIN_HINT: dict[str, tuple[str, ...]] = {
     "lingcai": ("hylcw.cn",),
     "huixun": ("iccchina.com",),
     "yize": ("easybii.com",),
+    "zaojiatong": ("zjtcn.com", "member.zjtcn.com"),
     "jd": ("jd.com",),
     "1688": ("1688.com", "taobao.com"),
 }
@@ -113,12 +128,27 @@ _AUTH_COOKIE_NAMES: dict[str, tuple[str, ...]] = {
     "lingcai": (
         "token",
         "access_token",
+        "accesstoken",
         "usertoken",
+        "userid",
+        "user_id",
+        "uid",
         "jsessionid",
         "authorization",
         "hy_token",
+        "hy_user",
         "auth_token",
         "sessionid",
+        "lc_token",
+        "lc_user",
+        "memberid",
+        "member_id",
+        "login_token",
+        "userinfo",
+        "username",
+        "user_name",
+        "phone",
+        "mobile",
     ),
     "huixun": (
         "has_logined",
@@ -139,6 +169,39 @@ _AUTH_COOKIE_NAMES: dict[str, tuple[str, ...]] = {
         "authorization",
         "easybii",
         "login",
+    ),
+    # 注意：匿名访客也会下发 jsid，不能当登录证据，否则「已登录」校验误过，
+    # 随后每条搜索/详情被踢回登录页（用户感觉：每次新链接都要再登）。
+    # 实测 .browser-profile 登录后常见：token / userId / username / user_uid / remUser / userLoginCookie
+    # 注意：匿名访客也会下发 jsid，绝不能收录；仅 user_name 也不算已登录。
+    "zaojiatong": (
+        "token",
+        "userid",
+        "user_id",
+        "user_uid",
+        "username",
+        "userlogincookie",
+        "remuser",
+        "remlogintime",
+        "remme",
+        "rememberme",
+        "uid",
+        "employeeid",
+        "tenantid",
+        "applicationid",
+        "usertag",
+        "access_token",
+        "usertoken",
+        "memberid",
+        "member_id",
+        "jsessionid",
+        "sessionid",
+        "authorization",
+        "loginname",
+        "curruser",
+        "userinfo",
+        "zjt_token",
+        "zjt_uid",
     ),
     "jd": ("pin", "thor", "unick", "pt_key", "pt_pin"),
     "1688": ("__cn_logon__", "cookie2", "lid", "_m_h5_tk"),
@@ -312,9 +375,16 @@ _SESSION_CONFLICT_HINTS = (
     "已被您登录",
     "将下线已登录人",
     "仅人工询价登录",
+    # 造价通：账号已在别处在线（MsgBox.Confirm / ConfirmBoxSmall）
+    "正在登录使用中",
+    "强行登录",
+    "是否继续",
+    "确认当前使用者是否仍需使用账号",
+    "更换其他账号登录",
+    "请留意使用者是否正在发布询价",
 )
 # 优先「继续登录」（完整进产品库）；次选「仅人工询价登录」
-_SESSION_CONFLICT_ACTIONS = ("继续登录", "仅人工询价登录")
+_SESSION_CONFLICT_ACTIONS = ("继续登录", "仅人工询价登录", "继续操作")
 
 
 def page_shows_one_click_login(page) -> bool:
@@ -363,7 +433,14 @@ def page_shows_session_conflict(page) -> bool:
 def _click_visible_label(page, label: str) -> bool:
     """点可见按钮/文案（精确优先）。"""
     # 慧讯弹窗按钮：.ivu-btn（勿用 newlogin-btn，那是一键登录主按钮）
+    # 造价通 MsgBox：#mb_btn_ok value=继续登录
     selectors = [
+        f"#mb_btn_ok[value='{label}']",
+        f"#mb_btn_ok_BoxSmall[value='{label}']",
+        f"#mb_btn_ok_Box[value='{label}']",
+        f"input#mb_btn_ok[value='{label}']",
+        f"input[type='button'][value='{label}']",
+        f"input[type='submit'][value='{label}']",
         f".ivu-modal-footer button:has-text('{label}')",
         f".ivu-modal button:has-text('{label}')",
         f".ivu-modal-wrap button:has-text('{label}')",
@@ -373,6 +450,8 @@ def _click_visible_label(page, label: str) -> bool:
         f"//button[normalize-space(.)='{label}']",
         f"//button[contains(normalize-space(.), '{label}')]",
         f"//span[normalize-space(.)='{label}']/ancestor::button[1]",
+        f"//input[@type='button' and @value='{label}']",
+        f"//input[@type='submit' and @value='{label}']",
     ]
     for sel in selectors:
         try:
@@ -481,6 +560,103 @@ def try_handle_huixun_session_conflict(page) -> tuple[bool, str]:
                 pass
             return True, label
     return False, "检测到账号冲突弹窗但未能点击确认"
+
+
+def install_zaojiatong_dialog_auto_accept(page) -> None:
+    """
+    造价通登录链路里，服务端 state=islogin 时会走浏览器原生 confirm()。
+    自动点「确定」= 同意踢掉其它端（isKick=true 再登一次）。
+    幂等：重复安装无妨。
+    """
+    if getattr(page, "_zjt_dialog_hooked", False):
+        return
+
+    def _on_dialog(dialog) -> None:
+        try:
+            msg = dialog.message or ""
+        except Exception:
+            msg = ""
+        # 仅自动接受「已在使用 / 强行登录」类；其它 alert 也 accept 以免卡住
+        try:
+            if dialog.type in ("confirm", "alert", "prompt"):
+                dialog.accept()
+            else:
+                dialog.dismiss()
+        except Exception:
+            try:
+                dialog.accept()
+            except Exception:
+                pass
+        # 记在 page 上方便调试
+        try:
+            page._zjt_last_dialog = msg[:200]
+        except Exception:
+            pass
+
+    try:
+        page.on("dialog", _on_dialog)
+        page._zjt_dialog_hooked = True
+    except Exception:
+        pass
+
+
+def try_handle_zaojiatong_session_conflict(page) -> tuple[bool, str]:
+    """
+    造价通：账号【xxx】正在登录使用中 → 弹窗「取消 / 继续登录」。
+
+    这不是「你没登录」，而是**同一账号已在别处在线**（工具浏览器上次会话、
+    系统 Chrome、另一台电脑等）。点「继续登录」会踢掉旧端、在本浏览器接管。
+    """
+    install_zaojiatong_dialog_auto_accept(page)
+
+    appeared = False
+    for _ in range(16):
+        if page_shows_session_conflict(page):
+            appeared = True
+            break
+        # DOM id 探测（MsgBox）
+        try:
+            if page.locator("#mb_btn_ok, #mb_btn_ok_BoxSmall, #mb_con").count() > 0:
+                appeared = True
+                break
+        except Exception:
+            pass
+        try:
+            page.wait_for_timeout(250)
+        except Exception:
+            break
+    if not appeared:
+        return False, ""
+
+    # 优先点造价通 MsgBox 的「继续登录」
+    for sel in (
+        "#mb_btn_ok",
+        "#mb_btn_ok_BoxSmall",
+        "#mb_btn_ok_Box",
+        "input#mb_btn_ok",
+        "input[value='继续登录']",
+    ):
+        try:
+            loc = page.locator(sel).first
+            if loc.count() > 0 and loc.is_visible(timeout=500):
+                loc.click(timeout=4000, force=True)
+                try:
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    pass
+                return True, "继续登录"
+        except Exception:
+            continue
+
+    for label in ("继续登录", "继续操作"):
+        if _click_visible_label(page, label):
+            try:
+                page.wait_for_timeout(1500)
+            except Exception:
+                pass
+            return True, label
+
+    return False, "检测到造价通「账号使用中」弹窗但未能点继续登录"
 
 
 def _wait_left_login_page(page, *, timeout_ms: int = 12000) -> bool:
@@ -682,6 +858,108 @@ def try_resume_huixun_session(page, *, timeout_ms: int = 20000) -> tuple[bool, s
     return False, f"慧讯一键登录未成功：{reason}"
 
 
+def probe_zaojiatong_market_session(page, timeout_ms: int = 30000) -> tuple[bool, str]:
+    """
+    造价通会话探针。
+
+    实测：
+    - SPA 会把未登录的 page.goto 踢到登录页（0.3s 内），不能单靠最终 URL 判死；
+    - 搜价主路径已改为 HTTP 抓 SSR，**不依赖**页面是否被踢；
+    - 要「能看见数字价」仍需登录 Cookie（token/userId 等）。
+
+    通过条件（满足其一）：
+    1) 有有效登录 Cookie（token/userId/…）；
+    2) 浏览器打开市场价后 ≥3s 仍停在分站且列表可见（真·已登录未踢）。
+    """
+    hits = auth_cookie_hits(page, "zaojiatong")
+    if hits:
+        # 再用 SSR 确认站点可达
+        check = CHECK_URLS.get("zaojiatong") or (
+            "https://gd.zjtcn.com/shichangjia/list/c_t_d_k.html"
+        )
+        try:
+            resp = page.context.request.get(check, timeout=timeout_ms)
+            text = resp.text() if resp else ""
+            if text and ("material-title" in text or "shichangjia" in text):
+                return True, f"已检测到登录 Cookie {hits[:3]}，SSR 列表可达"
+        except Exception:
+            return True, f"已检测到登录 Cookie {hits[:3]}"
+        return True, f"已检测到登录 Cookie {hits[:3]}"
+
+    check = CHECK_URLS.get("zaojiatong") or (
+        "https://gd.zjtcn.com/shichangjia/list/c_t_d_k.html"
+    )
+    # 无 Cookie：试一次页面是否「登完后不会被踢」（真登录态）
+    try:
+        page.goto(check, wait_until="domcontentloaded", timeout=timeout_ms)
+    except Exception as e:
+        return False, (
+            f"打开市场价失败: {e}。"
+            "请在本工具弹出的浏览器内登录造价通（勾选「30天内自动登录」），再点校验"
+        )
+
+    kicked = False
+    for _ in range(5):
+        try:
+            page.wait_for_timeout(700)
+        except Exception:
+            break
+        url = _safe(page, "url").lower()
+        title = _safe(page, "title")
+        if "member.zjtcn.com" in url or "/common/login" in url or title.strip().startswith(
+            "会员登录"
+        ):
+            kicked = True
+            break
+
+    hits2 = auth_cookie_hits(page, "zaojiatong")
+    if hits2:
+        return True, f"登录后已写入 Cookie {hits2[:3]}"
+
+    if kicked:
+        return False, (
+            "市场价被踢回登录页，且无 token/userId 等登录 Cookie。"
+            "请务必在【本工具弹出的浏览器】里登录（不要用系统自带 Chrome），"
+            "登录页勾选「30天内自动登录」，成功后应跳到材料列表再点校验。"
+            "说明：未登录时程序仍可用 SSR 搜名称规格，但价格需会员会话。"
+        )
+
+    # 没被踢且列表在
+    try:
+        n = page.locator("a.material-title, tbody tr").count()
+    except Exception:
+        n = 0
+    if n and n > 0:
+        return True, "市场价页保持打开且列表可见（未检测到典型 Cookie，请留意价格是否可见）"
+
+    return False, (
+        "未检测到造价通登录会话。请在工具弹出的浏览器完成登录后再校验。"
+    )
+
+
+def try_resume_zaojiatong_session(
+    page, timeout_ms: int = 25000
+) -> tuple[bool, str]:
+    """
+    造价通：登录在 member.zjtcn.com，搜价在 gd.zjtcn.com。
+    1) 先处理「账号正在使用中 → 继续登录」弹窗（多端互踢）；
+    2) 再以市场价探针确认会话。
+    """
+    install_zaojiatong_dialog_auto_accept(page)
+    handled, label = try_handle_zaojiatong_session_conflict(page)
+    if handled:
+        # 点完继续登录后等跳转/写 Cookie
+        try:
+            page.wait_for_timeout(2000)
+        except Exception:
+            pass
+        ok, reason = probe_zaojiatong_market_session(page, timeout_ms=timeout_ms)
+        if ok:
+            return True, f"已自动「{label}」并确认会话：{reason}"
+        return False, f"已点「{label}」但会话仍未生效：{reason}"
+    return probe_zaojiatong_market_session(page, timeout_ms=timeout_ms)
+
+
 def ensure_logged_in_or_resume(
     page,
     platform_id: str,
@@ -694,6 +972,8 @@ def ensure_logged_in_or_resume(
 
     慧讯特殊：关窗重开后 cookie 仍在，但页面卡在「一键登录」——
     此时不能仅凭 Cookie 判通过，必须先尝试点按钮并进入产品库。
+
+    造价通特殊：登录在 member、搜价在 gd 分站，需把会话落到分站，避免每条新链接再登。
     """
     pid = (platform_id or "").lower()
     if pid == "huixun":
@@ -714,6 +994,18 @@ def ensure_logged_in_or_resume(
             if ok and not looks_like_hard_login_url(_safe(page, "url")):
                 return True, reason
             return False, f"{r2}" if r2 else reason
+
+    # 造价通：先处理多端互踢弹窗，再探针
+    if pid == "zaojiatong":
+        install_zaojiatong_dialog_auto_accept(page)
+        # 登录页若正在弹「账号使用中」，先点继续登录
+        if page_shows_session_conflict(page) or "login" in _safe(page, "url").lower():
+            try_handle_zaojiatong_session_conflict(page)
+        resumed, r2 = try_resume_zaojiatong_session(page)
+        if resumed:
+            return True, r2
+        # 用户已点确认时仍失败：给出可操作原因，不要凭 Cookie 假通过
+        return False, r2
 
     ok, reason = verify_logged_in(
         page, pid, login_url, user_confirmed=user_confirmed
@@ -769,11 +1061,16 @@ def verify_logged_in(
     if pid == "huixun" and page_shows_one_click_login(page):
         return False, "慧讯页面出现「一键登录」，会话未激活"
 
-    if title.strip() in ("登录", "用户登录", "会员登录") or re.match(
-        r"^登录[-_|]", title.strip()
+    if (
+        title.strip() in ("登录", "用户登录", "会员登录")
+        or re.match(r"^登录[-_|]", title.strip())
+        or title.strip().startswith("会员登录")
     ):
         if pid == "huixun":
             return False, f"慧讯标题仍是登录页: {title[:40]}"
+        # 造价通：标题「会员登录_造价通」时，即使有弱 Cookie 也不放行，必须落到分站
+        if pid == "zaojiatong":
+            return False, f"造价通标题仍是登录页: {title[:40]}"
         if has_session and user_confirmed:
             return True, f"标题像登录页但检测到会话 Cookie: {cookie_hits[:3]}"
         return False, f"标题仍是登录页: {title[:40]}"

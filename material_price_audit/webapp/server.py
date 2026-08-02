@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
+import os
 import threading
+import time
 import webbrowser
 import zipfile
 from io import BytesIO
@@ -31,6 +34,41 @@ from .login_panel import LOGIN_PANEL
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 MAX_JSON_BYTES = 1 * 1024 * 1024
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+SERVER_PROCESS_STARTED_AT = time.time()
+_CORE_SOURCE_FILES = (
+    Path(__file__),
+    Path(__file__).with_name("runner.py"),
+    Path(__file__).parents[1] / "inquiry.py",
+    Path(__file__).parents[1] / "scheduler.py",
+    Path(__file__).parents[1] / "adapters" / "zaojiatong.py",
+    STATIC_DIR / "index.html",
+)
+
+
+def _source_fingerprint() -> str:
+    """轻量源码指纹：用来发现“页面进程没重启，还在跑旧内存代码”。"""
+    parts: list[str] = []
+    for path in _CORE_SOURCE_FILES:
+        try:
+            st = path.stat()
+            parts.append(f"{path.name}:{st.st_size}:{st.st_mtime_ns}")
+        except OSError:
+            parts.append(f"{path.name}:missing")
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+SOURCE_FINGERPRINT_AT_START = _source_fingerprint()
+
+
+def _service_identity() -> dict[str, Any]:
+    current = _source_fingerprint()
+    return {
+        "pid": os.getpid(),
+        "process_started_at": SERVER_PROCESS_STARTED_AT,
+        "source_fingerprint": SOURCE_FINGERPRINT_AT_START,
+        "current_source_fingerprint": current,
+        "restart_required": current != SOURCE_FINGERPRINT_AT_START,
+    }
 
 
 class RequestBodyError(ValueError):
@@ -52,7 +90,7 @@ def _platform_catalog(config: dict[str, Any] | None = None) -> list[dict[str, An
             "id": platform_id,
             "name": registry[platform_id].name,
             "login_url": registry[platform_id].login_url,
-            "cost": platform_id in ("guangcai", "huixun", "lingcai", "yize"),
+            "cost": platform_id in ("guangcai", "huixun", "lingcai", "yize", "zaojiatong"),
             "custom": platform_id not in BUILTIN,
         }
         for platform_id in platform_ids
@@ -205,6 +243,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_error(404)
             return _serve_file(self, static_path)
 
+        if path == "/api/health":
+            return _json_response(
+                self,
+                200,
+                {"ok": True, "version": __version__, **_service_identity()},
+            )
+
         if path == "/api/state":
             cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
             settings = get_user_settings(root, cfg)
@@ -223,6 +268,7 @@ class Handler(BaseHTTPRequestHandler):
             # platforms catalog
             snap["catalog"] = _platform_catalog(cfg)
             snap["version"] = __version__
+            snap["service"] = _service_identity()
             snap["login_signal"] = str(agent_login_signal_path(root))
             # list input files
             inp = root / "data" / "input"
@@ -237,6 +283,18 @@ class Handler(BaseHTTPRequestHandler):
             snap["input_files"] = files
             # AI / LLM 配置（Key 不回传明文）
             snap["llm"] = settings.public_llm_dict()
+            snap["baidu_fallback_enabled"] = bool(
+                getattr(settings, "baidu_fallback_enabled", False)
+            )
+            snap["default_region"] = dict(
+                getattr(settings, "default_region", None) or {}
+            )
+            snap["region_strategy"] = (
+                getattr(settings, "region_strategy", None) or "strict_city"
+            )
+            snap["region_required"] = bool(
+                getattr(settings, "region_required", False)
+            )
             # 登录面板独立状态（snapshot 内已带 login_panel，此处保证有 platforms 时初始化）
             if snap.get("platforms") and not (snap.get("login_panel") or {}).get("platforms"):
                 LOGIN_PANEL.reset_for_platforms(snap["platforms"])
@@ -254,6 +312,32 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/download/rfq":
             p = Path(STATE.rfq_path or (root / "data/output/rfq.xlsx"))
             return _serve_file(self, p, download_name="rfq.xlsx")
+        if path == "/api/history":
+            from .job_history import load_history
+
+            jobs = load_history(root, limit=50)
+            lite = [
+                {
+                    "id": j.get("id"),
+                    "ts": j.get("ts"),
+                    "phase": j.get("phase"),
+                    "platforms": j.get("platforms"),
+                    "full_k": j.get("full_k"),
+                    "partial": j.get("partial"),
+                    "need_review": j.get("need_review"),
+                    "no_match": j.get("no_match"),
+                    "tokens": j.get("tokens"),
+                    "items_done": j.get("items_done"),
+                    "message": j.get("message"),
+                    "result_path": j.get("result_path"),
+                    "rfq_path": j.get("rfq_path"),
+                    "has_files": bool(j.get("result_path") or j.get("rfq_path")),
+                }
+                for j in jobs
+            ]
+            return _json_response(
+                self, 200, {"ok": True, "jobs": lite, "total": len(lite)}
+            )
 
         self.send_error(404)
 
@@ -320,8 +404,27 @@ class Handler(BaseHTTPRequestHandler):
             skip_login = bool(data.get("skip_login"))
             llm_payload = data.get("llm") if isinstance(data.get("llm"), dict) else None
             match_mode = str(data.get("match_mode") or "").strip().lower() or None
+            baidu_fb = data.get("baidu_fallback_enabled")
+            if baidu_fb is None:
+                baidu_fb_arg = None
+            else:
+                baidu_fb_arg = bool(baidu_fb)
+            def_reg = data.get("default_region")
+            if not isinstance(def_reg, dict):
+                def_reg = None
+            reg_strat = data.get("region_strategy")
+            reg_req = data.get("region_required")
             runner.apply_settings(
-                platforms, quotes, limit, skip_login, llm=llm_payload, match_mode=match_mode
+                platforms,
+                quotes,
+                limit,
+                skip_login,
+                llm=llm_payload,
+                match_mode=match_mode,
+                baidu_fallback_enabled=baidu_fb_arg,
+                default_region=def_reg,
+                region_strategy=str(reg_strat) if reg_strat is not None else None,
+                region_required=bool(reg_req) if reg_req is not None else None,
             )
             snap = STATE.snapshot()
             cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
@@ -335,6 +438,19 @@ class Handler(BaseHTTPRequestHandler):
                     **snap,
                     "quotes_per_item": STATE.quotes_per_item,
                     "match_mode": getattr(STATE, "match_mode", None) or settings.match_mode,
+                    "baidu_fallback_enabled": bool(
+                        getattr(settings, "baidu_fallback_enabled", False)
+                    ),
+                    "default_region": dict(
+                        getattr(settings, "default_region", None) or {}
+                    ),
+                    "region_strategy": getattr(
+                        settings, "region_strategy", None
+                    )
+                    or "strict_city",
+                    "region_required": bool(
+                        getattr(settings, "region_required", False)
+                    ),
                     "limit": STATE.limit,
                     "platforms": list(STATE.platforms),
                     "llm": settings.public_llm_dict(),
@@ -351,10 +467,123 @@ class Handler(BaseHTTPRequestHandler):
             public = runner.apply_llm_settings(llm_payload)
             return _json_response(self, 200, {"ok": True, "llm": public})
 
+        if path == "/api/history/load":
+            import copy
+
+            from .job_history import get_job
+
+            job_id = str((data or {}).get("id") or "")
+            job = get_job(root, job_id) if job_id else None
+            if not job:
+                return _json_response(self, 404, {"ok": False, "error": "任务不存在"})
+            # 深拷贝；不写回 STATE，避免历史结果污染「当前任务」面板
+            item_rows = copy.deepcopy(list(job.get("item_results") or []))
+            payload = {
+                "ok": True,
+                "viewing_history": True,
+                "phase": "history",
+                "run_id": str(job.get("run_id") or job.get("id") or ""),
+                "full_k": int(job.get("full_k") or 0),
+                "partial": int(job.get("partial") or 0),
+                "need_review": int(job.get("need_review") or 0),
+                "no_match": int(job.get("no_match") or 0),
+                "message": str(job.get("message") or "历史任务"),
+                "result_path": str(job.get("result_path") or ""),
+                "rfq_path": str(job.get("rfq_path") or ""),
+                "evidence_path": str(job.get("evidence_path") or ""),
+                "item_results": item_rows,
+                "result_by_sheet": copy.deepcopy(list(job.get("result_by_sheet") or [])),
+                "job": {
+                    "id": job.get("id"),
+                    "ts": job.get("ts"),
+                    "message": job.get("message"),
+                    "run_id": job.get("run_id") or job.get("id"),
+                    "items_done": len(item_rows),
+                    "phase": job.get("phase") or "done",
+                },
+            }
+            return _json_response(self, 200, payload)
+
+        if path == "/api/open-url":
+            # 用脚本浏览器（.browser-profile 登录态）打开证据链，避免系统浏览器重登
+            url = str((data or {}).get("url") or "").strip()
+            if not url or not (url.startswith("http://") or url.startswith("https://")):
+                return _json_response(
+                    self, 400, {"ok": False, "error": "请提供 http(s) 链接"}
+                )
+            if STATE.phase in ("running", "login", "paused"):
+                return _json_response(
+                    self,
+                    409,
+                    {
+                        "ok": False,
+                        "error": "询价进行中，请结束后再打开证据（避免抢浏览器）",
+                    },
+                )
+            result = LOGIN_PANEL.open_url(url)
+            code = 200 if result.get("ok") else 400
+            return _json_response(self, code, result)
+
+        if path == "/api/history/delete":
+            from .job_history import delete_job, delete_jobs
+
+            payload = data if isinstance(data, dict) else {}
+            delete_files = bool(payload.get("delete_files"))
+            # 单条 id 或批量 ids
+            ids = payload.get("ids")
+            if isinstance(ids, list) and ids:
+                result = delete_jobs(
+                    root, [str(x) for x in ids], delete_files=delete_files
+                )
+                return _json_response(self, 200, result)
+            job_id = str(payload.get("id") or "")
+            if not job_id:
+                return _json_response(
+                    self, 400, {"ok": False, "error": "请提供 id 或 ids"}
+                )
+            result = delete_job(root, job_id, delete_files=delete_files)
+            code = 200 if result.get("ok") else 404
+            return _json_response(self, code, result)
+
+        if path == "/api/history/clear":
+            from .job_history import clear_history
+
+            payload = data if isinstance(data, dict) else {}
+            delete_files = bool(payload.get("delete_files"))
+            result = clear_history(root, delete_files=delete_files)
+            return _json_response(self, 200, result)
+
+        if path == "/api/llm/ready":
+            # 运行前 AI 是否真的能用（可选 probe 真连通）
+            from ..schema_map import check_llm_readiness
+
+            cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
+            settings = get_user_settings(root, cfg)
+            probe = False
+            if isinstance(data, dict):
+                probe = bool(data.get("probe"))
+                if "enabled" in data:
+                    settings.llm_enabled = bool(data.get("enabled"))
+                if data.get("api_base") is not None:
+                    settings.llm_api_base = str(data.get("api_base") or "").strip()
+                if data.get("model") is not None:
+                    settings.llm_model = str(data.get("model") or "gpt-4o-mini").strip()
+                if data.get("api_key_env") is not None:
+                    settings.llm_api_key_env = str(data.get("api_key_env") or "OPENAI_API_KEY")
+                if data.get("api_key"):
+                    settings.llm_api_key = str(data.get("api_key")).strip()
+                if data.get("use_for") is not None and isinstance(data.get("use_for"), list):
+                    settings.llm_use_for = [str(x) for x in data["use_for"]]
+            # 运行时开关：询价页关掉 AI 则视为不想用
+            if isinstance(data, dict) and "runtime_enabled" in data:
+                if not bool(data.get("runtime_enabled")):
+                    settings.llm_enabled = False
+            result = check_llm_readiness(settings, probe=probe)
+            return _json_response(self, 200, {"ok": True, **result})
+
         if path == "/api/llm/test":
             # 可用请求体临时覆盖 Key（不落盘）做连通性测试
             from ..schema_map import test_llm_connection
-            from ..settings_store import UserSettings
 
             cfg = load_config(root / "config.yaml" if (root / "config.yaml").exists() else None)
             settings = get_user_settings(root, cfg)
@@ -372,8 +601,31 @@ class Handler(BaseHTTPRequestHandler):
                 if data.get("api_key"):
                     settings.llm_api_key = str(data.get("api_key")).strip()
             result = test_llm_connection(settings)
+            # 成功则记入本会话，供开始询价时复用（免重复探测）
+            if result.get("ok"):
+                try:
+                    STATE.llm_status = dict(STATE.llm_status or {})
+                    STATE.llm_status["last_probe_ok"] = True
+                    STATE.llm_status["last_probe_ts"] = __import__("time").time()
+                    STATE.llm_status["last_probe_model"] = settings.llm_model or ""
+                    STATE.log(
+                        f"[AI·探测] 连接成功 model={settings.llm_model or '?'} — "
+                        f"可以开着 AI 跑询价"
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                    STATE.llm_status = dict(STATE.llm_status or {})
+                    STATE.llm_status["last_probe_ok"] = False
+                    STATE.llm_status["last_probe_error"] = result.get("error") or ""
+                    STATE.log(
+                        f"[AI·探测] 失败 — {result.get('error') or '未知错误'}；"
+                        f"请勿在未修好前依赖 AI"
+                    )
+                except Exception:
+                    pass
             return _json_response(self, 200 if result.get("ok") else 400, result)
-
         if path == "/api/login/init":
             plats = data.get("platforms") or STATE.platforms
             if isinstance(plats, str):
@@ -488,6 +740,30 @@ class Handler(BaseHTTPRequestHandler):
             result = STATE.set_llm_runtime(bool(data.get("enabled")))
             return _json_response(self, 200, {**result, **STATE.snapshot()})
 
+        if path == "/api/name-alias/confirm":
+            # 人工确认品名同义 / 负向映射 → 本地库 Token=0 学习
+            from ..name_aliases import confirm_different_names, confirm_same_names
+
+            same = bool((data or {}).get("same", True))
+            a = str((data or {}).get("inquiry_name") or (data or {}).get("a") or "").strip()
+            b = str(
+                (data or {}).get("candidate_name") or (data or {}).get("b") or ""
+            ).strip()
+            if not a or not b:
+                return _json_response(
+                    self, 400, {"ok": False, "error": "需要 inquiry_name 与 candidate_name"}
+                )
+            try:
+                if same:
+                    result = confirm_same_names(
+                        a, b, root, source="user_confirmed", confidence=1.0
+                    )
+                else:
+                    result = confirm_different_names(a, b, root, source="user_confirmed")
+                return _json_response(self, 200, result)
+            except Exception as e:
+                return _json_response(self, 500, {"ok": False, "error": str(e)})
+
         if path == "/api/start":
             if STATE.phase in ("running", "paused"):
                 return _json_response(
@@ -590,6 +866,64 @@ class Handler(BaseHTTPRequestHandler):
             )
             # apply_settings 可能把 first_n 又写一遍；再应用一次 scope 保证 sheets/ids 不丢
             runner.apply_item_scope(mode, scope_n, list(scope_sheets), list(scope_ids))
+
+            # —— AI 运行前硬检查：开了却不能用必须拦住 ——
+            try:
+                from ..schema_map import check_llm_readiness
+
+                cfg_ai = load_config(
+                    root / "config.yaml" if (root / "config.yaml").exists() else None
+                )
+                st_ai = get_user_settings(root, cfg_ai)
+                runtime_ai = (data or {}).get("llm_enabled")
+                if runtime_ai is not None:
+                    want_ai = bool(runtime_ai)
+                else:
+                    want_ai = bool(st_ai.llm_enabled)
+                st_ai.llm_enabled = want_ai
+                force_rules = bool((data or {}).get("llm_force_rules"))
+                skip_probe = bool((data or {}).get("llm_skip_probe"))
+                last_ok = bool((STATE.llm_status or {}).get("last_probe_ok"))
+                last_ts = float((STATE.llm_status or {}).get("last_probe_ts") or 0)
+                recent_ok = last_ok and (time.time() - last_ts < 600)
+                need_probe = (
+                    want_ai and not force_rules and not skip_probe and not recent_ok
+                )
+                ready = check_llm_readiness(st_ai, probe=need_probe)
+                if want_ai and not ready.get("ok"):
+                    if force_rules:
+                        with STATE.lock:
+                            STATE.llm_runtime_enabled = False
+                        STATE.log(
+                            f"[AI·拦截] 用户选择纯规则继续 — {ready.get('summary')}"
+                        )
+                    else:
+                        return _json_response(
+                            self,
+                            400,
+                            {
+                                "ok": False,
+                                "error": ready.get("summary")
+                                or "AI 已开启但当前不可用",
+                                "llm_ready": ready,
+                                "hint": ready.get("hint")
+                                or "请修好 AI，或确认后用纯规则启动",
+                                "code": "llm_not_ready",
+                            },
+                        )
+                elif want_ai and ready.get("ok"):
+                    STATE.log(f"[AI·就绪] {ready.get('summary')}")
+                    if need_probe and ready.get("live_ok"):
+                        with STATE.lock:
+                            st = dict(STATE.llm_status or {})
+                            st["last_probe_ok"] = True
+                            st["last_probe_ts"] = time.time()
+                            STATE.llm_status = st
+                elif not want_ai:
+                    STATE.log("[AI·就绪] 本任务不使用 AI（纯规则）")
+            except Exception as e:
+                STATE.log(f"[AI·就绪] 检查异常，将按配置继续: {e}")
+
             with STATE.lock:
                 sel_n = STATE._selected_count_unlocked()
             STATE.log(
@@ -680,6 +1014,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = T
     print("=" * 56)
     print("  材料询价向导已启动（用户在浏览器操作，无需敲命令）")
     print(f"  打开: {url}")
+    print(f"  源码指纹: {SOURCE_FINGERPRINT_AT_START}  pid={os.getpid()}")
     print("  登录：向导内「登录面板」分站打开/校验，全部通过后再询价")
     print("  停止: Ctrl+C")
     print("=" * 56)

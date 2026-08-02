@@ -8,7 +8,13 @@ from typing import Any
 
 import openpyxl
 
-from .matching import extract_tokens, name_search_core
+from .matching import (
+    collapse_cjk_spaces,
+    extract_tokens,
+    name_search_core,
+    normalize_material_name,
+    strip_geo_noise,
+)
 from .models import CanonicalItem, SheetSchema, WorkbookSchema
 
 
@@ -116,6 +122,8 @@ def _query_features(
             t
             for t in tokens
             if not _is_measurement_token(t)
+            and not re.fullmatch(r"(?i)(?:DN|PN|IP)\s*\d+(?:\.\d+)?", t or "")
+            and not re.fullmatch(r"[φΦ]\s*\d+(?:\.\d+)?", t or "")
             and (
                 re.match(
                     r"^(?:DS-|RG-|ST|iDS-|HM-|JB-|MS-|LRS-|GTYQ-|ZN-|WDZN-)", t, re.I
@@ -131,7 +139,13 @@ def _query_features(
             spec,
             re.I,
         )
-        if m and not _is_measurement_token(m.group(1)):
+        if (
+            m
+            and not _is_measurement_token(m.group(1))
+            and not re.fullmatch(
+                r"(?i)(?:DN|PN|IP)\s*\d+(?:\.\d+)?", m.group(1)
+            )
+        ):
             model = m.group(1)
 
     sizes = [
@@ -186,8 +200,8 @@ def _query_features(
     for pat in (
         r"(?:AC|DC)\s*\d+(?:\.\d+)?\s*V",
         r"\d+(?:\.\d+)?\s*W\s*(?:[/／]\s*(?:m|米))?",
-        r"\d{3,5}\s*K",
         r"IP\s*\d{2}",
+        r"\d{3,5}\s*K",
     ):
         m = re.search(pat, spec, re.I)
         if m:
@@ -224,11 +238,77 @@ def _query_features(
     }
 
 
+def _query_part_key(part: str) -> str:
+    """检索词片段归一化；用于识别 ``DN100 DN100`` 等重复锚点。"""
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", (part or "").lower())
+
+
+def _is_query_anchor(part: str) -> bool:
+    """型号/口径/电气参数可做包含去重，普通品名不做激进裁剪。"""
+    raw = re.sub(r"\s+", "", part or "")
+    return bool(
+        re.fullmatch(r"(?i)(?:DN|PN|IP)\d+(?:\.\d+)?", raw)
+        or re.fullmatch(r"[φΦ]\d+(?:\.\d+)?", raw)
+        or re.fullmatch(r"(?i)(?:AC|DC)?\d+(?:\.\d+)?(?:V|W|K|MPA|KPA|A)", raw)
+        or re.fullmatch(
+            r"(?i)[A-Z]{1,10}[A-Z0-9]*[-_/\.][A-Z0-9][A-Z0-9\-_/\.]*",
+            raw,
+        )
+        or re.fullmatch(r"(?i)[A-Z]{1,8}\d{2,}[A-Z0-9\-_/\.]*", raw)
+    )
+
+
+def normalize_search_query(query: str) -> str:
+    """
+    清理单个搜索词：
+      - 中文内部空格折叠
+      - 地名 / 信息价字样剥离
+      - 重复型号/规格去重
+
+    例：``DN100 DN100`` → ``DN100``；
+    ``UQK-12液位计 UQK-12`` → ``UQK-12液位计``；
+    ``成都 薄 壁 不锈钢管`` → ``薄壁不锈钢管``。
+    """
+    # 先折空格 + 去地名，再做锚点去重
+    q0 = strip_geo_noise(collapse_cjk_spaces(query or ""))
+    parts = [p for p in re.split(r"\s+", q0.strip()) if p]
+    out: list[str] = []
+    for part in parts:
+        # 零件级再去一次地名（防止「成都市」残留）
+        part = strip_geo_noise(part)
+        if not part:
+            continue
+        key = _query_part_key(part)
+        if not key:
+            continue
+        # 纯地名零件丢弃
+        if re.fullmatch(r"(?:全国|本市|当地)", part):
+            continue
+        existing_keys = [_query_part_key(x) for x in out]
+        if key in existing_keys:
+            continue
+        # 当前片段只是前面品名中已经包含的型号/口径，不再重复追加。
+        if _is_query_anchor(part) and any(key in old for old in existing_keys):
+            continue
+        # 先出现纯型号，后出现「型号+品名」时保留信息更完整的后者。
+        remove_indexes = [
+            i
+            for i, old in enumerate(out)
+            if _is_query_anchor(old)
+            and _query_part_key(old)
+            and _query_part_key(old) in key
+        ]
+        for i in reversed(remove_indexes):
+            out.pop(i)
+        out.append(part)
+    return " ".join(out)
+
+
 def _dedupe_queries(queries: list[str], *, max_n: int = 6, max_len: int = 40) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
     for q in queries:
-        q = re.sub(r"\s+", " ", (q or "")).strip()
+        q = normalize_search_query(q)
         if len(q) < 2 or len(q) > max_len:
             continue
         k = q.lower()
@@ -242,74 +322,171 @@ def _dedupe_queries(queries: list[str], *, max_n: int = 6, max_len: int = 40) ->
 
 
 # 造价信息站：按「材料品名库」检索，短词+口径/关键规格
-_COST_PLATFORM_IDS = frozenset({"guangcai", "lingcai", "huixun", "yize"})
+_COST_PLATFORM_IDS = frozenset({"guangcai", "lingcai", "huixun", "yize", "zaojiatong"})
 # 电商：按「商品标题」检索，品牌+型号+参数
 _ECOM_PLATFORM_IDS = frozenset({"jd", "1688", "taobao", "tmall", "zkh", "suning"})
 
 
 def build_cost_site_queries(name: str, spec: str, brand: str, tokens: list[str] | None = None) -> list[str]:
     """
-    广材 / 领材 / 慧讯 / 易择 搜法（信息价/材料库）：
-      1) 核心品名（线型灯、地埋灯、分控器…）
-      2) 品名 + 口径/型号
-      3) 品名 + 身份词（脱机、8端口…）
-      4) 品名 + 电气参数（功率/电压/IP）
-      5) 原始短名 / LED+品名
-      6) 品牌 + 品名
-    不靠超长商品文案；信息站索引的是材料名而非电商标题。
+    广材 / 领材 / 慧讯 / 易择 / 造价通 搜法（信息价/材料库）。
+
+    **名称优先两阶段**（检索召回，不放宽正式匹配门禁）：
+      1) **仅核心品名**（先扩召回同物结果集，禁止夹地名）
+      2) 品名 + 口径/型号（二次精准，供规格匹配用）
+      3) 少量身份/电气变体（预算内）
+    禁止一上来就用「品名+一堆参数」把搜索结果弄脏。
     """
-    # 名称粘尺寸时先剥开，保证 sizes/model 能抽到
+    # 名称粘尺寸时先剥开；再折空格/去地名
     name2, spec2 = peel_dims_into_spec(name, spec)
+    name2 = normalize_material_name(name2) or collapse_cjk_spaces(name2)
+    spec2 = collapse_cjk_spaces(spec2)
     f = _query_features(name2, spec2, brand, tokens)
-    core = f["name_core"]
-    short = f["name_short"]
+    core = strip_geo_noise(f["name_core"] or "") or f["name_core"]
+    short = strip_geo_noise(f["name_short"] or "") or f["name_short"]
     model = f.get("model") or ""
     sizes = list(f.get("sizes") or [])
-    length_hint = str(f.get("length_hint") or "")
+    brand_h = (f.get("brand") or f.get("brand_hint") or "").strip()
     queries: list[str] = []
 
-    # 有型号+截面时：最像人搜「XZP100 1250x400」——必须靠前，否则会点到同型号其它截面
-    if model and sizes:
-        queries.append(f"{model} {sizes[0]}")
-        queries.append(f"{model} {sizes[0].replace('x', '*')}")
-    if core and sizes:
-        queries.append(f"{core} {sizes[0]}")
-    if model and core:
-        queries.append(f"{core} {model}")
-    if model and sizes and length_hint:
-        queries.append(f"{model} {sizes[0]} {length_hint}")
-
-    # 品名库习惯：短品名靠后作兜底（纯「片式消声器」结果太杂）
+    # —— 1) 仅品名（最高优先，先拿同物结果集）——
     if core:
         queries.append(core)
-    if f["name_led"] and f["name_led"].lower() != (core or "").lower():
-        queries.append(f["name_led"])
 
-    if core and f["identity"]:
-        queries.append(f"{core} {' '.join(f['identity'][:3])}")
-    if core and f["electrical"]:
-        elec = f["electrical"][:2]
-        queries.append(f"{core} {' '.join(elec)}")
-    if core and f["brand"]:
-        queries.append(f"{core} {f['brand']}")
-    if model:
-        queries.append(model)
+    # —— 2) 硬规格二次精准（排在纯品名后，优先型号+截面 / 品名+口径）——
+    if model and sizes:
+        queries.append(f"{model} {sizes[0]}")
+    if core and sizes:
+        queries.append(f"{core} {sizes[0]}")
+    if core and model:
+        queries.append(f"{core} {model}")
+    # 无 DN/型号的设备靠“身份词 + 硬电气参数”精准召回。
+    # 例：分控器 脱机 8端口；线型灯 DC24V 18W/m IP65。
+    if core and f.get("identity"):
+        identity_bits = list(f["identity"][:3])
+        queries.append(f"{core} {' '.join(identity_bits)}")
+    if core and f.get("electrical"):
+        electrical_bits = list(f["electrical"][:3])
+        queries.append(f"{core} {' '.join(electrical_bits)}")
+    if f.get("name_led"):
+        led = strip_geo_noise(str(f["name_led"]))
+        if led and led.lower() != (core or "").lower():
+            queries.append(led)
 
+    # —— 3) 短整名 / 身份 / 品牌（预算内）——
     if short and short.lower() not in {q.lower() for q in queries}:
-        industrial_whole = bool(
-            f["port_in_name"]
-            or re.search(r"(?i)(?:DN|φ|Φ)\s*\d", short)
-            or (
-                len(short) <= 12
-                and not re.search(r"(?i)LED|成品|[A-Z]\d+$", short)
-            )
-        )
-        if industrial_whole and not sizes:
-            queries.insert(0, short)
-        else:
+        if len(short) <= 16 and short != core:
             queries.append(short)
+    if core and f.get("identity"):
+        queries.append(f"{core} {f['identity'][0]}")
+    if core and f.get("port_in_name") and f["port_in_name"] not in (core or ""):
+        queries.append(f"{core} {f['port_in_name']}")
+    if brand_h and core:
+        queries.append(f"{brand_h} {core}")
 
-    return _dedupe_queries(queries, max_n=6, max_len=40)
+    # 召回变体：镀锌钢管 → 镀锌管（禁止动「不锈钢」→「不锈管」）
+    if core and len(core) >= 4 and "钢" in core and "不锈钢" not in core:
+        stripped = core.replace("钢", "", 1)
+        if len(stripped) >= 2:
+            queries.append(stripped)
+
+    # 最多 4 个：少搜、快、Token 少；规格精度靠匹配门禁
+    return _dedupe_queries(queries, max_n=4, max_len=40)
+
+
+def platform_query_budget(
+    platform_id: str,
+    *,
+    cost_max: int = 3,
+    ecom_max: int = 2,
+) -> int:
+    """
+    每站检索词预算。
+    造价站默认 3（纯品名 + 品名规格）；电商保持较低（默认 2，上限 3）。
+    """
+    pid = (platform_id or "").strip().lower()
+    if pid in _ECOM_PLATFORM_IDS:
+        return max(1, min(3, int(ecom_max or 2)))
+    # 造价站 / 未知站：名称优先，少搜快准
+    n = int(cost_max or 3)
+    return max(2, min(4, n))
+
+
+def rule_requery_from_failures(
+    name: str,
+    spec: str,
+    brand: str,
+    tried_queries: list[str],
+    fail_reasons: list[str],
+    tokens: list[str] | None = None,
+    *,
+    max_n: int = 3,
+) -> list[str]:
+    """
+    规则侧原因感知改词（AI 关闭/失败时的兜底）。
+    失败原因关键字：名称未命中 / 型号 / DN / 尺寸 / 规格缺少。
+    """
+    name2, spec2 = peel_dims_into_spec(name, spec)
+    f = _query_features(name2, spec2, brand, tokens)
+    core = f.get("name_core") or ""
+    short = f.get("name_short") or ""
+    model = f.get("model") or ""
+    sizes = list(f.get("sizes") or [])
+    blob = "；".join(str(x) for x in (fail_reasons or []))
+    tried = {re.sub(r"\s+", " ", (q or "")).strip().lower() for q in (tried_queries or [])}
+    candidates: list[str] = []
+
+    def _add(q: str) -> None:
+        q = re.sub(r"\s+", " ", (q or "")).strip()
+        if len(q) < 2 or len(q) > 40:
+            return
+        if q.lower() in tried:
+            return
+        if q not in candidates:
+            candidates.append(q)
+
+    dn_fail = bool(re.search(r"(?i)DN|口径|通径|φ|直径|尺寸", blob))
+    model_fail = "型号" in blob
+    name_fail = "名称未命中" in blob or "名称" in blob and "未命中" in blob
+    missing = "缺少" in blob or "缺失" in blob or "未展示" in blob
+
+    # DN/尺寸错误 → 强制带正确口径/截面
+    if dn_fail or missing:
+        if core and sizes:
+            _add(f"{core} {sizes[0]}")
+            _add(f"{sizes[0]} {core}")
+        if model and sizes:
+            _add(f"{model} {sizes[0]}")
+        # 禁止纯口径搜索（如只搜 DN100）：召回噪声极大，也会制造大量重复询价。
+
+    # 型号错误 → 品名+型号 / 纯型号
+    if model_fail or missing:
+        if core and model:
+            _add(f"{core} {model}")
+        if model:
+            _add(model)
+
+    # 名称未命中 → 短名 / 核心品名 / LED 变体
+    if name_fail:
+        if short:
+            _add(short)
+        if core:
+            _add(core)
+        if f.get("name_led"):
+            _add(str(f["name_led"]))
+
+    # 通用兜底：仍无新词时补 品名+关键规格
+    if not candidates:
+        if core and sizes:
+            _add(f"{core} {sizes[0]}")
+        if core and model:
+            _add(f"{core} {model}")
+        if core and f.get("identity"):
+            _add(f"{core} {f['identity'][0]}")
+        if short:
+            _add(short)
+
+    return candidates[: max(1, max_n)]
 
 
 def build_ecommerce_queries(name: str, spec: str, brand: str, tokens: list[str] | None = None) -> list[str]:
@@ -464,6 +641,7 @@ def row_to_item(ws, schema: SheetSchema, r: int) -> CanonicalItem | None:
     qty = _f(_cell(ws, r, roles.get("qty"))) or 0.0
     submit = _f(_cell(ws, r, roles.get("submit_price")))
     remark = _s(_cell(ws, r, roles.get("remark")))
+    region_raw = _s(_cell(ws, r, roles.get("region")))
 
     # skip empty / section headers
     if not name and submit is None:
@@ -478,6 +656,9 @@ def row_to_item(ws, schema: SheetSchema, r: int) -> CanonicalItem | None:
             name, spec = n2, s2
     # 名称粘尺寸/有效长度 → 挪到规格（消声器、风管附件极常见）
     name, spec = peel_dims_into_spec(name, spec)
+    # 中文内部空格折叠 + 去地名：避免「薄 壁 管」「成都××」搞崩品名/搜索
+    name = normalize_material_name(name) or collapse_cjk_spaces(name)
+    spec = collapse_cjk_spaces(spec)
     if not name:
         return None
     # skip pure section titles (no digits, very short, no unit/qty/price)
@@ -512,6 +693,14 @@ def row_to_item(ws, schema: SheetSchema, r: int) -> CanonicalItem | None:
         conf = min(conf, 0.2)
 
     item_id = f"{schema.sheet}|{r}"
+    region_dict: dict = {}
+    if region_raw:
+        try:
+            from .region_gate import parse_region_text
+
+            region_dict = parse_region_text(region_raw, source="excel_row").to_dict()
+        except Exception:
+            region_dict = {"city": region_raw, "source": "excel_row"}
     return CanonicalItem(
         id=item_id,
         sheet=schema.sheet,
@@ -530,6 +719,8 @@ def row_to_item(ws, schema: SheetSchema, r: int) -> CanonicalItem | None:
         parse_confidence=max(0.0, conf),
         parse_status=status,
         parse_issues=issues,
+        region=region_dict,
+        region_raw=region_raw,
     )
 
 

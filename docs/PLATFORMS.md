@@ -8,8 +8,11 @@
 | `lingcai` | `https://www.hylcw.cn/userInfo/index.html` | `/marketPrice/so.html?...&gjz=...` | 搜索词双重 UTF-8 编码；`.list-item` 同行抽价 |
 | `huixun` | `https://services.iccchina.com/login` | 产品库 SPA 搜索框 | 直接填入 Unicode，不拼错误 URL |
 | `yize` | `https://www.easybii.com/` | 顶栏「产品信息/信息价」搜索；信息价页名称+规格表单 | 未登录/服务到期独立状态；同行表格抽价，不跨行串价 |
-| `jd` | `https://www.jd.com/` | 京东搜索页 | 检测“访问频繁”并停止当前会话 |
-| `1688` | 淘宝统一登录入口 | 1688 搜索页 | GBK 查询编码；验证码/风控页不当空结果 |
+| `zaojiatong` | 可选（仅看数字价时）`member…/login.html?url=…` | **专用适配器** `adapters/zaojiatong.py`：纯 `request` 抓 SSR，**禁止 page.goto 搜价/详情** | R1–R7：永不因 SPA 踢登录循环；无价则「没查到」；互踢弹窗仅登录阶段处理 |
+| `jd` | `https://www.jd.com/` | 京东搜索页 | 检测“访问频繁”并停止当前会话；**价仅市场参考** |
+| `1688` | 淘宝统一登录入口 | 1688 搜索页 | GBK 查询编码；验证码可等人继续；**价仅市场参考** |
+
+> 电商与造价站分流策略见 [ECOMMERCE_POLICY.md](./ECOMMERCE_POLICY.md)。
 
 ## 状态约定
 

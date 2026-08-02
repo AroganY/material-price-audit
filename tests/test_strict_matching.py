@@ -22,6 +22,31 @@ def test_led_ground_light_requires_every_hard_parameter():
     assert "规格缺少" in result.detail or "规格冲突" in result.detail
 
 
+def test_char_bag_name_equivalence_not_hardcoded_list():
+    """
+    同字异序品名应互认（通用算法，非词表）：
+    地埋灯↔埋地灯；不依赖写死同义词。
+    """
+    from material_price_audit.matching import soft_product_name_equivalent
+
+    assert soft_product_name_equivalent("地埋灯", "埋地灯", "")
+    assert soft_product_name_equivalent("埋地灯", "地埋灯", "")
+    assert soft_product_name_equivalent("LED地埋灯", "埋地灯", "埋地灯 18W")
+    # 不同品类不能因有共同字就过
+    assert not soft_product_name_equivalent("冷却塔", "塔吊", "")
+
+    a = strict_name_spec_match(item("地埋灯", "9W"), "埋地灯", "埋地灯 功率9W IP67")
+    assert "名称未命中" not in (a.detail or ""), a.detail
+    b = strict_name_spec_match(
+        item("LED地埋灯", "DC24V 9W"),
+        "埋地灯",
+        "埋地灯 功率(W):9 电压DC24V",
+    )
+    assert "名称未命中" not in (b.detail or ""), b.detail
+    c = strict_name_spec_match(item("埋地灯", ""), "地埋灯", "地埋灯 LED")
+    assert c.ok, (c.outcome, c.detail)
+
+
 def test_controller_accepts_port_and_dmx512_synonyms_but_still_requires_voltage():
     target = item(
         "8端口分控器",
@@ -192,3 +217,201 @@ def test_selectable_ranges_and_meter_unit_count_as_exact_coverage():
     )
     assert strict_name_spec_match(ground, "地埋灯", ground_text).ok
     assert strict_name_spec_match(line, "线型灯", line_text).ok
+
+
+# ─── P0：规格匹配准确性（DN/电话/价格噪声/条件去重）────────────────────
+
+
+def test_dn150_rejects_dn40_when_phone_contains_150():
+    """目标 DN150，页面 DN40 + 手机号含 150 → 必须 reject，不得因电话数字误命中。"""
+    target = item("闸阀", "DN150")
+    page = (
+        "闸阀 规格型号：DN40 PN16 "
+        "供应商名称：某某阀门有限公司 "
+        "手机号码：13800150123 联系人：张三"
+    )
+    mr = strict_name_spec_match(target, "闸阀", page)
+    assert not mr.ok
+    assert mr.outcome == "reject", (mr.outcome, mr.detail)
+    assert "DN150" in mr.detail or "尺寸" in mr.detail or "规格冲突" in mr.detail
+
+
+def test_dn100_not_hit_by_market_price_100():
+    """正文只有市场价 100、无 DN100 → 不得命中口径。"""
+    target = item("闸阀", "DN100")
+    page = "闸阀 规格型号：DN40 市场价： ￥100 建议价： ￥100 运费说明：本报价不含运费"
+    mr = strict_name_spec_match(target, "闸阀", page)
+    assert not mr.ok
+    # 不得因 ￥100 判定 DN100 已命中
+    assert mr.outcome in ("reject", "review"), mr.detail
+    if mr.outcome == "review":
+        assert "DN100" in mr.detail or "尺寸" in mr.detail
+    # 页面有 DN40 时应是硬冲突 reject
+    assert mr.outcome == "reject" or "缺少" in mr.detail
+
+
+def test_dn200_not_hit_by_address_or_phone_200():
+    """地址/电话出现 200 不得命中 DN200。"""
+    target = item("截止阀", "DN200")
+    page = (
+        "截止阀 规格型号：DN50 "
+        "固定电话：020-12342008 联系地址：广州市某路200号 "
+        "手机号码：13900000200"
+    )
+    mr = strict_name_spec_match(target, "截止阀", page)
+    assert not mr.ok
+    assert mr.outcome == "reject", (mr.outcome, mr.detail)
+
+
+def test_dn150_hits_when_spec_field_explicit():
+    """规格字段明确写 DN150 → 必须命中 accept。"""
+    target = item("闸阀", "DN150")
+    page = "闸阀 原始名称：闸阀 规格型号：DN150 PN16 除税市场价：128.5 供应商名称：某某公司"
+    mr = strict_name_spec_match(target, "闸阀", page)
+    assert mr.ok, (mr.outcome, mr.detail)
+    assert mr.outcome == "accept"
+
+
+def test_dn150_hits_explicit_platform_spec_mm_field():
+    """造价平台「规格(mm):150」是明确规格字段，可等价于 DN150。"""
+    target = item("不锈钢卡箍", "DN150")
+    page = "品种 : 卡箍 | 材质 : 不锈钢 | 规格(mm) : 150 | 类型 : 铸铁管用"
+    mr = strict_name_spec_match(
+        target,
+        "不锈钢卡箍",
+        page,
+        match_spec_text=page,
+        spec_seen=page,
+    )
+    assert mr.ok, (mr.outcome, mr.detail)
+    assert mr.outcome == "accept"
+
+
+def test_dn150_does_not_accept_cross_section_150x150_as_bore():
+    """规格(mm):150×150 是截面，不得冒充单口径 DN150。"""
+    target = item("不锈钢卡箍", "DN150")
+    page = "品种 : 卡箍 | 材质 : 不锈钢 | 规格(mm) : 150×150 | 类型 : 钢管用"
+    mr = strict_name_spec_match(
+        target,
+        "不锈钢卡箍",
+        page,
+        match_spec_text=page,
+        spec_seen=page,
+    )
+    assert not mr.ok
+    assert mr.outcome in ("review", "reject")
+
+
+def test_name_parenthetical_inclusion_must_be_shown_by_source():
+    """“含胶圈”是组成要求，不能因核心品名和 DN 对上就自动收价。"""
+    target = item("不锈钢卡箍(含胶圈)", "DN150")
+    source = "品种 : 卡箍 | 材质 : 不锈钢 | 规格(mm) : 150 | 类型 : 铸铁管用"
+    mr = strict_name_spec_match(
+        target,
+        "不锈钢卡箍",
+        source,
+        match_spec_text=source,
+        spec_seen=source,
+    )
+    assert not mr.ok
+    assert mr.outcome == "review"
+    assert "含胶圈" in mr.detail
+
+
+def test_name_parenthetical_inclusion_accepts_explicit_source_evidence():
+    target = item("不锈钢卡箍(含胶圈)", "DN150")
+    source = "品种 : 不锈钢卡箍 | 规格(mm) : 150 | 套装 : 含胶圈"
+    mr = strict_name_spec_match(
+        target,
+        "不锈钢卡箍（含胶圈）",
+        source,
+        match_spec_text=source,
+        spec_seen=source,
+    )
+    assert mr.ok, (mr.outcome, mr.detail)
+
+
+def test_name_parenthetical_inclusion_rejects_explicit_exclusion():
+    target = item("不锈钢卡箍(含胶圈)", "DN150")
+    source = "品种 : 不锈钢卡箍 | 规格(mm) : 150 | 包装 : 不含胶圈"
+    mr = strict_name_spec_match(
+        target,
+        "不锈钢卡箍",
+        source,
+        match_spec_text=source,
+        spec_seen=source,
+    )
+    assert not mr.ok
+    assert mr.outcome == "reject"
+    assert "不含胶圈" in mr.detail
+
+
+def test_dn100_forms_only_dimension_not_model():
+    """DN100 只能形成一个口径硬条件，不能同时形成型号条件。"""
+    from material_price_audit.matching import spec_requirement_groups
+
+    reqs = spec_requirement_groups("DN100")
+    kinds = [r["kind"] for r in reqs]
+    assert kinds.count("dimension") == 1
+    assert "model" not in kinds
+    assert all("DN100" in str(r.get("value") or r.get("label")) for r in reqs if r["kind"] == "dimension")
+
+
+def test_pn16_dn150_only_pressure_and_bore():
+    """PN16 DN150 只能形成压力 PN16 和口径 DN150。"""
+    from material_price_audit.matching import spec_requirement_groups
+
+    reqs = spec_requirement_groups("PN16 DN150")
+    kinds = sorted(r["kind"] for r in reqs)
+    assert kinds == ["dimension", "pressure"], reqs
+    labels = {r["kind"]: r["label"] for r in reqs}
+    assert "PN16" in labels["pressure"]
+    assert "DN150" in labels["dimension"] or "150" in labels["dimension"]
+    assert not any(r["kind"] == "model" for r in reqs)
+
+
+def test_electrical_attrs_not_one_model_token():
+    """AC220V/DC24V/400W/IP68 分别作为独立属性，不能整串作为型号。"""
+    from material_price_audit.matching import spec_requirement_groups
+
+    reqs = spec_requirement_groups("400W/AC220V/DC24V/IP68")
+    kinds = [r["kind"] for r in reqs]
+    assert "voltage" in kinds
+    assert "power" in kinds
+    assert "ip" in kinds
+    assert "model" not in kinds, reqs
+    # 两个电压各自独立
+    volts = [r for r in reqs if r["kind"] == "voltage"]
+    assert len(volts) == 2
+    prefixes = {r.get("prefix") for r in volts}
+    assert prefixes == {"AC", "DC"}
+
+
+def test_name_and_spec_exact_must_accept():
+    """名称和规格完全一致时必须 accept。"""
+    target = item("球阀", "PN16 DN100")
+    page = "球阀 规格型号：PN16 DN100 材质：铸钢"
+    mr = strict_name_spec_match(target, "球阀", page)
+    assert mr.ok
+    assert mr.outcome == "accept", mr.detail
+
+
+def test_name_ok_spec_absent_only_review():
+    """名称一致但规格未展示时只能 review（缺证据，不是冲突）。"""
+    target = item("球阀", "PN16 DN100")
+    page = "球阀 优质阀门 厂家直供 欢迎询价"
+    mr = strict_name_spec_match(target, "球阀", page)
+    assert not mr.ok
+    assert mr.outcome == "review", (mr.outcome, mr.detail)
+    assert "缺少" in mr.detail or "规格" in mr.detail
+    assert "冲突" not in mr.detail
+
+
+def test_name_ok_other_explicit_spec_must_reject():
+    """页面明确出现其它规格时必须 reject。"""
+    target = item("球阀", "DN100")
+    page = "球阀 规格型号：DN50 公称通径DN50"
+    mr = strict_name_spec_match(target, "球阀", page)
+    assert not mr.ok
+    assert mr.outcome == "reject", (mr.outcome, mr.detail)
+    assert "冲突" in mr.detail or "页面" in mr.detail

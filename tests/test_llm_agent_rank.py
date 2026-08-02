@@ -6,10 +6,10 @@ from material_price_audit.llm_agent import (
 
 
 class _Item:
-    def __init__(self, submit=None, name="阀门"):
+    def __init__(self, submit=None, name="阀门", spec="DN50"):
         self.submit = submit
         self.name = name
-        self.spec = "DN50"
+        self.spec = spec
         self.brand = ""
         self.unit = "个"
 
@@ -21,19 +21,41 @@ def test_under_submit_flag():
     assert under_submit_flag(c, 95) == "near"  # 100/95 ≈ 1.05 within 15%
 
 
-def test_rule_rank_prefers_under_submit():
-    item = _Item(submit=100)
+def test_rule_rank_spec_before_price_when_same_name():
+    """同名候选：规格一致优先；价格仅作末位 tie-break。"""
+    item = _Item(submit=100, name="闸阀", spec="DN50")
     cands = [
-        {"title": "A", "price_tax": 200, "tax_mode": "tax_excl", "score": 90, "url": "1"},
-        {"title": "B", "price_tax": 80, "tax_mode": "tax_excl", "score": 70, "url": "2"},
-        {"title": "C", "price_tax": 99, "tax_mode": "tax_excl", "score": 85, "url": "3"},
+        {
+            "title": "闸阀",
+            "spec_seen": "DN50",
+            "price_tax": 200,
+            "tax_mode": "tax_excl",
+            "score": 50,
+            "url": "hi-correct",
+        },
+        {
+            "title": "闸阀",
+            "spec_seen": "DN50",
+            "price_tax": 80,
+            "tax_mode": "tax_excl",
+            "score": 50,
+            "url": "lo-correct",
+        },
+        {
+            "title": "闸阀",
+            "spec_seen": "DN25",
+            "price_tax": 50,
+            "tax_mode": "tax_excl",
+            "score": 90,
+            "url": "cheap-wrong",
+        },
     ]
     ranked = rule_rank_candidates(cands, item=item, tax_divisor=1.13, top_n=3)
-    # B(80) and C(99) under submit before A(200)
-    assert ranked[0]["title"] in ("B", "C")
-    assert ranked[0]["_under_submit"] == "under"
-    assert ranked[-1]["title"] == "A"
-    assert ranked[-1]["_under_submit"] == "over"
+    # 错 DN 不得排第一
+    assert ranked[0]["url"] != "cheap-wrong"
+    # 同规格下低价优先
+    assert ranked[0]["url"] == "lo-correct"
+    assert ranked[-1]["url"] == "cheap-wrong"
 
 
 def test_estimate_ex_tax_incl():
