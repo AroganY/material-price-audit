@@ -1,0 +1,25 @@
+材料询价工作台 · macOS
+
+【使用方法】
+1. 将「材料询价工作台.app」拖到「应用程序」或任意文件夹
+2. 双击打开
+3. 首次运行会弹出终端窗口，自动安装依赖并下载 Chromium（需联网，可能几分钟）
+4. 安装完成后自动打开浏览器：http://127.0.0.1:8765/
+5. 以后再双击：直接启动
+
+若提示「无法打开，因为来自身份不明的开发者」：
+  系统设置 → 隐私与安全性 → 仍要打开
+  或：右键 App → 打开 → 打开
+
+【系统要求】
+- macOS 11+
+- 已安装 Python 3.10+（终端执行 python3 --version）
+  可用官网安装包：https://www.python.org/downloads/
+  或：brew install python@3.12
+
+【注意】
+- 关闭终端窗口会停止服务
+- 日志：材料询价工作台.app/Contents/Resources/app/data/output/desktop_launch.log
+
+【官网】
+若亘造价 OA：https://www.rogan.asia/

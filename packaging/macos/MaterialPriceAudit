@@ -1,0 +1,30 @@
+#!/bin/bash
+# macOS .app 入口：在终端窗口中显示安装/启动日志，并打开浏览器
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_ROOT="$(cd "$DIR/../Resources/app" && pwd)"
+cd "$APP_ROOT"
+
+# 优先用系统 python3
+if ! command -v python3 >/dev/null 2>&1; then
+  osascript -e 'display dialog "未检测到 Python 3.10+。\n请先安装：https://www.python.org/downloads/\n安装后重新打开本程序。" buttons {"好"} default button 1 with title "材料询价工作台"'
+  exit 1
+fi
+
+export MPA_DESKTOP_NOTIFY=0
+export PYTHONUNBUFFERED=1
+
+# 在本终端运行启动器（双击 .app 时可能没有可见终端，用 osascript 开 Terminal）
+if [[ -t 1 ]]; then
+  exec python3 "$APP_ROOT/desktop_launch.py"
+else
+  # 从 Finder 启动：打开 Terminal 跑启动器
+  ROOT_ESC="${APP_ROOT//\\/\\\\}"
+  ROOT_ESC="${ROOT_ESC//\"/\\\"}"
+  osascript <<APPLESCRIPT
+tell application "Terminal"
+  activate
+  do script "cd \"$ROOT_ESC\" && python3 desktop_launch.py; echo; echo '服务已结束。可关闭本窗口。'"
+end tell
+APPLESCRIPT
+fi

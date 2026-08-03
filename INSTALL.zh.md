@@ -8,10 +8,32 @@
 - 本机 **Chrome / Chromium**（推荐）
 - 磁盘约 500MB+（含浏览器驱动）
 
-## 方式 A：下载 Release 便携包（推荐）
+## 方式 A：macOS / Windows 双击启动包（最省事）
 
-1. 从 [GitHub Releases](https://github.com/AroganY/material-price-audit/releases) 或 [Gitee Releases](https://gitee.com/arogan/material-price-audit/releases) 下载  
-   **`material-price-audit-*-portable.zip`**
+从 [GitHub Releases](https://github.com/AroganY/material-price-audit/releases) 下载对应系统的 zip：
+
+| 文件 | 系统 |
+|------|------|
+| **MaterialPriceAudit-macOS-v\*.zip** | Mac |
+| **MaterialPriceAudit-Windows-v\*.zip** | Windows |
+
+**macOS**
+1. 解压 → 双击 **「材料询价工作台.app」**
+2. 首次会打开终端自动装依赖 + Chromium（需联网，几分钟）
+3. 完成后**自动弹出浏览器**进入向导 `http://127.0.0.1:8765/`
+4. 若系统拦截：右键 App → 打开；或「系统设置 → 隐私与安全性 → 仍要打开」
+
+**Windows**
+1. 解压 → 双击 **「双击启动-材料询价工作台.bat」**
+2. 首次自动装依赖 + Chromium（需联网）
+3. 完成后**自动弹出浏览器**进入向导
+
+> 仍需本机已安装 **Python 3.10+**（不是完全零依赖安装包；Chromium 首次在线下载）。  
+> 真正的「单文件免 Python」体积很大，后续版本可再做。
+
+## 方式 B：命令行便携包
+
+1. 下载 **`material-price-audit-*-portable.zip`**
 2. 解压到任意目录（路径尽量不要有奇怪空格）
 3. **macOS / Linux** 终端进入解压目录后执行：
 
@@ -28,7 +50,7 @@ chmod +x install.sh start.sh
 .\start.ps1
 ```
 
-## 方式 B：pip 安装 wheel
+## 方式 C：pip 安装 wheel
 
 ```bash
 python3 -m venv .venv
@@ -38,7 +60,7 @@ python -m playwright install chromium
 material-price-audit serve
 ```
 
-## 方式 C：从源码（开发者）
+## 方式 D：从源码（开发者）
 
 ```bash
 git clone https://github.com/AroganY/material-price-audit.git

@@ -1,0 +1,24 @@
+材料询价工作台 · Windows
+
+【使用方法】
+1. 双击「双击启动-材料询价工作台.bat」
+2. 首次运行会自动：
+   - 创建虚拟环境
+   - 安装依赖
+   - 下载 Chromium（可能需几分钟，需联网）
+   - 启动后自动打开浏览器界面 http://127.0.0.1:8765/
+3. 以后再双击：直接启动并打开界面
+
+【系统要求】
+- Windows 10/11
+- 已安装 Python 3.10 或更高（安装时勾选 Add to PATH）
+  下载：https://www.python.org/downloads/
+
+【注意】
+- 本工具仅在本机运行，询价数据与登录 Cookie 不上传
+- 关闭黑色窗口会停止服务；也可只关浏览器，窗口保留则服务继续
+- 若启动失败，查看 app\data\output\desktop_launch.log
+
+【官网】
+若亘造价 OA：https://www.rogan.asia/
+GitHub：https://github.com/AroganY/material-price-audit

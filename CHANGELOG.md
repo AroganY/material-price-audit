@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.3.3 — 2026-08-03
+
+### 桌面双击启动
+
+- **macOS**：`材料询价工作台.app` — 双击后自动装依赖并打开浏览器向导
+- **Windows**：`双击启动-材料询价工作台.bat` — 同上
+- 启动器：`desktop_launch.py`（首次 venv + pip + Chromium，之后秒开）
+
+发布附件：`MaterialPriceAudit-macOS-v0.3.3.zip` / `MaterialPriceAudit-Windows-v0.3.3.zip`
+
 ## v0.3.2 — 2026-08-03
 
 首个面向公众的可下载 Release 包。

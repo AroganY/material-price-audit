@@ -100,22 +100,16 @@
 
 ### 下载安装包（推荐）
 
-到 [GitHub Releases](https://github.com/AroganY/material-price-audit/releases) 或 [Gitee Releases](https://gitee.com/arogan/material-price-audit/releases) 下载 **`material-price-audit-*-portable.zip`**，解压后：
+到 [GitHub Releases](https://github.com/AroganY/material-price-audit/releases) 下载：
 
-```bash
-# macOS / Linux
-chmod +x install.sh start.sh
-./install.sh    # 首次
-./start.sh      # 启动向导
-```
+| 包 | 怎么用 |
+|----|--------|
+| **MaterialPriceAudit-macOS-v\*.zip** | 解压 → 双击 **材料询价工作台.app** → 首次自动装依赖 → **浏览器自动打开**向导 |
+| **MaterialPriceAudit-Windows-v\*.zip** | 解压 → 双击 **双击启动-材料询价工作台.bat** → 同上 |
+| `material-price-audit-*-portable.zip` | 命令行：`./install.sh` / `./start.sh` |
 
-```powershell
-# Windows
-.\install.ps1
-.\start.ps1
-```
-
-中文安装说明见 [INSTALL.zh.md](./INSTALL.zh.md)。
+> 需要本机已装 **Python 3.10+**；首次会联网下载 Chromium。  
+> 中文说明：[INSTALL.zh.md](./INSTALL.zh.md)
 
 ### 从源码安装
 
