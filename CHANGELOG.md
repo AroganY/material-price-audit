@@ -1,5 +1,12 @@
 # 更新日志
 
+## v0.3.4 — 2026-08-03
+
+- 向导内价联通客户端推广（顶栏、首页横幅、结果页 CTA），样式与页面蓝色主色统一
+- 下载入口：https://www.scjcio.site/tools/download
+
+发布附件：`MaterialPriceAudit-macOS-v0.3.4.zip` / `MaterialPriceAudit-Windows-v0.3.4.zip` 等。
+
 ## v0.3.3 — 2026-08-03
 
 ### 桌面双击启动
