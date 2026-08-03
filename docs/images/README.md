@@ -16,6 +16,7 @@
 | `05b-scope-box.png` | 询价范围面板特写 |
 | `05c-usage-panel.png` | Token 用量面板特写 |
 | `06-step6-results.png` | ⑥ 结果工作台（材料列表 + 规格/链接核对区） |
+| `ruogeng-miniprogram-qrcode.png` | 若亘造价助手 · 微信小程序码（README 宣传区） |
 
 重新截取 ①～⑤（需服务已启动；默认**不会覆盖** `06`）：
 
