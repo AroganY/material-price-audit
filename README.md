@@ -351,7 +351,8 @@ python scripts/capture_screenshots.py
 | 产品 | 说明 |
 |------|------|
 | **若亘造价助手**（微信小程序） | 造价员随身工具：查价、询价、材料与工作组协作等，适合现场 / 通勤时快速处理。微信扫下方小程序码，或搜索 **「若亘造价助手」**。 |
-| **若亘造价 OA** | 面向造价咨询企业的业务与协同：会员与权益、云端同步、工作组、查价询价范围等。**产品官网：** [https://www.rogan.asia/](https://www.rogan.asia/) · 业务入口亦可访问 [https://www.scjcio.site](https://www.scjcio.site) |
+| **价联通客户端** | 桌面客户端（查价 / 询价 / 同步等）。**下载地址：** [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download) |
+| **若亘造价 OA** | 面向造价咨询企业的业务与协同：会员与权益、云端同步、工作组、查价询价范围等。**产品官网：** [https://www.rogan.asia/](https://www.rogan.asia/) · 业务入口 [https://www.scjcio.site](https://www.scjcio.site) |
 
 <p align="center">
   <img src="docs/images/ruogeng-miniprogram-qrcode.png" alt="若亘造价助手 微信小程序码" width="280" />
@@ -359,7 +360,7 @@ python scripts/capture_screenshots.py
   <sub>微信扫一扫 · 若亘造价助手</sub>
 </p>
 
-> 本仓库 **Material Price Audit** 是**本地开源**询价工作台（数据与 Cookie 不出本机）；小程序与 OA 是独立的在线产品线，按各自账号与权益使用。欢迎试用，也欢迎把需求反馈给我们。
+> 本仓库 **Material Price Audit** 是**本地开源**询价工作台（数据与 Cookie 不出本机）；小程序、价联通客户端与 OA 是独立产品线，按各自账号与权益使用。欢迎试用，也欢迎把需求反馈给我们。
 
 ---
 
@@ -369,6 +370,7 @@ python scripts/capture_screenshots.py
 
 - 给仓库点一个 **Star**（GitHub / Gitee 均可），让更多造价同行看见  
 - 把问题与改进建议开 [Issue](https://github.com/AroganY/material-price-audit/issues)，或直接反馈给若亘团队  
+- 需要桌面客户端：**[价联通客户端下载](https://www.scjcio.site/tools/download)**  
 - 需要团队版 / 小程序 / OA：官网 **[www.rogan.asia](https://www.rogan.asia/)**，或微信扫上方小程序码打开 **若亘造价助手**  
 
 你的 Star 与反馈，是这份开源继续更新的最大动力。谢谢。

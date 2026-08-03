@@ -87,3 +87,9 @@ python -m material_price_audit serve
 | 登录后又要登 | 务必在工具弹出的窗口登录，不要只用系统 Chrome |
 
 更多说明见 [README.md](./README.md)。
+
+## 价联通客户端
+
+若需要若亘 **价联通** 桌面客户端（非本开源本地向导），请访问：
+
+**https://www.scjcio.site/tools/download**

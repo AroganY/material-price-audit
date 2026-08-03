@@ -21,5 +21,6 @@
 - 关闭终端窗口会停止服务
 - 日志：材料询价工作台.app/Contents/Resources/app/data/output/desktop_launch.log
 
-【官网】
-若亘造价 OA：https://www.rogan.asia/
+【官网与客户端】
+价联通客户端下载：https://www.scjcio.site/tools/download
+若亘造价 OA 官网：https://www.rogan.asia/

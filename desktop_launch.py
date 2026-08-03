@@ -251,6 +251,7 @@ def main() -> int:
         return 2
 
     log(f"打开浏览器：{URL}")
+    log("价联通客户端下载：https://www.scjcio.site/tools/download")
     webbrowser.open(URL)
     # 非阻塞提示（部分环境双击无终端，给用户反馈）
     try:
