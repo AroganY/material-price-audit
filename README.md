@@ -98,8 +98,30 @@
 
 **环境：** Python 3.10+，本机 Chrome / Chromium 推荐。
 
+### 下载安装包（推荐）
+
+到 [GitHub Releases](https://github.com/AroganY/material-price-audit/releases) 或 [Gitee Releases](https://gitee.com/arogan/material-price-audit/releases) 下载 **`material-price-audit-*-portable.zip`**，解压后：
+
+```bash
+# macOS / Linux
+chmod +x install.sh start.sh
+./install.sh    # 首次
+./start.sh      # 启动向导
+```
+
+```powershell
+# Windows
+.\install.ps1
+.\start.ps1
+```
+
+中文安装说明见 [INSTALL.zh.md](./INSTALL.zh.md)。
+
+### 从源码安装
+
 ```bash
 git clone https://github.com/AroganY/material-price-audit.git
+# 或：git clone https://gitee.com/arogan/material-price-audit.git
 cd material-price-audit
 
 python3 -m venv .venv
