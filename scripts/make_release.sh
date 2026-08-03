@@ -8,10 +8,17 @@ VERSION=$(python3 -c "from material_price_audit import __version__; print(__vers
 NAME="material-price-audit-${VERSION}"
 echo "==> 版本 ${VERSION}"
 
-python3 -m pip install -q -U build setuptools wheel
+# 使用临时 venv，避免与 Homebrew 的 wheel 冲突
+VENV="${ROOT}/.release-venv"
+if [[ ! -x "${VENV}/bin/python" ]]; then
+  python3 -m venv "$VENV"
+fi
+# shellcheck disable=SC1091
+source "${VENV}/bin/activate"
+python -m pip install -q -U pip build setuptools wheel
 rm -rf dist build *.egg-info
-python3 -m build
-
+python -m build
+deactivate
 # 便携包：源码 + 安装脚本 + 说明（不含 .venv / data 隐私）
 STAGE="dist/${NAME}-portable"
 rm -rf "$STAGE" "dist/${NAME}-portable.zip"
