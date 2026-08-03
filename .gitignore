@@ -60,3 +60,4 @@ agent_state.json
 .codegraph/
 *.swp
 *~
+.release-venv/
