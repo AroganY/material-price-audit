@@ -368,6 +368,106 @@
     }
     .brand-copy strong { display: block; font-size: 15px; letter-spacing: .01em; }
     .brand-copy span { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
+    .btn-jlt {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 36px !important;
+      padding: 0 14px !important;
+      border-radius: 999px !important;
+      border: none !important;
+      background: linear-gradient(135deg, #f59e0b 0%, #ea580c 55%, #dc2626 100%) !important;
+      color: #fff !important;
+      font-size: 13px !important;
+      font-weight: 800 !important;
+      letter-spacing: .02em;
+      text-decoration: none !important;
+      box-shadow: 0 4px 14px rgba(234, 88, 12, .35);
+      white-space: nowrap;
+    }
+    .btn-jlt:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .jlt-banner {
+      margin: 0 0 18px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      border: 1px solid #fdba74;
+      background: linear-gradient(105deg, #fff7ed 0%, #ffedd5 42%, #fff 100%);
+      box-shadow: 0 10px 28px rgba(234, 88, 12, .12);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px 18px;
+    }
+    .jlt-banner-main { flex: 1 1 260px; min-width: 0; }
+    .jlt-banner-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #c2410c;
+      margin: 0 0 6px;
+    }
+    .jlt-banner-kicker span {
+      display: inline-block;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #ea580c;
+      box-shadow: 0 0 0 3px rgba(234, 88, 12, .2);
+    }
+    .jlt-banner h3 {
+      margin: 0 0 6px;
+      font-size: 17px;
+      font-weight: 800;
+      color: #9a3412;
+      line-height: 1.3;
+    }
+    .jlt-banner p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #9a3412;
+    }
+    .jlt-banner p strong { color: #7c2d12; }
+    .jlt-banner-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+    .jlt-banner .btn-jlt-lg {
+      min-height: 44px !important;
+      padding: 0 20px !important;
+      font-size: 15px !important;
+    }
+    .jlt-banner .btn-jlt-sec {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid #fdba74;
+      background: #fff;
+      color: #c2410c;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .jlt-banner .btn-jlt-dismiss {
+      border: none;
+      background: transparent;
+      color: #9a3412;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: .75;
+      text-decoration: underline;
+      padding: 4px 6px;
+    }
+    .jlt-banner.is-hidden { display: none !important; }
     .local-status {
       display: inline-flex; align-items: center; gap: 7px;
       color: #475569; font-size: 12px; font-weight: 600;
@@ -1104,6 +1204,11 @@
     @media (max-width: 860px) {
       .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .quality-note { display: none; }
+      .jlt-banner { padding: 14px; }
+      .jlt-banner h3 { font-size: 15px; }
+      .jlt-banner .btn-jlt-lg { width: 100%; }
+      .btn-jlt { font-size: 12px !important; padding: 0 10px !important; }
+
       .steps { grid-template-columns: repeat(4, 1fr); }
       .step-pill:nth-child(4n) { border-right: 0; }
       .step-pill:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
@@ -1145,13 +1250,32 @@
         <div class="brand-copy"><strong>材料询价工作台</strong><span>Material Price Audit</span></div>
       </div>
       <div class="topbar-actions">
-        <a class="ghost" id="btnJltDownload" href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer" title="下载价联通桌面客户端" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;padding:0 12px;min-height:34px;font-size:13px;font-weight:650">价联通客户端</a>
+        <a class="btn-jlt" id="btnJltDownload" href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer" title="下载价联通桌面客户端">⬇ 价联通客户端</a>
         <button type="button" class="ghost" id="btnOpenHistoryTop">任务历史</button>
         <div class="local-status">本地服务已连接</div>
       </div>
     </div>
   </header>
   <div class="wrap">
+    <!-- 价联通醒目广告位 -->
+    <aside class="jlt-banner" id="jltBanner" aria-label="价联通客户端推广">
+      <div class="jlt-banner-main">
+        <p class="jlt-banner-kicker"><span></span>若亘 · 价联通</p>
+        <h3>需要官方桌面客户端？一键下载「价联通」</h3>
+        <p>
+          本页是<strong>本地开源询价向导</strong>。查价 / 询价 / 云同步等完整能力，请用
+          <strong>价联通客户端</strong>（支持 Windows / macOS）。
+        </p>
+      </div>
+      <div class="jlt-banner-actions">
+        <a class="btn-jlt btn-jlt-lg" href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer">
+          立即下载价联通客户端
+        </a>
+        <a class="btn-jlt-sec" href="https://www.rogan.asia/" target="_blank" rel="noopener noreferrer">若亘官网</a>
+        <button type="button" class="btn-jlt-dismiss" id="btnJltDismiss" title="7 天内不再显示横幅">暂不显示</button>
+      </div>
+    </aside>
+
     <div class="page-intro">
       <div>
         <p class="eyebrow">询价任务</p>
@@ -1160,9 +1284,6 @@
       </div>
       <div class="quality-note">
         结果原则：不确定就留空。每个正式价格都保留商品标题、来源平台和复核链接。
-        <br />
-        若亘桌面客户端（价联通）：
-        <a href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;font-weight:700">www.scjcio.site/tools/download</a>
       </div>
     </div>
 
@@ -1522,10 +1643,24 @@
         <div class="btns result-actions" style="margin:0">
           <a href="/api/download/result"><button type="button" class="primary">下载结果 Excel</button></a>
           <a href="/api/download/rfq"><button type="button" class="ghost">下载 RFQ</button></a>
+          <a class="btn-jlt" href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer" style="text-decoration:none">⬇ 价联通客户端</a>
           <button type="button" class="ghost" id="btnOpenHistoryFromDone">任务历史</button>
           <button type="button" class="primary" id="btnContinueDone" style="display:none">继续询价</button>
           <button type="button" class="ghost" id="btnBackToRun" style="display:none">返回执行页</button>
           <button type="button" class="ghost" id="btnRestart">再询一批</button>
+        </div>
+      </div>
+
+      <div class="jlt-banner" style="margin-top:14px" aria-label="价联通客户端">
+        <div class="jlt-banner-main">
+          <p class="jlt-banner-kicker"><span></span>结果可导出 · 日常用客户端更省事</p>
+          <h3 style="font-size:15px">Excel 下完了？试试官方「价联通」桌面客户端</h3>
+          <p>查价、询价、同步与会员能力一体，下载安装即可用（与本开源向导独立）。</p>
+        </div>
+        <div class="jlt-banner-actions">
+          <a class="btn-jlt btn-jlt-lg" href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer">
+            去下载价联通
+          </a>
         </div>
       </div>
 
@@ -1613,7 +1748,7 @@
     <footer>
       材料询价工作台 · 本地运行 · 文件与登录信息保留在当前电脑
       ·
-      <a href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:none;font-weight:650">价联通客户端下载</a>
+      <a href="https://www.scjcio.site/tools/download" target="_blank" rel="noopener noreferrer" style="color:#ea580c;text-decoration:none;font-weight:800">⬇ 价联通客户端下载</a>
       ·
       <a href="https://www.rogan.asia/" target="_blank" rel="noopener noreferrer" style="color:#64748b;text-decoration:none">若亘官网</a>
     </footer>
@@ -4428,6 +4563,26 @@
     on("btnOpenHistoryTop", "onclick", () => openHistoryPanel());
     on("btnOpenHistoryFromRun", "onclick", () => openHistoryPanel());
     on("btnOpenHistoryFromDone", "onclick", () => openHistoryPanel());
+
+    // 价联通横幅：可暂隐 7 天，顶栏橙色按钮始终保留
+    (function initJltBanner() {
+      const KEY = "mpa_jlt_banner_hide_until";
+      const banner = $("jltBanner");
+      const dismiss = $("btnJltDismiss");
+      try {
+        const until = parseInt(localStorage.getItem(KEY) || "0", 10) || 0;
+        if (banner && until > Date.now()) banner.classList.add("is-hidden");
+      } catch (e) { /* ignore */ }
+      if (dismiss) {
+        dismiss.onclick = () => {
+          try {
+            localStorage.setItem(KEY, String(Date.now() + 7 * 24 * 3600 * 1000));
+          } catch (e) { /* ignore */ }
+          if (banner) banner.classList.add("is-hidden");
+        };
+      }
+    })();
+
     on("btnHistBackResults", "onclick", () => {
       window.__pinRunPage = false;
       setStep(6);

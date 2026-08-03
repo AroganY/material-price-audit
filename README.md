@@ -346,13 +346,20 @@ python scripts/capture_screenshots.py
 
 ## 若亘其它产品
 
-本开源工具由 **若亘** 团队维护，面向造价员的日常核价 / 询价。若你还需要「手机上随手查价」或「团队协同的造价业务系统」，可以了解：
+> ### ⬇ 价联通桌面客户端（推荐）
+>
+> 若亘官方桌面端：查价 / 询价 / 同步等一体能力。  
+> **立即下载 → [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download)**  
+>
+> 本仓库是**本地开源询价向导**；需要完整客户端请走上面官方下载页。
+
+本开源工具由 **若亘** 团队维护，面向造价员的日常核价 / 询价。相关产品：
 
 | 产品 | 说明 |
 |------|------|
-| **若亘造价助手**（微信小程序） | 造价员随身工具：查价、询价、材料与工作组协作等，适合现场 / 通勤时快速处理。微信扫下方小程序码，或搜索 **「若亘造价助手」**。 |
-| **价联通客户端** | 桌面客户端（查价 / 询价 / 同步等）。**下载地址：** [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download) |
-| **若亘造价 OA** | 面向造价咨询企业的业务与协同：会员与权益、云端同步、工作组、查价询价范围等。**产品官网：** [https://www.rogan.asia/](https://www.rogan.asia/) · 业务入口 [https://www.scjcio.site](https://www.scjcio.site) |
+| **价联通客户端** ⭐ | 桌面客户端。**下载：** [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download) |
+| **若亘造价助手**（微信小程序） | 造价员随身工具：查价、询价、材料与工作组协作等。微信扫下方小程序码，或搜索 **「若亘造价助手」**。 |
+| **若亘造价 OA** | 企业业务与协同。**官网：** [https://www.rogan.asia/](https://www.rogan.asia/) · 业务入口 [https://www.scjcio.site](https://www.scjcio.site) |
 
 <p align="center">
   <img src="docs/images/ruogeng-miniprogram-qrcode.png" alt="若亘造价助手 微信小程序码" width="280" />
