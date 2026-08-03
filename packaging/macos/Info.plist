@@ -9,9 +9,9 @@
 	<key>CFBundleIdentifier</key>
 	<string>asia.rogan.material-price-audit</string>
 	<key>CFBundleVersion</key>
-	<string>0.3.4</string>
+	<string>0.3.5</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3.4</string>
+	<string>0.3.5</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleExecutable</key>

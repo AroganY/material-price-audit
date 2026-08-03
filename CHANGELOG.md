@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.3.5 — 2026-08-03
+
+- **修复 macOS 从下载打开失败**：App Translocation 只读路径下无法创建 `.venv`
+- 启动器将虚拟环境与数据写入 `~/Library/Application Support/MaterialPriceAudit/`
+- 安装说明强调：请把 App 拖到「应用程序」并 `xattr -cr`
+
 ## v0.3.4 — 2026-08-03
 
 - 向导内价联通客户端推广（顶栏、首页横幅、结果页 CTA），样式与页面蓝色主色统一

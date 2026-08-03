@@ -1,25 +1,31 @@
 材料询价工作台 · macOS
 
-【使用方法】
-1. 将「材料询价工作台.app」拖到「应用程序」或任意文件夹
-2. 双击打开
-3. 首次运行会弹出终端窗口，自动安装依赖并下载 Chromium（需联网，可能几分钟）
-4. 安装完成后自动打开浏览器：http://127.0.0.1:8765/
-5. 以后再双击：直接启动
-
-若提示「无法打开，因为来自身份不明的开发者」：
-  系统设置 → 隐私与安全性 → 仍要打开
-  或：右键 App → 打开 → 打开
+【正确打开方式（重要）】
+1. 解压 zip 后，把「材料询价工作台.app」拖到「应用程序」或「文稿」等本地文件夹
+   （不要留在「下载」里直接双击，否则 macOS 会隔离到只读临时目录导致无法安装）
+2. 首次若提示无法打开：右键 App → 打开 → 打开
+   或终端执行：
+     xattr -cr /Applications/材料询价工作台.app
+3. 再双击打开
+4. 首次会弹出终端，自动安装依赖并下载 Chromium（需联网，可能几分钟）
+5. 完成后自动打开浏览器：http://127.0.0.1:8765/
 
 【系统要求】
 - macOS 11+
 - 已安装 Python 3.10+（终端执行 python3 --version）
-  可用官网安装包：https://www.python.org/downloads/
+  官网：https://www.python.org/downloads/
   或：brew install python@3.12
+
+【数据保存在哪】
+若从下载区打开被系统隔离，程序会自动把环境写到：
+  ~/Library/Application Support/MaterialPriceAudit/
+（.venv、data、登录 Cookie 等）
+建议仍将 App 放到「应用程序」以获得稳定体验。
 
 【注意】
 - 关闭终端窗口会停止服务
-- 日志：材料询价工作台.app/Contents/Resources/app/data/output/desktop_launch.log
+- 日志：~/Library/Application Support/MaterialPriceAudit/data/output/desktop_launch.log
+  或 App 内 data/output/desktop_launch.log（仅当 App 目录可写时）
 
 【官网与客户端】
 价联通客户端下载：https://www.scjcio.site/tools/download

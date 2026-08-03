@@ -18,10 +18,12 @@
 | **MaterialPriceAudit-Windows-v\*.zip** | Windows |
 
 **macOS**
-1. 解压 → 双击 **「材料询价工作台.app」**
-2. 首次会打开终端自动装依赖 + Chromium（需联网，几分钟）
-3. 完成后**自动弹出浏览器**进入向导 `http://127.0.0.1:8765/`
-4. 若系统拦截：右键 App → 打开；或「系统设置 → 隐私与安全性 → 仍要打开」
+1. 解压后，把 **「材料询价工作台.app」拖到「应用程序」**（不要在「下载」里直接开）
+2. 若无法打开：右键 → 打开；或终端：`xattr -cr /Applications/材料询价工作台.app`
+3. 双击 App；首次会自动装依赖 + Chromium（需联网，几分钟）
+4. 完成后**自动弹出浏览器**进入向导 `http://127.0.0.1:8765/`
+5. 若曾在下载区打开失败（只读/AppTranslocation），新版本会把环境写到  
+   `~/Library/Application Support/MaterialPriceAudit/`
 
 **Windows**
 1. 解压 → 双击 **「双击启动-材料询价工作台.bat」**

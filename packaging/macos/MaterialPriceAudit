@@ -13,6 +13,16 @@ fi
 
 export MPA_DESKTOP_NOTIFY=0
 export PYTHONUNBUFFERED=1
+# 默认把运行数据放到用户可写目录，避免 App Translocation 只读失败
+export MATERIAL_PRICE_AUDIT_HOME="${MATERIAL_PRICE_AUDIT_HOME:-$HOME/Library/Application Support/MaterialPriceAudit}"
+mkdir -p "$MATERIAL_PRICE_AUDIT_HOME"
+
+# 若在 Translocation 路径，提示用户（不阻断，启动器会写到 HOME）
+case "$APP_ROOT" in
+  *AppTranslocation*)
+    osascript -e 'display dialog "检测到从「下载」直接打开，系统隔离了 App。\n程序仍会尝试启动（数据写入用户目录）。\n\n建议：把 App 拖到「应用程序」，终端执行：\nxattr -cr /Applications/材料询价工作台.app\n然后再打开。" buttons {"继续启动"} default button 1 with title "材料询价工作台" with icon note' || true
+    ;;
+esac
 
 # 在本终端运行启动器（双击 .app 时可能没有可见终端，用 osascript 开 Terminal）
 if [[ -t 1 ]]; then
@@ -21,10 +31,12 @@ else
   # 从 Finder 启动：打开 Terminal 跑启动器
   ROOT_ESC="${APP_ROOT//\\/\\\\}"
   ROOT_ESC="${ROOT_ESC//\"/\\\"}"
+  HOME_ESC="${MATERIAL_PRICE_AUDIT_HOME//\\/\\\\}"
+  HOME_ESC="${HOME_ESC//\"/\\\"}"
   osascript <<APPLESCRIPT
 tell application "Terminal"
   activate
-  do script "cd \"$ROOT_ESC\" && python3 desktop_launch.py; echo; echo '服务已结束。可关闭本窗口。'"
+  do script "export MATERIAL_PRICE_AUDIT_HOME=\"$HOME_ESC\"; cd \"$ROOT_ESC\" && python3 desktop_launch.py; echo; echo '服务已结束。可关闭本窗口。'"
 end tell
 APPLESCRIPT
 fi
