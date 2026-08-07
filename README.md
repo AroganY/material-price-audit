@@ -3,49 +3,6 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22C55E.svg)](./LICENSE)
 [![Local Web](https://img.shields.io/badge/UI-本地浏览器向导-2563EB)](#快速开始)
-[![RoganOA](https://img.shields.io/badge/RoganOA-www.rogan.asia-0f766e)](https://www.rogan.asia/)
-[![价联通](https://img.shields.io/badge/价联通-www.scjcio.site-2563EB)](https://www.scjcio.site)
-
----
-
-## 若亘产品入口（小程序码 · 官网 · 下载）
-
-本仓库是 **本地开源询价向导**。若亘正式产品请走下面入口（**扫码 / 点链接即可**）：
-
-| 产品 | 链接（直接点开） |
-|------|------------------|
-| **若亘造价 OA（RoganOA）** | **https://www.rogan.asia/** |
-| **价联通官网 / 登录** | **https://www.scjcio.site** |
-| **价联通桌面客户端下载** | **https://www.scjcio.site/tools/download** |
-| **微信小程序 · 若亘造价助手** | 微信搜「若亘造价助手」· 或扫下方小程序码 |
-
-### 微信小程序码（若亘造价助手）
-
-微信扫一扫进入 **若亘造价助手**（随身查价 / 询价 / 工作组）：
-
-![若亘造价助手微信小程序码](https://raw.githubusercontent.com/AroganY/material-price-audit/main/docs/images/ruogeng-miniprogram-qrcode.png)
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/AroganY/material-price-audit/main/docs/images/ruogeng-miniprogram-qrcode.png" alt="若亘造价助手微信小程序码" width="360" />
-</p>
-
-若图裂了可打开仓库内路径：[`docs/images/ruogeng-miniprogram-qrcode.png`](docs/images/ruogeng-miniprogram-qrcode.png)
-
-### 官网与下载（完整 URL，浏览器直接打开）
-
-```
-若亘造价 OA（RoganOA）     https://www.rogan.asia/
-价联通官网 / 登录            https://www.scjcio.site
-价联通桌面客户端下载         https://www.scjcio.site/tools/download
-```
-
-- 若亘 OA：https://www.rogan.asia/
-- 价联通：https://www.scjcio.site
-- 客户端下载：https://www.scjcio.site/tools/download
-
-> 与本开源工具账号独立；能力说明见 [若亘产品矩阵](#若亘产品矩阵小程序--价联通--oa)。
-
----
 
 **造价员用的本地材料询价助手**：上传任意表头的询价 Excel → 勾选广材/慧讯/领材/易择/造价通/京东/1688 → 浏览器登录 → 瀑布 / 多站并行搜价 → 导出比价表与 RFQ。
 
@@ -57,7 +14,7 @@
 - **登录可恢复**：Cookie 落在 `.browser-profile`；询价中若需重登，点 **「我已登录，继续」**
 
 <p align="center">
-  <img src="./docs/images/01-step1-platforms.png" alt="选择平台" width="860" />
+  <img src="docs/images/01-step1-platforms.png" alt="选择平台" width="860" />
 </p>
 
 > 上图及下文截图均由 Playwright 对本地运行的向导 **真实截屏**（`scripts/capture_screenshots.py`），样例材料名为演示数据，非 AI 生成界面图。
@@ -66,7 +23,6 @@
 
 ## 目录
 
-- [若亘产品入口（小程序码 · 官网 · 下载）](#若亘产品入口小程序码--官网--下载)
 - [它解决什么问题](#它解决什么问题)
 - [功能一览](#功能一览)
 - [快速开始](#快速开始)
@@ -79,7 +35,7 @@
 - [开发与截图](#开发与截图)
 - [合规边界](#合规边界)
 - [京东 / 1688 策略](#京东--1688-策略)
-- [若亘产品矩阵（小程序 · 价联通 · OA）](#若亘产品矩阵小程序--价联通--oa)
+- [若亘其它产品](#若亘其它产品)
 - [如果帮到了你](#如果帮到了你)
 
 ---
@@ -133,7 +89,7 @@
 - **平台调度**：一平台一 Worker，Cookie 注入并行；限流/验证码/登录熔断  
 - **慧讯**：关窗重开自动「一键登录 → 继续登录」  
 - **造价通**：列表以 HTTP SSR 为主，避免 SPA 踢登录死循环  
-- **领材**：双重 URL 编码；`userInfo` 不当成已离开登录；会话在 **localStorage.bearertoken**（非 Cookie） 
+- **领材**：双重 URL 编码；`userInfo` 不当成已离开登录；需真实会话 Cookie  
 - 运行中：暂停 / 停止 / 断点续跑 / 开关大模型 / Token 统计 / 登录等待放行  
 
 ---
@@ -206,7 +162,7 @@ python -m material_price_audit serve --host 127.0.0.1 --port 8765
 只有「已通过」的站才会参与询价。Cookie 只在本机 `.browser-profile/`。
 
 - 请在 **工具弹出的浏览器** 登录（不要只用系统自带 Chrome）  
-- 会员站（广材/领材/慧讯/易择/造价通）**不能**靠空「强制确认」凑数——必须探测到会话 Cookie / localStorage（领材 JWT）或已登录文案  
+- 会员站（广材/领材/慧讯/易择/造价通）**不能**靠空「强制确认」凑数——必须探测到会话 Cookie 或已登录文案  
 - 校验失败时：重新在弹出窗口登录后再点校验  
 
 ![步骤4 登录](docs/images/04-step4-login.png)
@@ -388,110 +344,30 @@ python scripts/capture_screenshots.py
 
 ---
 
-## 若亘产品矩阵（小程序 · 价联通 · OA）
+## 若亘其它产品
 
-本开源仓库由 **若亘** 团队维护：把「多站翻页抄价」收成 **本机 Web 向导**。  
-若你还要 **手机查价、项目库云同步、企业信息价发布与协同**，请直接用若亘正式产品——**不是本仓库的替代品，而是完整业务闭环**。
+> ### ⬇ 价联通桌面客户端（推荐）
+>
+> 若亘官方桌面端：查价 / 询价 / 同步等一体能力。  
+> **立即下载 → [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download)**  
+>
+> 本仓库是**本地开源询价向导**；需要完整客户端请走上面官方下载页。
 
-```text
-  询价 Excel / 材料清单
-           │
-           ▼
-  ┌────────────────────────────────┐
-  │  Material Price Audit（本仓库）  │  本地多站询价 · Cookie 不出机 · 导出比价
-  └────────────────┬───────────────┘
-                   │ 比价结果 / 经验
-     ┌─────────────┼──────────────────┐
-     ▼             ▼                  ▼
-  微信小程序      价联通桌面端         若亘造价 OA（RoganOA）
-  随身查价询价     项目库·云同步·工作组   门户·审核·发布·企业协同
-  若亘造价助手     scjcio.site/download  rogan.asia · scjcio.site
-```
+本开源工具由 **若亘** 团队维护，面向造价员的日常核价 / 询价。相关产品：
 
-| 产品 | 给谁用 | 解决什么 | 入口 |
-|------|--------|----------|------|
-| **本仓库 · 材料询价工作台** | 造价员本机核价 | 广材/慧讯/领材… 瀑布搜价、候选工作台、导出 RFQ | 当前 GitHub / Gitee |
-| **微信小程序 · 若亘造价助手** | 外勤 / 工地 / 随时查 | 手机查价、询价历史、工作组只读、会员权益 | 下方小程序码 · 搜「若亘造价助手」 |
-| **价联通桌面客户端** | 日常造价业务 | 项目经验库、导入导出、云同步、AI 工具、工作组 | [下载页](https://www.scjcio.site/tools/download) |
-| **若亘造价 OA / RoganOA** | 企业 / 造价站 / 信息中心 | 信息价门户、上传解析、审核发布、高亮追溯、协同 | [rogan.asia](https://www.rogan.asia/) · [scjcio.site](https://www.scjcio.site) |
-
----
-
-### 微信小程序 · 若亘造价助手
-
-**造价员的口袋工作台**——会议室、工地、甲方现场不用开电脑也能用。
-
-| 能力 | 说明 |
+| 产品 | 说明 |
 |------|------|
-| **查价** | 关键词检索材料价；个人库 / 工作组 / 共享价库范围切换 |
-| **询价** | 询价历史与区间对比；与桌面端同步后的询价组手机可看 |
-| **工作组** | 邀请码入组，只读查看负责人共享的项目与询价（需权益） |
-| **工作台** | 项目概览、最近动态；可与桌面扫码登录联动 |
-| **会员订阅** | 云同步、AI、工作组等权益在小程序内开通 / 续费 |
-| **贡献与纠错** | 共建共享价、提交价格纠错（社区能力） |
-
-微信扫一扫 · **若亘造价助手**（也可微信内搜索同名小程序）：
-
-![若亘造价助手微信小程序码](https://raw.githubusercontent.com/AroganY/material-price-audit/main/docs/images/ruogeng-miniprogram-qrcode.png)
+| **价联通客户端** ⭐ | 桌面客户端。**下载：** [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download) |
+| **若亘造价助手**（微信小程序） | 造价员随身工具：查价、询价、材料与工作组协作等。微信扫下方小程序码，或搜索 **「若亘造价助手」**。 |
+| **若亘造价 OA** | 企业业务与协同。**官网：** [https://www.rogan.asia/](https://www.rogan.asia/) · 业务入口 [https://www.scjcio.site](https://www.scjcio.site) |
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AroganY/material-price-audit/main/docs/images/ruogeng-miniprogram-qrcode.png" alt="若亘造价助手微信小程序码" width="360" />
+  <img src="docs/images/ruogeng-miniprogram-qrcode.png" alt="若亘造价助手 微信小程序码" width="280" />
+  <br />
+  <sub>微信扫一扫 · 若亘造价助手</sub>
 </p>
 
-- 若亘 OA：https://www.rogan.asia/
-- 价联通：https://www.scjcio.site
-- 桌面下载：https://www.scjcio.site/tools/download
-
-> 小程序账号与 **价联通桌面 / 云端** 同一套体系（https://www.scjcio.site）：桌面维护项目库，手机查价询价，团队用工作组共享。
-
----
-
-### 价联通桌面客户端
-
-面向日常造价业务的 **官方桌面端**（本仓库是「多站网页询价」专用工具，客户端能力更完整）：
-
-- 📁 **项目库 / 经验库** — 综合单价、工料机，本地可用  
-- ☁️ **云同步** — 多设备同一账号（需云同步权益）  
-- 👥 **工作组** — 建组、邀请、按项目共享只读视图  
-- 🤖 **AI 与工具岛** — 查价、核价、解析等桌面能力  
-- 🔗 与小程序 **同账号**，一套数据多端用  
-
-**立即下载 → [https://www.scjcio.site/tools/download](https://www.scjcio.site/tools/download)**
-
----
-
-### 若亘造价 OA · RoganOA
-
-面向 **工程造价企业 / 造价管理机构 / 信息中心** 的业务与协同门户（Web）：
-
-| 能力 | 说明 |
-|------|------|
-| **信息价检索** | 省市区县 + 期次 + 关键词，站内快速查官方信息价 |
-| **上传与智能解析** | PDF/Excel 入库，结构化材料行，可审计来源 |
-| **PDF 高亮回溯** | 点价格回跳源页并高亮，核对「价从哪来」 |
-| **审核发布** | 数据集草稿 → 发布 / 撤回，适合站内流程 |
-| **合规与审计** | 权限、导出审批、操作日志、纠错通道 |
-| **企业协同** | 多角色、组织数据隔离，对接团队日常办公 |
-
-| 入口 | 链接 |
-|------|------|
-| **若亘官网（RoganOA 品牌站）** | **[https://www.rogan.asia/](https://www.rogan.asia/)** |
-| **价联通 / 业务与管理端** | **[https://www.scjcio.site](https://www.scjcio.site)** |
-
-> 需要 **团队版演示、部署咨询、信息价门户合作**，优先走 [rogan.asia](https://www.rogan.asia/) 或 [scjcio.site](https://www.scjcio.site) 联系我们。
-
----
-
-### 本仓库 vs 正式产品（别混）
-
-| | 本仓库（开源） | 小程序 + 价联通桌面 | 若亘 OA |
-|--|--------------|-------------------|--------|
-| 定位 | 多站市场询价、比价底稿 | 个人/团队造价业务闭环 | 机构/企业级门户与协同 |
-| 数据 | 本机 Cookie + Excel，默认不出网 | 登录云端、权益订阅 | 企业/站级部署与权限 |
-| 价格来源 | 你登录的广材慧讯等页面 | 项目库、共享库、信息价服务 | 官方信息价与审核发布流 |
-| 不替代 | — | 不替代本工具的多站瀑布询价 | 不替代本机批量抓站询价 |
-
-**一句话**：多站抄价用 **本开源向导** → 随身查与团队项目用 **小程序 + 价联通** → 企业信息价与办公协同用 **若亘 OA**。
+> 本仓库 **Material Price Audit** 是**本地开源**询价工作台（数据与 Cookie 不出本机）；小程序、价联通客户端与 OA 是独立产品线，按各自账号与权益使用。欢迎试用，也欢迎把需求反馈给我们。
 
 ---
 
@@ -501,9 +377,8 @@ python scripts/capture_screenshots.py
 
 - 给仓库点一个 **Star**（GitHub / Gitee 均可），让更多造价同行看见  
 - 把问题与改进建议开 [Issue](https://github.com/AroganY/material-price-audit/issues)，或直接反馈给若亘团队  
-- **微信小程序**：扫上方码，或搜 **「若亘造价助手」** —— 随身查价 / 询价  
-- **价联通桌面**：[立即下载](https://www.scjcio.site/tools/download)  
-- **若亘 OA / 团队版**：[www.rogan.asia](https://www.rogan.asia/) · [www.scjcio.site](https://www.scjcio.site)  
+- 需要桌面客户端：**[价联通客户端下载](https://www.scjcio.site/tools/download)**  
+- 需要团队版 / 小程序 / OA：官网 **[www.rogan.asia](https://www.rogan.asia/)**，或微信扫上方小程序码打开 **若亘造价助手**  
 
 你的 Star 与反馈，是这份开源继续更新的最大动力。谢谢。
 
